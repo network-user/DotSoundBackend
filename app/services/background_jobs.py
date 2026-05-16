@@ -25,7 +25,7 @@ from __future__ import annotations
 
 import uuid
 from datetime import UTC, datetime
-from typing import Any
+from typing import Any, Protocol
 
 import structlog
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -45,12 +45,24 @@ class IdempotencySkipped(Exception):
         self.key = key
 
 
+class TaskKicker(Protocol):
+    def with_labels(self, **labels: str) -> TaskKicker: ...
+
+    async def kiq(self, **payload: object) -> object: ...
+
+
+class EnqueueTask(Protocol):
+    task_name: str
+
+    def kicker(self) -> TaskKicker: ...
+
+
 def _new_job_id() -> str:
     return uuid.uuid4().hex
 
 
 async def enqueue(
-    task: Any,
+    task: EnqueueTask,
     *,
     payload: dict[str, Any] | None = None,
     queue: str = "default",
@@ -60,6 +72,7 @@ async def enqueue(
     parent_job_id: str | None = None,
     scheduled_job_id: str | None = None,
     created_by_user_id: int | None = None,
+    job_id_payload_key: str | None = None,
     session: AsyncSession | None = None,
 ) -> str:
     """Insert a BackgroundJob row and kick ``task`` via Taskiq.
@@ -70,7 +83,7 @@ async def enqueue(
     Raises ``IdempotencySkipped`` if ``idempotency_key`` is already
     in flight (caller decides whether to swallow or propagate).
     """
-    payload = payload or {}
+    payload = dict(payload or {})
 
     if idempotency_key is not None:
         ok = await acquire_idempotency_slot(
@@ -85,6 +98,10 @@ async def enqueue(
             raise IdempotencySkipped(idempotency_key)
 
     job_id = _new_job_id()
+    task_payload = dict(payload)
+    if job_id_payload_key is not None:
+        payload.pop(job_id_payload_key, None)
+        task_payload[job_id_payload_key] = job_id
     row = BackgroundJob(
         id=job_id,
         name=task.task_name,
@@ -117,7 +134,7 @@ async def enqueue(
         bgjob_queue=queue,
     )
     try:
-        result = await kicker.kiq(**payload)
+        result = await kicker.kiq(**task_payload)
     except Exception:
         logger.exception(
             "background_job_kick_failed",

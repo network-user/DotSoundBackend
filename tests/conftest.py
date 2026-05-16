@@ -143,11 +143,15 @@ async def client(db_engine) -> AsyncClient:
         _override_get_db
     )
 
-    async with AsyncClient(
-        transport=ASGITransport(app=application),
-        base_url="http://test",
-    ) as ac:
-        yield ac  # type: ignore[misc]
+    with patch(
+        "app.middlewares.admin_audit_log.AsyncSessionLocal",
+        factory,
+    ):
+        async with AsyncClient(
+            transport=ASGITransport(app=application),
+            base_url="http://test",
+        ) as ac:
+            yield ac  # type: ignore[misc]
 
 
 async def _fake_put_cas(
@@ -245,6 +249,15 @@ async def create_test_track(
         return_value=None,
     ), patch(
         "app.services.file_validator.validate_audio",
+        return_value=None,
+    ), patch(
+        "app.services.file_validator.scan_for_malware",
+        new_callable=AsyncMock,
+        return_value=None,
+    ), patch(
+        "app.services.track_ingest_schedule_service"
+        ".schedule_new_track_background_jobs",
+        new_callable=AsyncMock,
         return_value=None,
     ), patch(
         "app.services.upload_service"

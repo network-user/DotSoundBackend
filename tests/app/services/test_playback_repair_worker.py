@@ -6,6 +6,7 @@ from fastapi import HTTPException
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.models.background_job import BackgroundJob
 from app.models.track import Track
 from app.models.track_playback_failure_event import TrackPlaybackFailureEvent
 from app.models.user import User
@@ -179,6 +180,93 @@ async def test_repair_track_healthy_source_records_check_timestamp(
     assert result["refreshed_sc_url"] is False
     assert track.playback_last_checked_at is not None
     assert track.playback_last_repair_attempt_at is None
+
+
+async def test_repair_track_cancel_signal_stops_before_refresh(
+    db_session: AsyncSession,
+) -> None:
+    user = await _make_user(db_session)
+    track = await _make_failed_soundcloud_track(db_session, user)
+    track_id = track.id
+    await db_session.commit()
+    resolve = AsyncMock(
+        side_effect=HTTPException(
+            status_code=502,
+            detail="SoundCloud stream unavailable",
+        )
+    )
+    refresh = AsyncMock(return_value=True)
+
+    with (
+        patch(f"{_MOD}._resolve_third_party_stream", new=resolve),
+        patch(f"{_MOD}.is_cancelled", new=AsyncMock(side_effect=[
+            False,
+            False,
+            True,
+        ])),
+        patch(
+            "app.services.track_fallback_service."
+            "TrackFallbackService.try_refresh_sc_url",
+            new=refresh,
+        ),
+        patch(f"{_MOD}.progress.safe_set_progress", new=AsyncMock()) as sp,
+    ):
+        result = await TrackPlaybackRepairService(db_session).repair_track(
+            track_id,
+            progress_id="progress-cancel",
+            background_job_id="bg-cancel",
+        )
+
+    assert result["status"] == "cancelled"
+    assert result["ok"] is False
+    resolve.assert_awaited_once()
+    refresh.assert_not_awaited()
+    assert any(
+        call.kwargs.get("stage") == "cancelled"
+        for call in sp.await_args_list
+    )
+    refreshed = await db_session.get(Track, track_id)
+    assert refreshed is not None
+    assert refreshed.playback_last_failure_at is not None
+
+
+async def test_repair_track_db_cancelling_state_stops_before_work(
+    db_session: AsyncSession,
+) -> None:
+    user = await _make_user(db_session)
+    track = await _make_failed_soundcloud_track(db_session, user)
+    track_id = track.id
+    job_id = "bg-db-cancel"
+    job = BackgroundJob(
+        id=job_id,
+        name="app.services.playback_repair_worker:repair_track_playback_task",
+        queue="default",
+        status="cancelling",
+        payload={"track_id": track_id},
+        max_attempts=2,
+        scheduled_at=datetime.now(UTC),
+    )
+    db_session.add(job)
+    await db_session.commit()
+
+    with (
+        patch(f"{_MOD}.is_cancelled", new=AsyncMock(return_value=False)),
+        patch(
+            f"{_MOD}._resolve_third_party_stream",
+            new=AsyncMock(),
+        ) as resolve,
+        patch(f"{_MOD}.progress.safe_set_progress", new=AsyncMock()) as sp,
+    ):
+        result = await TrackPlaybackRepairService(db_session).repair_track(
+            track_id,
+            progress_id="progress-db-cancel",
+            background_job_id=job_id,
+        )
+
+    assert result["status"] == "cancelled"
+    assert result["background_job_id"] == job_id
+    resolve.assert_not_awaited()
+    assert sp.await_args.kwargs["stage"] == "cancelled"
 
 
 async def test_repair_candidates_audits_public_soundcloud_scope(

@@ -5,6 +5,16 @@ import path from 'path'
 
 const MINI_APP_BASE = '/mini_app/'
 
+const pwaShellGlobPatterns = [
+  'index.html',
+  'manifest.webmanifest',
+  'assets/index-*.js',
+  'assets/index-*.css',
+  'assets/vendor-*.js',
+  'assets/ru-*.js',
+  'assets/en-*.js',
+]
+
 const normalizeModuleId = (id: string): string =>
   id.replace(/\\/g, '/')
 
@@ -180,14 +190,28 @@ export default defineConfig({
         ],
       },
       workbox: {
-        globPatterns: [
-          '**/*.{js,css,html,svg,woff2}',
-        ],
+        globPatterns: pwaShellGlobPatterns,
         globIgnores: [
           '**/secure/**',
           '**/assets/hls-*.js',
         ],
         runtimeCaching: [
+          {
+            urlPattern:
+              /\/mini_app\/assets\/(?!secure\/).+\.(?:js|css)$/,
+            handler: 'CacheFirst',
+            options: {
+              cacheName: 'mini-app-lazy-assets',
+              expiration: {
+                maxEntries: 96,
+                maxAgeSeconds: 60 * 60 * 24 * 30,
+                purgeOnQuotaError: true,
+              },
+              cacheableResponse: {
+                statuses: [200],
+              },
+            },
+          },
           {
             urlPattern: /^https?:\/\/.*\/api\/v1\/tracks\/cover_proxy/,
             handler: 'CacheFirst',

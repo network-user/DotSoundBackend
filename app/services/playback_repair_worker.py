@@ -11,9 +11,11 @@ from app.api.v1.tracks.playback import _resolve_third_party_stream
 from app.config import settings
 from app.core.db import AsyncSessionLocal
 from app.core.tkq import broker
+from app.models.background_job import BackgroundJob
 from app.models.track import Track
 from app.repositories.track import TrackRepository
 from app.services import playback_repair_progress as progress
+from app.services.cancellation import is_cancelled
 from app.services.track_fallback_service import TrackFallbackService
 from app.services.track_playback_health_service import (
     TrackPlaybackHealthService,
@@ -40,7 +42,15 @@ class TrackPlaybackRepairService:
         self,
         track_id: int,
         progress_id: str | None = None,
+        background_job_id: str | None = None,
     ) -> dict[str, Any]:
+        cancelled = await self._cancel_if_requested(
+            track_id,
+            progress_id,
+            background_job_id,
+        )
+        if cancelled is not None:
+            return cancelled
         await progress.safe_set_progress(
             progress_id,
             stage="loading_track",
@@ -94,6 +104,13 @@ class TrackPlaybackRepairService:
             )
             return result
 
+        cancelled = await self._cancel_if_requested(
+            track_id,
+            progress_id,
+            background_job_id,
+        )
+        if cancelled is not None:
+            return cancelled
         before_sc_url = track.sc_url
         refreshed = False
         repair_attempted = False
@@ -106,6 +123,13 @@ class TrackPlaybackRepairService:
             )
             protocol = await self._verify_current_source(track)
         except HTTPException as first_exc:
+            cancelled = await self._cancel_if_requested(
+                track_id,
+                progress_id,
+                background_job_id,
+            )
+            if cancelled is not None:
+                return cancelled
             if not _is_soundcloud_track(track):
                 result = self._failed_result(track_id, first_exc)
                 await progress.safe_set_progress(
@@ -117,6 +141,13 @@ class TrackPlaybackRepairService:
                 )
                 return result
             repair_attempted = True
+            cancelled = await self._cancel_if_requested(
+                track_id,
+                progress_id,
+                background_job_id,
+            )
+            if cancelled is not None:
+                return cancelled
             await progress.safe_set_progress(
                 progress_id,
                 stage="refreshing_source",
@@ -124,6 +155,13 @@ class TrackPlaybackRepairService:
                 log_line="trying source refresh",
             )
             refreshed = await self._try_refresh_soundcloud_source(track)
+            cancelled = await self._cancel_if_requested(
+                track_id,
+                progress_id,
+                background_job_id,
+            )
+            if cancelled is not None:
+                return cancelled
             if not refreshed:
                 result = await self._record_unresolved(
                     track_id,
@@ -150,6 +188,13 @@ class TrackPlaybackRepairService:
                 protocol = await self._verify_current_source(track)
             except HTTPException as second_exc:
                 await self._session.rollback()
+                cancelled = await self._cancel_if_requested(
+                    track_id,
+                    progress_id,
+                    background_job_id,
+                )
+                if cancelled is not None:
+                    return cancelled
                 result = await self._record_unresolved(
                     track_id,
                     second_exc,
@@ -167,6 +212,13 @@ class TrackPlaybackRepairService:
                 return result
             except Exception as second_exc:  # noqa: BLE001
                 await self._session.rollback()
+                cancelled = await self._cancel_if_requested(
+                    track_id,
+                    progress_id,
+                    background_job_id,
+                )
+                if cancelled is not None:
+                    return cancelled
                 result = self._error_result(track_id, second_exc)
                 await progress.safe_set_progress(
                     progress_id,
@@ -187,6 +239,13 @@ class TrackPlaybackRepairService:
             )
             return result
 
+        cancelled = await self._cancel_if_requested(
+            track_id,
+            progress_id,
+            background_job_id,
+        )
+        if cancelled is not None:
+            return cancelled
         await progress.safe_set_progress(
             progress_id,
             stage="clearing_health",
@@ -197,6 +256,13 @@ class TrackPlaybackRepairService:
             track,
             repair_attempted=repair_attempted,
         )
+        cancelled = await self._cancel_if_requested(
+            track_id,
+            progress_id,
+            background_job_id,
+        )
+        if cancelled is not None:
+            return cancelled
         await self._session.commit()
         new_sc_url = track.sc_url
         logger.info(
@@ -277,6 +343,51 @@ class TrackPlaybackRepairService:
         track.playback_recovery_failed_at = None
         await self._session.flush()
 
+    async def _cancel_if_requested(
+        self,
+        track_id: int,
+        progress_id: str | None,
+        background_job_id: str | None,
+    ) -> dict[str, Any] | None:
+        if not background_job_id:
+            return None
+        if not await self._is_cancel_requested(background_job_id):
+            return None
+        await self._session.rollback()
+        result = {
+            "track_id": track_id,
+            "ok": False,
+            "status": "cancelled",
+            "detail": "Playback repair cancelled",
+            "background_job_id": background_job_id,
+        }
+        await progress.safe_set_progress(
+            progress_id,
+            stage="cancelled",
+            track_id=track_id,
+            log_line="playback repair cancelled",
+            result=result,
+        )
+        logger.info(
+            "track_playback_repair_cancelled",
+            track_id=track_id,
+            background_job_id=background_job_id,
+        )
+        return result
+
+    async def _is_cancel_requested(self, background_job_id: str) -> bool:
+        if await is_cancelled(background_job_id):
+            return True
+        row = await self._session.get(
+            BackgroundJob,
+            background_job_id,
+            populate_existing=True,
+        )
+        return row is not None and row.status in {
+            "cancelled",
+            "cancelling",
+        }
+
     async def _record_unresolved(
         self,
         track_id: int,
@@ -321,11 +432,13 @@ class TrackPlaybackRepairService:
 async def repair_track_playback_task(
     track_id: int,
     progress_id: str = "",
+    background_job_id: str = "",
 ) -> dict[str, Any]:
     async with AsyncSessionLocal() as session:
         return await TrackPlaybackRepairService(session).repair_track(
             track_id,
             progress_id=progress_id or None,
+            background_job_id=background_job_id or None,
         )
 
 

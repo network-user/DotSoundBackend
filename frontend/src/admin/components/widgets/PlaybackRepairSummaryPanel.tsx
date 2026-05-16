@@ -105,6 +105,7 @@ export function PlaybackRepairSummaryPanel({
     ['skipped', count(summary.outcomes, 'skipped')],
     ['not_found', count(summary.outcomes, 'not_found')],
     ['error', count(summary.outcomes, 'error')],
+    ['cancelled', count(summary.outcomes, 'cancelled')],
   ] as const
 
   return (

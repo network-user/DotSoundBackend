@@ -913,7 +913,8 @@
             "unresolved": "не решено",
             "skipped": "пропущено",
             "not_found": "не найдено",
-            "error": "ошибка"
+            "error": "ошибка",
+            "cancelled": "отменено"
           },
           "stages": {
             "queued": "В очереди",
@@ -930,6 +931,7 @@
             "processing": "Обработка",
             "running": "В работе",
             "cancelling": "Отмена",
+            "cancelled": "Отменено",
             "unknown": "Неизвестно"
           }
         },

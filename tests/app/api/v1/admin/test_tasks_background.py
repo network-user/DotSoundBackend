@@ -3,8 +3,10 @@ from unittest.mock import AsyncMock, patch
 
 import pytest
 from httpx import AsyncClient
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.models.admin_action_log import AdminActionLog
 from app.models.background_job import BackgroundJob
 from tests.conftest import (
     admin_bearer_for_user,
@@ -146,6 +148,27 @@ async def test_admin_bulk_cancel_active_background_jobs(
     assert queued.finished_at is not None
     assert running.status == "cancelling"
     assert done.status == "done"
+
+    audit = (
+        await db_session.scalars(
+            select(AdminActionLog).where(
+                AdminActionLog.action
+                == "tasks.background_jobs.cancel_active"
+            )
+        )
+    ).one()
+    assert audit.user_id == admin["id"]
+    assert audit.target_type == "background_job"
+    assert audit.target_id == "bulk"
+    assert audit.meta["filters"] == {"name": "demo"}
+    assert audit.meta["matched"] == 2
+    assert audit.meta["cancelled"] == 1
+    assert audit.meta["cancelling"] == 1
+    assert audit.meta["purged_messages"] == 1
+    assert set(audit.meta["items_sample"]) == {
+        "bg-cancel-queued",
+        "bg-cancel-running",
+    }
 
 
 async def test_admin_playback_repair_summary_aggregates_jobs(

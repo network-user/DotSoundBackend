@@ -28,6 +28,7 @@ _PUBLIC_STAGES: frozenset[str] = frozenset(
         "unresolved",
         "not_found",
         "error",
+        "cancelled",
         "processing",
     }
 )
@@ -39,6 +40,7 @@ _TERMINAL_STAGES: frozenset[str] = frozenset(
         "unresolved",
         "not_found",
         "error",
+        "cancelled",
     }
 )
 

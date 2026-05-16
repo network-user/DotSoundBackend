@@ -913,7 +913,8 @@
             "unresolved": "unresolved",
             "skipped": "skipped",
             "not_found": "not found",
-            "error": "error"
+            "error": "error",
+            "cancelled": "cancelled"
           },
           "stages": {
             "queued": "Queued",
@@ -930,6 +931,7 @@
             "processing": "Processing",
             "running": "Running",
             "cancelling": "Cancelling",
+            "cancelled": "Cancelled",
             "unknown": "Unknown"
           }
         },

@@ -307,6 +307,7 @@ class AdminService:
                 idempotency_key=f"playback-repair:track:{track_id}",
                 idempotency_ttl_seconds=600,
                 created_by_user_id=actor_id,
+                job_id_payload_key="background_job_id",
             )
         except IdempotencySkipped:
             await progress.safe_set_progress(

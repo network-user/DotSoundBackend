@@ -108,6 +108,13 @@ function readBgPayloadTarget(payload: unknown): string {
   return 'вЂ“'
 }
 
+function readBgPayloadTrackId(payload: unknown): number | null {
+  if (!payload || typeof payload !== 'object') return null
+  const data = payload as Record<string, unknown>
+  const trackId = data.track_id
+  return typeof trackId === 'number' ? trackId : null
+}
+
 function shortBgTaskName(name: string): string {
   const raw = name.split(':').pop() || name
   return raw.split('.').pop() || raw
@@ -1441,6 +1448,30 @@ export function TasksRoute() {
                     <strong className="admin-mono">
                       {readBgPayloadTarget(bgDetail.data.payload)}
                     </strong>
+                    {(() => {
+                      const trackId = readBgPayloadTrackId(
+                        bgDetail.data.payload,
+                      )
+                      if (trackId == null) return null
+                      return (
+                        <MotionPress
+                          variant="ghost"
+                          haptic="selection"
+                          className="admin-link"
+                          onClick={() =>
+                            window.open(
+                              `/mini_app/track/${trackId}`,
+                              '_blank',
+                            )
+                          }
+                        >
+                          {t(
+                            'admin.tasks.bg.playbackRepair.openTrack',
+                            { id: trackId },
+                          )}
+                        </MotionPress>
+                      )
+                    })()}
                   </div>
                   <div>
                     <span>{t('admin.tasks.detail.attempts')}</span>

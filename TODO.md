@@ -1,5 +1,46 @@
 # DotSound - TODO Tracker
 
+- [x] **Admin task cancellation hardening (2026-05-16)**
+  - Playback repair jobs now receive their `BackgroundJob.id` in the
+    Taskiq payload and check both Redis cancel signals and DB
+    `cancelling/cancelled` state at safe repair boundaries.
+  - Cancellation now stops playback repair before source refresh,
+    unresolved suppression, health clearing, and commit where possible,
+    while updating live progress with a terminal `cancelled` stage.
+  - Bulk active-job cancellation now writes an admin audit-log row with
+    actor, filters, matched/cancelled/cancelling counts, purge count, and
+    a bounded sample of affected job ids.
+
+- [x] **Mini App PWA precache diet (2026-05-16)**
+  - Replaced the broad Workbox precache glob for all Mini App JS/CSS with a
+    shell-only whitelist: `index.html`, manifest, startup `index` JS/CSS,
+    `vendor`, and base `ru`/`en` locale chunks.
+  - Kept icons and notification sounds in the generated precache through
+    `includeAssets`, while excluding lazy route/player/admin/HLS chunks from
+    service-worker install-time downloads.
+  - Added an on-demand `mini-app-lazy-assets` runtime cache for hashed
+    non-admin Mini App JS/CSS assets so lazy chunks are cached after first
+    real use instead of during initial service-worker install.
+  - Verified `frontend` production build with `npm run build`; Workbox
+    precache dropped from 101 entries / about 1.64 MiB to 19 entries /
+    about 759 KiB.
+
+- [x] **Admin playback repair progress polish (2026-05-16)**
+  - Added a playback repair summary endpoint for a concrete bulk run:
+    processed/total, status counts, outcome counts, active items, and the
+    currently running repair stage.
+  - Added human-readable admin labels for playback repair stages in Tasks,
+    active jobs, job detail, and the Tracks current-repair panel.
+  - Tracks now keeps the latest single/bulk repair run visible with live
+    aggregate progress and a direct link to filtered playback repair tasks.
+  - Playback repair task details now include a direct action to open the
+    affected track card.
+  - Decided not to persist full live progress snapshots in DB: Redis remains
+    the live source, while `BackgroundJob.result_summary` keeps the final
+    durable outcome.
+  - Verified targeted admin playback tests, Ruff, and `frontend` production
+    build with `npm run build`.
+
 - [x] **Mini App initial payload split for mobile (2026-05-16)**
   - Moved heavy Mini App surfaces behind lazy chunks, including onboarding,
     tutorial, auth, settings, track sheet, profile-adjacent overlays, and

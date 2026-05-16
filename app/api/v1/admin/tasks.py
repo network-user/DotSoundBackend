@@ -5,7 +5,7 @@ from __future__ import annotations
 from typing import Any
 
 import structlog
-from fastapi import APIRouter, Body, Depends, HTTPException, Query
+from fastapi import APIRouter, Body, Depends, HTTPException, Query, Request
 from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -18,6 +18,7 @@ from app.dependencies import (
 from app.models.background_job import BackgroundJob
 from app.models.scheduled_job import ScheduledJob
 from app.models.user import User
+from app.repositories.admin_action_log import AdminActionLogRepository
 from app.repositories.admin_tasks import AdminTasksRepository
 from app.services import compute_queue_service as q
 from app.services.cancellation import signal_cancel
@@ -66,6 +67,7 @@ _PLAYBACK_REPAIR_OUTCOMES: frozenset[str] = frozenset(
         "skipped",
         "not_found",
         "error",
+        "cancelled",
     }
 )
 _PLAYBACK_REPAIR_SUMMARY_LIMIT = 20000
@@ -841,8 +843,9 @@ async def list_active_background_jobs(
 
 @router.post("/jobs/cancel-active")
 async def cancel_active_background_jobs(
+    request: Request,
     body: BackgroundJobBulkCancelRequest | None = Body(default=None),
-    _admin: User = Depends(require_capability("tasks.manage")),
+    admin: User = Depends(require_capability("tasks.manage")),
     session: AsyncSession = Depends(get_db),
 ) -> BackgroundJobBulkCancelResponse:
     from datetime import UTC, datetime
@@ -895,6 +898,23 @@ async def cancel_active_background_jobs(
     purged_messages = await _purge_bgjob_messages(queued_ids)
     for job_id in ids:
         await signal_cancel(job_id)
+    await AdminActionLogRepository(session).write(
+        user_id=admin.id,
+        action="tasks.background_jobs.cancel_active",
+        target_type="background_job",
+        target_id="bulk",
+        ip=(request.client.host if request.client else None),
+        meta={
+            "filters": spec.model_dump(exclude_none=True),
+            "matched": len(ids),
+            "cancelled": cancelled,
+            "cancelling": cancelling,
+            "purged_messages": purged_messages,
+            "items_sample": ids[:100],
+            "items_truncated": len(ids) > 100,
+        },
+    )
+    await session.commit()
 
     logger.info(
         "admin_background_jobs_bulk_cancel",
@@ -971,6 +991,11 @@ async def retry_background_job(
             queue=row.queue or "default",
             max_attempts=row.max_attempts or 3,
             parent_job_id=row.id,
+            job_id_payload_key=(
+                "background_job_id"
+                if row.name == _PLAYBACK_REPAIR_TASK_NAME
+                else None
+            ),
         )
     except IdempotencySkipped as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc
