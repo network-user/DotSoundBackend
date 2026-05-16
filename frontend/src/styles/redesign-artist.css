@@ -262,7 +262,7 @@
   scroll-snap-type: x mandatory;
   scrollbar-width: none;
   -ms-overflow-style: none;
-  touch-action: pan-x;
+  touch-action: pan-x pan-y;
 }
 
 .rf-artist-top-tracks__viewport::-webkit-scrollbar {
@@ -369,7 +369,7 @@
   scroll-snap-type: x mandatory;
   scrollbar-width: none;
   -ms-overflow-style: none;
-  touch-action: pan-x;
+  touch-action: pan-x pan-y;
 }
 
 .rf-artist-releases__viewport::-webkit-scrollbar {

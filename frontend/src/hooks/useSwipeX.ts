@@ -54,14 +54,22 @@ export function useSwipeX({
       onProgress?.(0)
       const absDx = Math.abs(dx)
       const absDy = Math.abs(dy)
-      if (absDy > threshold && absDy > absDx * 1.5) {
+      if (
+        absDy > threshold &&
+        absDy > absDx * 1.5 &&
+        ((dy < 0 && onSwipeUp) || (dy > 0 && onSwipeDown))
+      ) {
         e.preventDefault()
         e.stopPropagation()
         if (dy < 0) onSwipeUp?.()
         else onSwipeDown?.()
         return
       }
-      if (absDx > threshold && absDx > absDy * 1.5) {
+      if (
+        absDx > threshold &&
+        absDx > absDy * 1.5 &&
+        ((dx < 0 && onSwipeLeft) || (dx > 0 && onSwipeRight))
+      ) {
         e.preventDefault()
         e.stopPropagation()
         if (dx < 0) onSwipeLeft?.()
