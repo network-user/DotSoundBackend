@@ -84,6 +84,39 @@ def _http_exc_message(exc: HTTPException) -> str:
     return d if isinstance(d, str) else str(d)
 
 
+_SC_USER_MESSAGES_RU: dict[str, str] = {
+    "geo_blocked": (
+        "Этот трек заблокирован правообладателем для "
+        "воспроизведения в нашем регионе."
+    ),
+    "subscription_required": (
+        "Этот трек доступен только подписчикам SoundCloud Go+."
+    ),
+    "preview_only": (
+        "На SoundCloud доступна только короткая превью-версия " "этого трека."
+    ),
+    "snippet_only": (
+        "SoundCloud отдаёт для этого трека только короткий "
+        "сниппет — полная версия недоступна."
+    ),
+    "removed": ("Этот трек удалён или скрыт на SoundCloud."),
+    "not_streamable": (
+        "Этот трек на SoundCloud отключён для потокового " "воспроизведения."
+    ),
+    "no_playable_transcoding": (
+        "У этого трека нет ни одного потокового формата, "
+        "доступного для воспроизведения."
+    ),
+    "provider_manifest_not_found_for_all_formats": (
+        "SoundCloud сейчас не отдаёт ни один поток для этого "
+        "трека. Возможно, он стал недоступен в нашем регионе."
+    ),
+    "provider_returned_no_playable_url": (
+        "У этого трека нет потоков, которые мы могли бы " "воспроизвести."
+    ),
+}
+
+
 def _third_party_error_detail(
     exc: HTTPException,
     track: object,
@@ -101,6 +134,14 @@ def _third_party_error_detail(
     detail["source_platform"] = getattr(track, "source_platform", None)
     if _third_party_is_soundcloud(track):
         detail.setdefault("provider", "soundcloud")
+        reason_for_msg = detail.get("reason")
+        user_message = (
+            _SC_USER_MESSAGES_RU.get(str(reason_for_msg))
+            if isinstance(reason_for_msg, str)
+            else None
+        )
+        if user_message:
+            detail.setdefault("user_message", user_message)
     return detail
 
 
@@ -311,9 +352,7 @@ async def _http_proxy_range_get(
                 else "?"
             ),
             outbound_proxied=bool(out_proxy),
-            body_preview=body_preview[:200].decode(
-                "utf-8", errors="replace"
-            ),
+            body_preview=body_preview[:200].decode("utf-8", errors="replace"),
         )
         raise HTTPException(
             status_code=status.HTTP_502_BAD_GATEWAY,
@@ -343,9 +382,7 @@ async def _http_proxy_range_get(
                     report_outbound_proxy_result,
                 )
 
-                report_outbound_proxy_result(
-                    out_proxy, ok=not upstream_error
-                )
+                report_outbound_proxy_result(out_proxy, ok=not upstream_error)
             await resp.aclose()
 
     return StreamingResponse(
@@ -404,6 +441,20 @@ async def _proxy_cors_bypass_third_party_audio(
     )
 
 
+def _sc_detail_reason_is_manifest_all_404(
+    exc: HTTPException,
+) -> bool:
+    """Return True for SC 502 with all-manifests-404 reason."""
+    if exc.status_code != 502:
+        return False
+    detail = exc.detail if isinstance(exc.detail, dict) else None
+    if not detail:
+        return False
+    return (
+        detail.get("reason") == "provider_manifest_not_found_for_all_formats"
+    )
+
+
 async def _resolve_third_party_stream_with_recovery(
     track: Track,
     session: AsyncSession,
@@ -435,8 +486,12 @@ async def _resolve_third_party_stream_with_recovery(
 
         fallback_svc = TrackFallbackService(session, _settings)
         resolved = False
-        if exc.status_code in (404, 410) and _third_party_is_soundcloud(
-            eff_track
+        sc_refresh_codes = (404, 410)
+        sc_is_manifest_all_404 = (
+            is_sc_502 and _sc_detail_reason_is_manifest_all_404(exc)
+        )
+        if _third_party_is_soundcloud(eff_track) and (
+            exc.status_code in sc_refresh_codes or sc_is_manifest_all_404
         ):
             sc_refreshed = await fallback_svc.try_refresh_sc_url(track)
             if sc_refreshed:

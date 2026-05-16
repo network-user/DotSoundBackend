@@ -1195,6 +1195,7 @@ export function PlayerProvider({
   type PlaybackFailureTelemetry = {
     errorCode?: string
     errorReason?: string
+    userMessage?: string
   }
   const lastUnavailableFailureRef =
     useRef<PlaybackFailureTelemetry>({})
@@ -1222,36 +1223,41 @@ export function PlayerProvider({
     }
   }, [])
 
-  const recordUnavailableSkip = useCallback(() => {
-    const b = unavailableSkipBatchRef.current
-    b.count += 1
-    const title =
-      b.count === 1
-        ? i18n.t('redesign.playerErrors.trackUnavailable')
-        : i18n.t(
-            'redesign.playerErrors.tracksUnavailableSkipped',
-            { count: b.count },
-          )
-    if (b.islandId) {
-      updateIsland(b.islandId, { title })
-    } else {
-      b.islandId = showIsland({
-        kind: 'toast',
-        title,
-        durationMs: 3500,
-      })
-    }
-    if (b.resetTimer != null) {
-      clearTimeout(b.resetTimer)
-    }
-    b.resetTimer = setTimeout(() => {
-      unavailableSkipBatchRef.current = {
-        count: 0,
-        islandId: null,
-        resetTimer: null,
+  const recordUnavailableSkip = useCallback(
+    (userMessage?: string) => {
+      const b = unavailableSkipBatchRef.current
+      b.count += 1
+      const trimmedUserMessage = userMessage?.trim() || ''
+      const title =
+        b.count === 1
+          ? (trimmedUserMessage ||
+              i18n.t('redesign.playerErrors.trackUnavailable'))
+          : i18n.t(
+              'redesign.playerErrors.tracksUnavailableSkipped',
+              { count: b.count },
+            )
+      if (b.islandId) {
+        updateIsland(b.islandId, { title })
+      } else {
+        b.islandId = showIsland({
+          kind: 'toast',
+          title,
+          durationMs: 5000,
+        })
       }
-    }, 3500)
-  }, [])
+      if (b.resetTimer != null) {
+        clearTimeout(b.resetTimer)
+      }
+      b.resetTimer = setTimeout(() => {
+        unavailableSkipBatchRef.current = {
+          count: 0,
+          islandId: null,
+          resetTimer: null,
+        }
+      }, 3500)
+    },
+    [],
+  )
 
   const haltRadioAfterAutoSkipExhaustion = useCallback(() => {
     radioAutoSkipHaltedRef.current = true
@@ -1296,11 +1302,15 @@ export function PlayerProvider({
     if (wasRadioMode && radioAutoSkipHaltedRef.current) {
       return false
     }
-    if (failure.errorCode || failure.errorReason) {
+    if (
+      failure.errorCode ||
+      failure.errorReason ||
+      failure.userMessage
+    ) {
       lastUnavailableFailureRef.current = failure
     }
     markTrackUnavailableInSession(trackId)
-    recordUnavailableSkip()
+    recordUnavailableSkip(failure.userMessage)
     consecutiveAutoSkipsRef.current += 1
     if (wasRadioMode) {
       radioAutoSkipsRef.current += 1

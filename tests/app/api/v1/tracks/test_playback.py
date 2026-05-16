@@ -602,3 +602,65 @@ async def test_recovery_handles_soundcloud_502_as_recoverable() -> None:
     assert stream_url == "https://media.sndcdn.com/repl.mp3"
     assert protocol == "progressive"
     fallback_mock.assert_awaited_once_with(original)
+
+
+async def test_sc_502_manifest_all_404_triggers_url_refresh() -> None:
+    from app.api.v1.tracks.playback import (
+        _resolve_third_party_stream_with_recovery,
+    )
+
+    track = SimpleNamespace(
+        id=200,
+        source_platform="soundcloud",
+        sc_url="https://soundcloud.com/a/original",
+    )
+    call_log: list[str] = []
+
+    async def fake_resolve(
+        track: object,
+        _session: object,
+        *,
+        use_cache: bool = True,
+    ) -> tuple[str, str]:
+        call_log.append("resolve")
+        if len(call_log) == 1:
+            raise HTTPException(
+                status_code=502,
+                detail={
+                    "code": "soundcloud_stream_unavailable",
+                    "reason": ("provider_manifest_not_found_for_all_formats"),
+                },
+            )
+        return "https://media.sndcdn.com/refreshed.mp3", "hls"
+
+    refresh_mock = AsyncMock(return_value=True)
+    fallback_mock = AsyncMock(return_value=None)
+    with (
+        patch(
+            "app.api.v1.tracks.playback._resolve_third_party_stream",
+            new=fake_resolve,
+        ),
+        patch(
+            "app.services.track_fallback_service.TrackFallbackService."
+            "try_refresh_sc_url",
+            new=refresh_mock,
+        ),
+        patch(
+            "app.services.track_fallback_service.TrackFallbackService."
+            "find_and_apply_fallback",
+            new=fallback_mock,
+        ),
+    ):
+        eff_track, stream_url, protocol = (
+            await _resolve_third_party_stream_with_recovery(
+                track,
+                session=object(),  # type: ignore[arg-type]
+                use_cache=True,
+            )
+        )
+
+    assert eff_track is track
+    assert stream_url == "https://media.sndcdn.com/refreshed.mp3"
+    assert protocol == "hls"
+    refresh_mock.assert_awaited_once_with(track)
+    fallback_mock.assert_not_awaited()

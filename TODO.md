@@ -1,5 +1,71 @@
 # DotSound - TODO Tracker
 
+- [x] **SoundCloud import policy gate + verify-blocks-phantom + 502
+  recovery (2026-05-16)**
+  - PrivateCore: added `services/sc_track_policy.py` with
+    `evaluate_soundcloud_track_importability(track)` and
+    `classify_soundcloud_stream_failure_reason(track)`. Reads SC
+    `policy`/`monetization_model`/`access`/`streamable`/`media.
+    transcodings` and returns a structured decision (allowed +
+    reason + RU user_message) without I/O. Reason codes:
+    `geo_blocked`, `subscription_required`, `preview_only`,
+    `snippet_only`, `removed`, `not_streamable`,
+    `no_playable_transcoding`, `not_track`,
+    `region_unsupported`.
+  - Backend `import_or_get_track`: rejects SC tracks at the
+    `/resolve` step when PrivateCore says they cannot be
+    streamed by anonymous client — returns
+    `422 soundcloud_track_not_importable` with a user-facing
+    reason instead of creating a Track that the player will
+    immediately fail on.
+  - Backend: when `_verify_imported_track_playback` fails on a
+    freshly-created SC Track, the row is now marked
+    `is_active=false`, `is_public=false`,
+    `deleted_reason=<reason>` and the caller gets a structured
+    `422 soundcloud_track_unverified`. Behaviour controlled by
+    `sc_strict_import_verify` (default `True` in prod; tests
+    flip it off via root-conftest autouse fixture). This is the
+    fix for the 5opka/VPN-style case where a track was importable
+    but every transcoding manifest returned 404.
+  - Backend `_resolve_third_party_stream_with_recovery`: SC
+    `502 provider_manifest_not_found_for_all_formats` now also
+    triggers `TrackFallbackService.try_refresh_sc_url`, not
+    only `404/410`. The fallback path can now repair the
+    “resolve works, manifest 404 for every format” case when
+    SC renames the permalink.
+  - Backend transport: SC transcoding-manifest GET now sends
+    `Origin: https://soundcloud.com` +
+    `Referer: https://soundcloud.com/` (only on the manifest
+    step, not on `/resolve` or `/search`).
+  - Backend: new admin endpoint
+    `GET /api/v1/admin/soundcloud/diagnose?url=...` (requires
+    `tracks.manage`). Resolves the URL, runs the PrivateCore
+    decision, and HEAD-probes every transcoding with the same
+    headers/auth the player uses. Lets an operator see at a
+    glance whether the track is `policy=BLOCK`, `SUB_HIGH_TIER`,
+    has snipped-only transcodings, etc.
+  - Backend stream-error UX: `_third_party_error_detail` now
+    enriches SC 502/4xx responses with `user_message` (RU)
+    derived from the structured `reason`, so the frontend can
+    surface a concrete cause instead of generic
+    "трек недоступен".
+  - Frontend: `getApiErrorTelemetry` now reads `user_message`;
+    `PlayerContext.recordUnavailableSkip` shows it as the
+    in-island title on the first skip, falling back to the
+    existing locale string for subsequent skips.
+  - Tests: 28 new PrivateCore tests on
+    `evaluate_soundcloud_track_importability` /
+    `classify_soundcloud_stream_failure_reason`. Backend
+    tests cover policy rejection (BLOCK, SUB_HIGH_TIER),
+    phantom-track suppression on verify failure, and 502
+    `provider_manifest_not_found_for_all_formats` → URL
+    refresh recovery path. Frontend `npm run build`,
+    Ruff and targeted pytest all green.
+  - Out of scope here (will iterate separately): switching the
+    SC manifest egress to a Russia-bypass proxy / Tor — config
+    knobs `sc_stream_manifest_proxy_retries` and
+    `sc_stream_fallback_direct_on_tor_failure` already exist.
+
 - [x] **Telegram import visibility in profile (2026-05-16)**
   - Profile data now refreshes when returning from the import subview and
     immediately after an import job reaches `done`, so the imported tracks

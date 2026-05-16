@@ -67,17 +67,13 @@ def _compile_bigint_sqlite(
     return "INTEGER"
 
 
-@event.listens_for(
-    Base, "init", propagate=True
-)
+@event.listens_for(Base, "init", propagate=True)
 def _set_boolean_defaults(
     target: object,
     _args: object,
     kwargs: dict[str, object],
 ) -> None:
-    for attr in type(
-        target
-    ).__mapper__.column_attrs:
+    for attr in type(target).__mapper__.column_attrs:
         col = attr.columns[0]
         if (
             isinstance(col.type, Boolean)
@@ -102,6 +98,30 @@ def _disable_rate_limit() -> Iterator[None]:
         yield
 
 
+@pytest.fixture(autouse=True)
+def _disable_sc_strict_import_verify(
+    monkeypatch: pytest.MonkeyPatch,
+) -> Iterator[None]:
+    """Default SC import behavior in tests: don't reject on verify fail.
+
+    Tests rarely mock the actual SoundCloud HTTP layer, so the
+    post-import verification call will return False (no network).
+    With ``sc_strict_import_verify=True`` (the production default)
+    that would turn every SC import test into a 422. Override to
+    False here; specific tests that exercise the strict-verify branch
+    flip it back to True with ``monkeypatch.setattr``.
+    """
+    from app.config import settings
+
+    monkeypatch.setattr(
+        settings,
+        "sc_strict_import_verify",
+        False,
+        raising=False,
+    )
+    yield
+
+
 @pytest.fixture
 def anyio_backend() -> str:
     return "asyncio"
@@ -120,10 +140,8 @@ async def db_engine() -> AsyncIterator[AsyncEngine]:
 async def db_session(
     db_engine: AsyncEngine,
 ) -> AsyncIterator[AsyncSession]:
-    factory: async_sessionmaker[AsyncSession] = (
-        async_sessionmaker(
-            db_engine, expire_on_commit=False
-        )
+    factory: async_sessionmaker[AsyncSession] = async_sessionmaker(
+        db_engine, expire_on_commit=False
     )
     async with factory() as session:
         yield session
@@ -133,10 +151,8 @@ async def db_session(
 async def client(
     db_engine: AsyncEngine,
 ) -> AsyncIterator[AsyncClient]:
-    factory: async_sessionmaker[AsyncSession] = (
-        async_sessionmaker(
-            db_engine, expire_on_commit=False
-        )
+    factory: async_sessionmaker[AsyncSession] = async_sessionmaker(
+        db_engine, expire_on_commit=False
     )
 
     async def _override_get_db() -> AsyncSession:
@@ -149,9 +165,7 @@ async def client(
                 raise
 
     application = create_app()
-    application.dependency_overrides[get_db] = (
-        _override_get_db
-    )
+    application.dependency_overrides[get_db] = _override_get_db
 
     with patch(
         "app.middlewares.admin_audit_log.AsyncSessionLocal",
@@ -172,9 +186,7 @@ async def _fake_put_cas(
 ) -> str:
     from app.core.s3 import build_cas_audio_key
 
-    return build_cas_audio_key(
-        content_sha256_hex, extension
-    )
+    return build_cas_audio_key(content_sha256_hex, extension)
 
 
 @pytest.fixture
@@ -198,20 +210,22 @@ def mock_s3() -> Iterator[AsyncMock]:
 def mock_taskiq() -> Iterator[None]:
     _lyrics_kiq = MagicMock()
     _lyrics_kiq.task_id = "test-lyrics-task"
-    with patch(
-        "app.services.upload_service"
-        ".transcode_and_upload.kiq",
-        new_callable=AsyncMock,
-        return_value=None,
-    ), patch(
-        "app.services.upload_service"
-        ".generate_and_upload_cover.kiq",
-        new_callable=AsyncMock,
-        return_value=None,
-    ), patch(
-        "app.services.lyrics_worker.catalog_only_lyrics_task.kiq",
-        new_callable=AsyncMock,
-        return_value=_lyrics_kiq,
+    with (
+        patch(
+            "app.services.upload_service" ".transcode_and_upload.kiq",
+            new_callable=AsyncMock,
+            return_value=None,
+        ),
+        patch(
+            "app.services.upload_service" ".generate_and_upload_cover.kiq",
+            new_callable=AsyncMock,
+            return_value=None,
+        ),
+        patch(
+            "app.services.lyrics_worker.catalog_only_lyrics_task.kiq",
+            new_callable=AsyncMock,
+            return_value=_lyrics_kiq,
+        ),
     ):
         yield
 
@@ -223,15 +237,11 @@ async def create_test_user(
 ) -> dict[str, Any]:
     payload = {
         "telegram_id": telegram_id,
-        "first_name": kwargs.get(
-            "first_name", "Test"
-        ),
+        "first_name": kwargs.get("first_name", "Test"),
         "username": kwargs.get("username"),
         "last_name": kwargs.get("last_name"),
     }
-    r = await client.post(
-        "/api/v1/users", json=payload
-    )
+    r = await client.post("/api/v1/users", json=payload)
     assert r.status_code == 200
     return r.json()
 
@@ -247,42 +257,46 @@ async def create_test_track(
     }
     headers: dict[str, str] = {}
     if uploader_id is not None:
-        headers = await auth_headers(
-            client, uploader_id
-        )
+        headers = await auth_headers(client, uploader_id)
 
     _lyrics_kiq = MagicMock()
     _lyrics_kiq.task_id = "test-lyrics-task"
-    with patch(
-        "app.core.s3.upload_object",
-        new_callable=AsyncMock,
-        return_value=None,
-    ), patch(
-        "app.services.file_validator.validate_audio",
-        return_value=None,
-    ), patch(
-        "app.services.file_validator.scan_for_malware",
-        new_callable=AsyncMock,
-        return_value=None,
-    ), patch(
-        "app.services.track_ingest_schedule_service"
-        ".schedule_new_track_background_jobs",
-        new_callable=AsyncMock,
-        return_value=None,
-    ), patch(
-        "app.services.upload_service"
-        ".transcode_and_upload.kiq",
-        new_callable=AsyncMock,
-        return_value=None,
-    ), patch(
-        "app.services.upload_service"
-        ".generate_and_upload_cover.kiq",
-        new_callable=AsyncMock,
-        return_value=None,
-    ), patch(
-        "app.services.lyrics_worker.catalog_only_lyrics_task.kiq",
-        new_callable=AsyncMock,
-        return_value=_lyrics_kiq,
+    with (
+        patch(
+            "app.core.s3.upload_object",
+            new_callable=AsyncMock,
+            return_value=None,
+        ),
+        patch(
+            "app.services.file_validator.validate_audio",
+            return_value=None,
+        ),
+        patch(
+            "app.services.file_validator.scan_for_malware",
+            new_callable=AsyncMock,
+            return_value=None,
+        ),
+        patch(
+            "app.services.track_ingest_schedule_service"
+            ".schedule_new_track_background_jobs",
+            new_callable=AsyncMock,
+            return_value=None,
+        ),
+        patch(
+            "app.services.upload_service" ".transcode_and_upload.kiq",
+            new_callable=AsyncMock,
+            return_value=None,
+        ),
+        patch(
+            "app.services.upload_service" ".generate_and_upload_cover.kiq",
+            new_callable=AsyncMock,
+            return_value=None,
+        ),
+        patch(
+            "app.services.lyrics_worker.catalog_only_lyrics_task.kiq",
+            new_callable=AsyncMock,
+            return_value=_lyrics_kiq,
+        ),
     ):
         r = await client.post(
             "/api/v1/tracks/upload",
@@ -291,9 +305,7 @@ async def create_test_track(
             files={
                 "file": (
                     "t.mp3",
-                    BytesIO(
-                        b"\xff\xfb" + b"\x00" * 64
-                    ),
+                    BytesIO(b"\xff\xfb" + b"\x00" * 64),
                     "audio/mpeg",
                 )
             },
@@ -306,9 +318,7 @@ async def auth_headers(
     client: AsyncClient,
     user_id: int,
 ) -> dict[str, str]:
-    response = await client.post(
-        f"/api/v1/auth/mock/{user_id}"
-    )
+    response = await client.post(f"/api/v1/auth/mock/{user_id}")
     assert response.status_code == 200
     token = response.json()["access_token"]
     return {"Authorization": f"Bearer {token}"}

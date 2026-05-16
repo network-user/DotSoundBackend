@@ -261,7 +261,11 @@ export function getApiErrorMessage(
 
 export function getApiErrorTelemetry(
   err: unknown,
-): { errorCode?: string; errorReason?: string } {
+): {
+  errorCode?: string
+  errorReason?: string
+  userMessage?: string
+} {
   if (!(err instanceof ApiError) || !err.detail) {
     return {}
   }
@@ -273,7 +277,11 @@ export function getApiErrorTelemetry(
     typeof err.detail.reason === 'string'
       ? err.detail.reason
       : undefined
-  return { errorCode: code, errorReason: reason }
+  const userMessage =
+    typeof err.detail.user_message === 'string'
+      ? err.detail.user_message
+      : undefined
+  return { errorCode: code, errorReason: reason, userMessage }
 }
 
 const RETRY_STATUS = new Set([502, 503, 504])

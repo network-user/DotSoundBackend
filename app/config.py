@@ -202,6 +202,14 @@ class AppSettings(BaseSettings):
     # Extra same-mode retries after every SoundCloud transcoding
     # manifest returns 404 through one outbound identity.
     sc_stream_manifest_proxy_retries: int = 2
+    # On import, refuse to create a phantom Track row if the very
+    # first playback verification fails (every SC transcoding manifest
+    # returns 404, geo block, removed, Go+ only, etc.). When False, the
+    # row is created and surfaced in the user library but every play
+    # attempt returns 502 — that was the pre-2026-05-16 behavior. Keep
+    # True in production. Tests that don't mock the SC verify path
+    # should override to False or patch the verifier.
+    sc_strict_import_verify: bool = True
     # When TOR_POOL_ENABLED=true, startup failure must fail closed by
     # default. Otherwise an operator can believe rotated egress is active
     # while the process silently falls back to the server IP.

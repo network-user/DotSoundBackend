@@ -6,6 +6,11 @@ from typing import Any
 import httpx
 import structlog
 from dotsound_private_core import censor_text
+from dotsound_private_core.services.sc_track_policy import (
+    SoundCloudImportDecision,
+    classify_soundcloud_stream_failure_reason,
+    evaluate_soundcloud_track_importability,
+)
 from fastapi import HTTPException, status
 from sqlalchemy import select
 from sqlalchemy import text as sql_text
@@ -25,6 +30,13 @@ from app.services.url_cache import (
     get_cached_stream,
     set_cached_stream,
 )
+
+_SC_WEB_ORIGIN = "https://soundcloud.com"
+_SC_WEB_REFERER = "https://soundcloud.com/"
+_SC_MANIFEST_BROWSER_HEADERS: dict[str, str] = {
+    "Origin": _SC_WEB_ORIGIN,
+    "Referer": _SC_WEB_REFERER,
+}
 
 logger: structlog.stdlib.BoundLogger = structlog.get_logger(__name__)
 
@@ -96,11 +108,7 @@ def _sc_error_detail(
         detail["attempted_protocols"] = attempted_protocols
     if extra:
         detail.update(
-            {
-                key: value
-                for key, value in extra.items()
-                if value is not None
-            }
+            {key: value for key, value in extra.items() if value is not None}
         )
     return detail
 
@@ -658,7 +666,11 @@ class SoundCloudService:
                     attempted_protocols.append(protocol)
                 for index, selected in enumerate(variants, start=1):
                     try:
-                        r = await client.get(selected["url"], params=params)
+                        r = await client.get(
+                            selected["url"],
+                            params=params,
+                            headers=_SC_MANIFEST_BROWSER_HEADERS,
+                        )
                     except httpx.HTTPError as exc:
                         saw_transient_network_error = True
                         logger.warning(
@@ -672,9 +684,7 @@ class SoundCloudService:
                         continue
                     if r.status_code in (401, 403):
                         raise HTTPException(
-                            status_code=(
-                                status.HTTP_503_SERVICE_UNAVAILABLE
-                            ),
+                            status_code=(status.HTTP_503_SERVICE_UNAVAILABLE),
                             detail=_sc_client_auth_error_detail(
                                 stage="transcoding_manifest",
                                 upstream_status=r.status_code,
@@ -851,8 +861,7 @@ class SoundCloudService:
                         )
                     except _SCAllTranscodings404 as exc:
                         last_404_protocols = (
-                            exc.attempted_protocols
-                            or last_404_protocols
+                            exc.attempted_protocols or last_404_protocols
                         )
                         logger.warning(
                             "soundcloud_stream_retry_proxy_all_404",
@@ -885,9 +894,7 @@ class SoundCloudService:
                     detail=_sc_error_detail(
                         code="soundcloud_stream_unavailable",
                         message="SoundCloud stream unavailable",
-                        reason=(
-                            "provider_manifest_not_found_for_all_formats"
-                        ),
+                        reason=("provider_manifest_not_found_for_all_formats"),
                         stage="transcoding_manifest",
                         retryable=True,
                         upstream_status=404,
@@ -935,9 +942,7 @@ class SoundCloudService:
                     detail=_sc_error_detail(
                         code="soundcloud_stream_unavailable",
                         message="SoundCloud stream unavailable",
-                        reason=(
-                            "provider_manifest_not_found_for_all_formats"
-                        ),
+                        reason=("provider_manifest_not_found_for_all_formats"),
                         stage="transcoding_manifest",
                         retryable=True,
                         upstream_status=404,
@@ -1731,6 +1736,30 @@ class SoundCloudService:
     ) -> Track:
         sc_url: str = sc_data.get("permalink_url", "")
 
+        decision = evaluate_soundcloud_track_importability(sc_data)
+        if not decision.allowed:
+            logger.info(
+                "sc_track_import_rejected_by_policy",
+                sc_url=sc_url or None,
+                reason=decision.reason,
+                diagnostic=dict(decision.diagnostic),
+            )
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail=_sc_error_detail(
+                    code="soundcloud_track_not_importable",
+                    message=(
+                        decision.user_message
+                        or "Этот трек SoundCloud сейчас недоступен "
+                        "для импорта."
+                    ),
+                    reason=str(decision.reason or "not_importable"),
+                    stage="resolve",
+                    retryable=False,
+                    extra={"diagnostic": dict(decision.diagnostic)},
+                ),
+            )
+
         async def _verify_and_reindex(t: Track) -> bool:
             playback_verified = await self._verify_imported_track_playback(t)
             from app.services.search_index_notify import (
@@ -1855,6 +1884,16 @@ class SoundCloudService:
                 track_id=track.id,
             )
             playback_verified = await _verify_and_reindex(track)
+            if not playback_verified and settings.sc_strict_import_verify:
+                await self._suppress_unverified_imported_track(
+                    track,
+                    sc_data=sc_data,
+                )
+                raise self._sc_unverified_http_exception(
+                    track=track,
+                    sc_data=sc_data,
+                    sc_url=sc_url,
+                )
             await _ingest_schedule(track)
             if playback_verified:
                 await _maybe_enqueue_audio_cache(track.id)
@@ -1906,10 +1945,91 @@ class SoundCloudService:
             track_id=track.id,
         )
         playback_verified = await _verify_and_reindex(track)
+        if not playback_verified and settings.sc_strict_import_verify:
+            await self._suppress_unverified_imported_track(
+                track,
+                sc_data=sc_data,
+            )
+            raise self._sc_unverified_http_exception(
+                track=track,
+                sc_data=sc_data,
+                sc_url=sc_url,
+            )
         await _ingest_schedule(track)
         if playback_verified:
             await _maybe_enqueue_audio_cache(track.id)
         return track
+
+    async def _suppress_unverified_imported_track(
+        self,
+        track: Track,
+        *,
+        sc_data: dict | None,
+    ) -> None:
+        """Hide a freshly-created SC track that failed playback verify.
+
+        Marks the track as inactive and tags ``deleted_reason`` with
+        a stable code so admin tooling can find/cleanup these rows.
+        Leaves the row in place so the next import of the same
+        ``sc_url`` is still deduplicated by ON CONFLICT.
+        """
+        reason_code = (
+            classify_soundcloud_stream_failure_reason(sc_data)
+            or "playback_unverified"
+        )
+        track.is_active = False
+        track.is_public = False
+        track.deleted_reason = reason_code[:32]
+        try:
+            await self._session.commit()
+        except Exception:  # noqa: BLE001
+            await self._session.rollback()
+            raise
+        logger.warning(
+            "sc_import_unverified_track_suppressed",
+            track_id=track.id,
+            sc_url=track.sc_url,
+            reason=reason_code,
+        )
+
+    def _sc_unverified_http_exception(
+        self,
+        *,
+        track: Track,
+        sc_data: dict | None,
+        sc_url: str,
+    ) -> HTTPException:
+        decision: SoundCloudImportDecision = (
+            evaluate_soundcloud_track_importability(sc_data)
+        )
+        reason = (
+            decision.reason if not decision.allowed else "playback_unverified"
+        )
+        message = (
+            decision.user_message
+            if not decision.allowed and decision.user_message
+            else (
+                "Этот трек не удалось воспроизвести через "
+                "SoundCloud прямо сейчас — он сохранён в "
+                "архив, попробуйте импортировать его позже "
+                "или выберите другой источник."
+            )
+        )
+        return HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=_sc_error_detail(
+                code="soundcloud_track_unverified",
+                message=message,
+                reason=str(reason or "playback_unverified"),
+                stage="import_playback_verification",
+                retryable=True,
+                extra={
+                    "sc_url": sc_url or None,
+                    "track_id": track.id,
+                    "diagnostic": dict(decision.diagnostic),
+                },
+            ),
+        )
 
     async def _verify_imported_track_playback(self, track: Track) -> bool:
         if track.access_mode != "third_party_stream" or not track.sc_url:
@@ -1928,8 +2048,8 @@ class SoundCloudService:
                 use_cache=False,
             )
         except HTTPException as exc:
-            detail = exc.detail if isinstance(exc.detail, str) else str(
-                exc.detail
+            detail = (
+                exc.detail if isinstance(exc.detail, str) else str(exc.detail)
             )
             await health.record_import_verification_failed(
                 track_id=track.id,

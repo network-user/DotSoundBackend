@@ -43,6 +43,7 @@ _MOD = "app.services.soundcloud_service"
 def _isolate_soundcloud_service(
     monkeypatch: pytest.MonkeyPatch,
 ) -> Iterator[None]:
+    from app.config import settings
     from app.services import soundcloud_service
 
     soundcloud_service._sc_http_client_cache.clear()
@@ -56,6 +57,12 @@ def _isolate_soundcloud_service(
         soundcloud_service,
         "set_cached_stream",
         _noop_set_cached_stream,
+    )
+    monkeypatch.setattr(
+        settings,
+        "sc_strict_import_verify",
+        False,
+        raising=False,
     )
     yield
     soundcloud_service._sc_http_client_cache.clear()
@@ -490,10 +497,7 @@ def _assert_sc_stream_unavailable_detail(
     assert isinstance(detail, dict)
     assert detail["code"] == "soundcloud_stream_unavailable"
     assert detail["message"] == "SoundCloud stream unavailable"
-    assert (
-        detail["reason"]
-        == "provider_manifest_not_found_for_all_formats"
-    )
+    assert detail["reason"] == "provider_manifest_not_found_for_all_formats"
     assert detail["stage"] == "transcoding_manifest"
     assert detail["upstream_status"] == 404
     return detail
@@ -1411,3 +1415,154 @@ async def test_fetch_expanded_artist_station_playlist(
     called_url = mock_resolve.await_args[0][0]
     assert "artist-stations:7" in called_url
     mock_bulk.assert_awaited_once_with([11, 12])
+
+
+class TestImportOrGetTrackPolicyRejection:
+    async def test_blocked_policy_rejects_import_without_db_write(
+        self,
+        session: AsyncSession,
+    ) -> None:
+        svc = SoundCloudService("test_id", session)
+        with pytest.raises(HTTPException) as exc:
+            await svc.import_or_get_track(
+                {
+                    "permalink_url": ("https://soundcloud.com/blocked/track"),
+                    "title": "Blocked",
+                    "user": {"username": "Artist"},
+                    "duration": 100000,
+                    "uri": "sc:blocked",
+                    "kind": "track",
+                    "policy": "BLOCK",
+                    "media": {
+                        "transcodings": [
+                            {
+                                "url": "https://api/x",
+                                "snipped": False,
+                                "format": {"protocol": "hls"},
+                            },
+                        ],
+                    },
+                },
+                uploader_id=1,
+            )
+        assert exc.value.status_code == 422
+        assert exc.value.detail["code"] == "soundcloud_track_not_importable"
+        assert exc.value.detail["reason"] == "geo_blocked"
+
+        from app.models.track import Track as _Track
+
+        rows = await session.execute(
+            __import__(
+                "sqlalchemy",
+                fromlist=["select"],
+            )
+            .select(_Track)
+            .where(_Track.sc_url == "https://soundcloud.com/blocked/track")
+        )
+        assert rows.scalar_one_or_none() is None
+
+    async def test_subscription_only_track_is_rejected(
+        self,
+        session: AsyncSession,
+    ) -> None:
+        svc = SoundCloudService("test_id", session)
+        with pytest.raises(HTTPException) as exc:
+            await svc.import_or_get_track(
+                {
+                    "permalink_url": "https://soundcloud.com/p/go",
+                    "title": "Go+ Only",
+                    "user": {"username": "Artist"},
+                    "duration": 100000,
+                    "uri": "sc:go",
+                    "kind": "track",
+                    "monetization_model": "SUB_HIGH_TIER",
+                    "media": {
+                        "transcodings": [
+                            {
+                                "url": "https://api/x",
+                                "snipped": False,
+                                "format": {"protocol": "hls"},
+                            },
+                        ],
+                    },
+                },
+                uploader_id=1,
+            )
+        assert exc.value.detail["reason"] == "subscription_required"
+
+
+class TestImportOrGetTrackStrictVerify:
+    async def test_strict_verify_failure_suppresses_phantom_track(
+        self,
+        session: AsyncSession,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        from app.config import settings as _settings
+
+        monkeypatch.setattr(
+            _settings,
+            "sc_strict_import_verify",
+            True,
+            raising=False,
+        )
+
+        async def _failing_verify(
+            self: SoundCloudService,
+            track: object,
+        ) -> bool:
+            return False
+
+        monkeypatch.setattr(
+            SoundCloudService,
+            "_verify_imported_track_playback",
+            _failing_verify,
+        )
+
+        async def _noop_schedule(*_args: object, **_kwargs: object) -> None:
+            return None
+
+        monkeypatch.setattr(
+            "app.services.search_index_notify.schedule_reindex_track",
+            _noop_schedule,
+        )
+
+        svc = SoundCloudService("test_id", session)
+        sc_url = "https://soundcloud.com/phantom/case"
+        with pytest.raises(HTTPException) as exc:
+            await svc.import_or_get_track(
+                {
+                    "permalink_url": sc_url,
+                    "title": "Will Fail Verify",
+                    "user": {"username": "Artist"},
+                    "duration": 100000,
+                    "uri": "sc:phantom",
+                    "kind": "track",
+                    "media": {
+                        "transcodings": [
+                            {
+                                "url": "https://api/x",
+                                "snipped": False,
+                                "format": {"protocol": "hls"},
+                            },
+                        ],
+                    },
+                },
+                uploader_id=1,
+            )
+        assert exc.value.status_code == 422
+        assert exc.value.detail["code"] == "soundcloud_track_unverified"
+
+        from app.models.track import Track as _Track
+
+        select_fn = __import__(
+            "sqlalchemy",
+            fromlist=["select"],
+        ).select
+        rows = await session.execute(
+            select_fn(_Track).where(_Track.sc_url == sc_url)
+        )
+        phantom = rows.scalar_one_or_none()
+        assert phantom is not None
+        assert phantom.is_active is False
+        assert phantom.is_public is False
+        assert phantom.deleted_reason is not None

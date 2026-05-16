@@ -17,11 +17,11 @@ from . import (
     complaints,
     dashboard,
     experiments,
-    recsys,
     genre_samples,
     logs,
     manifest,
     metrics,
+    recsys,
     security,
     system,
     tasks,
@@ -32,6 +32,9 @@ from . import (
 )
 from . import (
     playlists as admin_playlists,
+)
+from . import (
+    soundcloud as admin_soundcloud,
 )
 
 router = APIRouter(
@@ -60,4 +63,5 @@ router.include_router(tasks.router)
 router.include_router(audit.router)
 router.include_router(security.router)
 router.include_router(antivirus.router)
+router.include_router(admin_soundcloud.router)
 router.include_router(ws.router)
