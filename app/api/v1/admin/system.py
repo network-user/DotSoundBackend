@@ -41,6 +41,44 @@ _AI_ARTIST_SUPPLEMENTAL_TTL_KEY = "ai.artist_supplemental_ttl_days"
 _RADIO_TUNING_KEY = "recsys.radio_tuning"
 
 
+def _backend_outbound_runtime_status(
+    snapshot: dict[str, Any],
+) -> dict[str, Any]:
+    from app.services.tor_pool import get_tor_pool
+
+    result = dict(snapshot)
+    static_proxy_count = len(settings.outbound_static_proxy_urls_list)
+    tor_pool = get_tor_pool()
+    tor_available = bool(settings.tor_pool_enabled and tor_pool is not None)
+
+    if static_proxy_count > 0:
+        mode = "proxy"
+    elif tor_available:
+        mode = "tor"
+    else:
+        mode = "direct"
+
+    tor = dict(result.get("tor") or {})
+    tor["available"] = tor_available
+    tor["control_port"] = (
+        settings.tor_control_port if tor_available else None
+    )
+    tor.setdefault("circuit_uses_cap", settings.tor_pool_size)
+    tor.setdefault(
+        "newnym_min_interval_s",
+        settings.tor_circuit_max_age_seconds,
+    )
+
+    proxies = dict(result.get("proxies") or {})
+    proxies["configured"] = static_proxy_count
+    proxies["prefer_tor"] = bool(tor_available and static_proxy_count == 0)
+
+    result["mode"] = mode
+    result["tor"] = tor
+    result["proxies"] = proxies
+    return result
+
+
 class AiSettingsResponse(BaseModel):
     track_info_ttl_days: int
     artist_supplemental_ttl_days: int
@@ -122,6 +160,7 @@ async def outbound_status(
             "available": False,
             "error": type(exc).__name__,
         }
+    snapshot = _backend_outbound_runtime_status(snapshot)
     return {"available": True, **snapshot}
 
 

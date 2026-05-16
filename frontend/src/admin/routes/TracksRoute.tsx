@@ -22,6 +22,7 @@ import { OverflowMenu } from '../components/widgets/OverflowMenu'
 import { FormModal } from '../components/widgets/FormModal'
 import { BulkPageSelector } from '../components/widgets/BulkPageSelector'
 import { PlaybackRepairSummaryPanel } from '../components/widgets/PlaybackRepairSummaryPanel'
+import type { SoundCloudDiagnoseResponse } from '../lib/adminApi'
 
 interface TrackRow {
   id: number
@@ -71,6 +72,7 @@ interface ModalsState {
   import: boolean
   gmImport: boolean
   sourceEdit: TrackRow | null
+  scDiagnose: boolean
 }
 
 const initialModals: ModalsState = {
@@ -82,6 +84,7 @@ const initialModals: ModalsState = {
   import: false,
   gmImport: false,
   sourceEdit: null,
+  scDiagnose: false,
 }
 
 const PAGE_SIZE = 25
@@ -109,6 +112,12 @@ function playbackDiagnosticParts(row: TrackRow): string[] {
     parts.push(protocols.join('+'))
   }
   return parts
+}
+
+function formatScDiagnoseResult(
+  result: SoundCloudDiagnoseResponse,
+): string {
+  return JSON.stringify(result, null, 2)
 }
 
 type ModalsAction =
@@ -175,6 +184,7 @@ export function TracksRoute() {
   const importModal = modals.import
   const gmImportModal = modals.gmImport
   const sourceEditModal = modals.sourceEdit
+  const scDiagnoseModal = modals.scDiagnose
   const setPromptModal = useCallback(
     (v: PromptState | null) =>
       modalsDispatch({ type: 'set', key: 'prompt', value: v }),
@@ -215,6 +225,11 @@ export function TracksRoute() {
       modalsDispatch({ type: 'set', key: 'sourceEdit', value: v }),
     [],
   )
+  const setScDiagnoseModal = useCallback(
+    (v: boolean) =>
+      modalsDispatch({ type: 'set', key: 'scDiagnose', value: v }),
+    [],
+  )
   const [contextEditValue, setContextEditValue] = useState('')
   const [busyContext, setBusyContext] = useState(false)
   const [importText, setImportText] = useState('')
@@ -234,6 +249,13 @@ export function TracksRoute() {
     can: '',
   })
   const [sourceBusy, setSourceBusy] = useState(false)
+  const [scDiagnoseUrl, setScDiagnoseUrl] = useState(
+    'https://soundcloud.com/5opka-music/vpn',
+  )
+  const [scDiagnoseBusy, setScDiagnoseBusy] = useState(false)
+  const [scDiagnoseError, setScDiagnoseError] = useState<string | null>(null)
+  const [scDiagnoseResult, setScDiagnoseResult] =
+    useState<SoundCloudDiagnoseResponse | null>(null)
 
   const contextTextareaRef = useRef<HTMLTextAreaElement>(null)
   const playbackErrorQuery =
@@ -627,6 +649,31 @@ export function TracksRoute() {
       await showAlert((err as Error).message)
     } finally {
       setSourceBusy(false)
+    }
+  }
+
+  const openScDiagnoseModal = (url?: string | null) => {
+    if (url) {
+      setScDiagnoseUrl(url)
+    }
+    setScDiagnoseError(null)
+    setScDiagnoseResult(null)
+    setScDiagnoseModal(true)
+  }
+
+  const handleSoundCloudDiagnose = async () => {
+    const url = scDiagnoseUrl.trim()
+    if (!url) return
+    setScDiagnoseBusy(true)
+    setScDiagnoseError(null)
+    try {
+      const result = await adminApi.diagnoseSoundCloudTrack(url)
+      setScDiagnoseResult(result)
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err)
+      setScDiagnoseError(msg)
+    } finally {
+      setScDiagnoseBusy(false)
     }
   }
 
@@ -1029,6 +1076,20 @@ export function TracksRoute() {
             >
               {t('admin.tracks.actionSources')}
             </MotionPress>
+            {i.row.original.source_platform === 'soundcloud' &&
+              (i.row.original.sc_url || i.row.original.source_url) && (
+                <MotionPress
+                  variant="ghost"
+                  onClick={() =>
+                    openScDiagnoseModal(
+                      i.row.original.sc_url || i.row.original.source_url,
+                    )
+                  }
+                  disabled={busy}
+                >
+                  SC diagnose
+                </MotionPress>
+              )}
             {pbRow && (
               <>
                 <MotionPress
@@ -1396,6 +1457,9 @@ export function TracksRoute() {
           }
         >
           {t('admin.tracks.openPlaybackRepairTasks')}
+        </MotionPress>
+        <MotionPress variant="ghost" onClick={() => openScDiagnoseModal()}>
+          SC diagnose
         </MotionPress>
         <MotionPress
           variant="ghost"
@@ -1785,6 +1849,54 @@ export function TracksRoute() {
         >
           {t('admin.tracks.sourceEditClearHint')}
         </p>
+      </FormModal>
+
+      <FormModal
+        open={scDiagnoseModal}
+        size="lg"
+        title="SoundCloud diagnose"
+        subtitle="Resolve a SoundCloud URL through the backend outbound path and probe every available manifest."
+        submitText="Run diagnose"
+        cancelText={t('admin.common.close')}
+        submitting={scDiagnoseBusy}
+        submitDisabled={!scDiagnoseUrl.trim()}
+        error={scDiagnoseError}
+        closeOnOverlayClick={!scDiagnoseBusy}
+        onClose={() => setScDiagnoseModal(false)}
+        onSubmit={() => handleSoundCloudDiagnose()}
+      >
+        <label style={{ display: 'block', fontSize: 12, marginBottom: 4 }}>
+          SoundCloud URL
+        </label>
+        <input
+          value={scDiagnoseUrl}
+          onChange={(e) => setScDiagnoseUrl(e.target.value)}
+          placeholder="https://soundcloud.com/artist/track"
+          style={{ width: '100%' }}
+          disabled={scDiagnoseBusy}
+        />
+        {scDiagnoseResult && (
+          <div className="admin-sc-diagnose-result">
+            <div className="admin-sc-diagnose-summary">
+              <StatusPill
+                kind={scDiagnoseResult.decision.allowed ? 'ok' : 'warn'}
+              >
+                {scDiagnoseResult.decision.allowed
+                  ? 'Allowed'
+                  : scDiagnoseResult.decision.reason || 'Blocked'}
+              </StatusPill>
+              <span>
+                egress:{' '}
+                {scDiagnoseResult.request.egress.ip_probe.ip || 'unknown'}
+              </span>
+              <span>
+                proxied:{' '}
+                {scDiagnoseResult.request.egress.proxied ? 'yes' : 'no'}
+              </span>
+            </div>
+            <pre>{formatScDiagnoseResult(scDiagnoseResult)}</pre>
+          </div>
+        )}
       </FormModal>
 
       <FormModal

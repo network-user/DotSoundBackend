@@ -1,5 +1,14 @@
 # DotSound - TODO Tracker
 
+- [x] **Admin Network runtime mode fix (2026-05-16)**
+  - Admin `GET /api/v1/admin/system/outbound-status` now overlays the
+    PrivateCore metrics snapshot with Backend runtime transport config:
+    `OUTBOUND_STATIC_PROXY_URLS` forces `mode=proxy`, disables the Tor
+    card in the response, and exposes only the configured proxy count.
+  - Added regression coverage for the case where PrivateCore's opaque
+    outbound snapshot reports `tor`, but Backend playback egress is
+    actually configured for static proxies.
+
 - [x] **SoundCloud import policy gate + verify-blocks-phantom + 502
   recovery (2026-05-16)**
   - PrivateCore: added `services/sc_track_policy.py` with
@@ -44,6 +53,19 @@
     headers/auth the player uses. Lets an operator see at a
     glance whether the track is `policy=BLOCK`, `SUB_HIGH_TIER`,
     has snipped-only transcodings, etc.
+  - Follow-up in the same session: the diagnostic endpoint now
+    pins `/resolve`, egress-IP lookup, and manifest probes to
+    one selected SoundCloud outbound proxy and returns
+    `request.egress` (`outbound_configured`, `proxied`,
+    redacted proxy URL/scheme/host/port, and `ip_probe`). This
+    makes it clear which IP/transport SoundCloud saw during the
+    diagnostic run.
+  - Admin UI follow-up: Tracks admin page now has a toolbar-level
+    `SC diagnose` button plus row-level `SC diagnose` buttons for
+    SoundCloud tracks. The modal runs the authenticated admin request
+    through `adminApi.diagnoseSoundCloudTrack(...)` and renders the
+    full JSON response, including egress IP/proxy and manifest probe
+    statuses.
   - Backend stream-error UX: `_third_party_error_detail` now
     enriches SC 502/4xx responses with `user_message` (RU)
     derived from the structured `reason`, so the frontend can

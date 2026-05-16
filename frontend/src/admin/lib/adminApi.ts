@@ -61,6 +61,36 @@ export class AdminApiError extends Error {
   }
 }
 
+export interface SoundCloudDiagnoseResponse {
+  request: {
+    url: string
+    egress: {
+      outbound_configured: boolean
+      proxied: boolean
+      proxy_url: string | null
+      proxy_scheme: string | null
+      proxy_host: string | null
+      proxy_port: number | null
+      ip_probe: {
+        ok: boolean
+        ip?: string | null
+        provider: string
+        status_code?: number
+        error?: string
+      }
+    }
+  }
+  decision: {
+    allowed: boolean
+    reason: string | null
+    user_message: string | null
+    diagnostic: Record<string, unknown>
+  }
+  track: Record<string, unknown>
+  manifest_probes: Array<Record<string, unknown>>
+  track_authorization_present: boolean
+}
+
 interface RequestOptions {
   method?: string
   body?: unknown
@@ -1027,6 +1057,13 @@ export const adminApi = {
     adminFetch<Record<string, unknown>>(
       `/tracks/${trackId}/playback-health/full-restore`,
       { method: 'POST', body: {} },
+    ),
+  diagnoseSoundCloudTrack: (url: string) =>
+    adminFetch<SoundCloudDiagnoseResponse>(
+      '/soundcloud/diagnose',
+      {
+        query: { url },
+      },
     ),
   listAdminAlbums: (params: {
     page?: number

@@ -25,3 +25,14 @@ def test_compose_backend_uses_bot_service_internal_url() -> None:
         compose,
         "worker",
     )
+
+
+def test_compose_dev_services_mount_private_core_source() -> None:
+    compose = Path("docker-compose.yml").read_text(encoding="utf-8")
+    mount = "../DotSoundPrivateCore:/DotSoundPrivateCore:ro"
+    pythonpath = "PYTHONPATH: /DotSoundPrivateCore/src"
+
+    for service in ("backend", "worker"):
+        block = _service_block(compose, service)
+        assert mount in block
+        assert pythonpath in block

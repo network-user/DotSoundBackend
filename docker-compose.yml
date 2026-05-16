@@ -113,6 +113,9 @@ services:
       DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-dotsound}:${POSTGRES_PASSWORD:-dotsound}@postgres:5432/${POSTGRES_DB:-dotsound}
       ELASTICSEARCH_URL: http://elasticsearch:9200
       INTERNAL_API_ALLOWED_CIDRS: ${INTERNAL_API_ALLOWED_CIDRS:-},172.16.0.0/12
+      # Live sibling checkout overrides the PrivateCore baked into the
+      # image (see volume below). Prod compose resets both.
+      PYTHONPATH: /DotSoundPrivateCore/src
     ports:
       - "8000:8000"
     depends_on:
@@ -126,6 +129,7 @@ services:
         condition: service_healthy
     volumes:
       - .:/app
+      - ../DotSoundPrivateCore:/DotSoundPrivateCore:ro
     logging: *default-logging
     networks:
       - dotsound
@@ -172,6 +176,7 @@ services:
       DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-dotsound}:${POSTGRES_PASSWORD:-dotsound}@postgres:5432/${POSTGRES_DB:-dotsound}
       ELASTICSEARCH_URL: http://elasticsearch:9200
       INTERNAL_API_ALLOWED_CIDRS: ${INTERNAL_API_ALLOWED_CIDRS:-},172.16.0.0/12
+      PYTHONPATH: /DotSoundPrivateCore/src
     depends_on:
       redis:
         condition: service_healthy
@@ -183,6 +188,7 @@ services:
         condition: service_healthy
     volumes:
       - .:/app
+      - ../DotSoundPrivateCore:/DotSoundPrivateCore:ro
     logging: *default-logging
     networks:
       - dotsound
