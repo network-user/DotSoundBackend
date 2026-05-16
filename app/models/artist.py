@@ -92,6 +92,12 @@ class Artist(Base, TimestampMixin):
         server_default="false",
         nullable=False,
     )
+    catalog_sync_enabled: Mapped[bool] = mapped_column(
+        Boolean,
+        server_default="true",
+        nullable=False,
+        index=True,
+    )
     soundcloud_user_id: Mapped[int | None] = mapped_column(
         BigInteger,
         nullable=True,

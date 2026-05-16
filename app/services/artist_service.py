@@ -33,6 +33,7 @@ class ArtistService:
         raw_artist_string: str,
         source: str = "internal",
         external_id: str | None = None,
+        skip_catalog_sync: bool = False,
     ) -> list[Artist]:
         raw_matches = resolve_artist_names(raw_artist_string)
         if not raw_matches:
@@ -54,6 +55,7 @@ class ArtistService:
                 normalized=m.canonical,
                 source=source,
                 external_id=(external_id if i == 0 else None),
+                skip_catalog_sync=skip_catalog_sync,
             )
             await self._repo.link_track(
                 track_id=track_id,
@@ -70,6 +72,7 @@ class ArtistService:
         normalized: str,
         source: str,
         external_id: str | None,
+        skip_catalog_sync: bool = False,
     ) -> Artist:
         existing = await self._repo.find_by_normalized_name(normalized)
         if existing:
@@ -90,6 +93,7 @@ class ArtistService:
             name_normalized=normalized,
             source=source,
             external_id=external_id,
+            catalog_sync_enabled=not skip_catalog_sync,
         )
         logger.info(
             "artist_created",
@@ -113,7 +117,10 @@ class ArtistService:
                 enrich_artist_task,
             )
 
-            await enrich_artist_task.kiq(artist_id=artist.id)
+            await enrich_artist_task.kiq(
+                artist_id=artist.id,
+                skip_catalog_sync=skip_catalog_sync,
+            )
         except Exception:
             logger.exception(
                 "artist_enrich_schedule_failed",

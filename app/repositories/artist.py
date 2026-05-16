@@ -379,3 +379,16 @@ class ArtistRepository(BaseRepository[Artist]):
         artist.soundcloud_permalink = soundcloud_permalink
         await self._session.flush()
         return artist
+
+    async def set_catalog_sync_enabled(
+        self,
+        artist_id: int,
+        *,
+        enabled: bool,
+    ) -> Artist | None:
+        artist = await self.get_by_id(artist_id)
+        if artist is None:
+            return None
+        artist.catalog_sync_enabled = enabled
+        await self._session.flush()
+        return artist

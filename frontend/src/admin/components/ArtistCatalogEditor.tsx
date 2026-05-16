@@ -558,6 +558,19 @@ export function ArtistCatalogEditor({
   const catalogSyncBusy =
     overview.data?.catalog_sync_state === 'running'
 
+  const setCatalogSyncEnabledMut = useMutation({
+    mutationFn: (enabled: boolean) =>
+      adminApi.setCatalogSyncEnabled(artistId, enabled),
+    onSuccess: () => {
+      qc.invalidateQueries({
+        queryKey: ['admin', 'catalog', artistId],
+      })
+      qc.invalidateQueries({
+        queryKey: ['admin', 'artists'],
+      })
+    },
+  })
+
   const releasesOrdered: CatalogReleaseRow[] = useMemo(() => {
     const items = overview.data?.releases ?? []
     return items
@@ -925,6 +938,32 @@ export function ArtistCatalogEditor({
           </section>
           <section className="admin-catalog-section">
             <h3>{t('admin.artists.catalog.sync')}</h3>
+            <label className="admin-catalog-check">
+              <input
+                type="checkbox"
+                checked={
+                  overview.data?.catalog_sync_enabled ?? true
+                }
+                disabled={setCatalogSyncEnabledMut.isPending}
+                onChange={(e) =>
+                  setCatalogSyncEnabledMut.mutate(
+                    e.target.checked,
+                    {
+                      onError: async (err) => {
+                        await showAlert(
+                          (err as Error).message ||
+                            t('admin.common.unknownError'),
+                        )
+                      },
+                    },
+                  )
+                }
+              />
+              {t('admin.artists.catalog.syncEnabledLabel')}
+            </label>
+            <p className="admin-auth-hint">
+              {t('admin.artists.catalog.syncEnabledHint')}
+            </p>
             {syncStatusBanner && (
               <div
                 className={

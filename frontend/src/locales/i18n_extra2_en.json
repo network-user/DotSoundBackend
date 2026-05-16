@@ -1034,6 +1034,7 @@
   },
   "import": {
     "jobTimeout": "Import is taking too long. Please try again later.",
+    "scanSlowHint": "Scanning is taking longer than usual — the provider may be slow. Keep waiting or cancel.",
     "readFail": "Could not read the playlist",
     "botReadFail": "Could not read music from Telegram",
     "botConnectFail": "Could not reach the bot",

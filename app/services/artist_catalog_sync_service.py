@@ -505,6 +505,7 @@ class ArtistCatalogSyncService:
                             track_id=track.id,
                             raw_artist_string=track.artist,
                             source="soundcloud",
+                            skip_catalog_sync=True,
                         )
                     except Exception as exc:
                         logger.warning(

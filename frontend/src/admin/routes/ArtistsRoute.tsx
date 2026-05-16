@@ -150,6 +150,16 @@ export function ArtistsRoute() {
     jobIds: Array<{ artistId: number | null; jobId: string | null }>
     errors: Array<{ artist_id: number; detail: string }>
   } | null>(null)
+  const [scImportModal, setScImportModal] = useState(false)
+  const [scImportUrl, setScImportUrl] = useState('')
+  const [scImportResult, setScImportResult] = useState<{
+    artist_id: number
+    artist_name: string
+    created: boolean
+    queued: boolean
+    job_id?: string | null
+  } | null>(null)
+  const [scImportPending, setScImportPending] = useState(false)
 
   const list = useQuery({
     queryKey: [
@@ -347,6 +357,23 @@ export function ArtistsRoute() {
       setImportResult(res)
     } catch (err) {
       await showAlert((err as Error).message)
+    }
+  }
+
+  const handleScImport = async () => {
+    if (!scImportUrl.trim() || scImportPending) return
+    const ok = await stepUp.request('catalog.sync.run')
+    if (!ok) return
+    setScImportPending(true)
+    try {
+      const res = await adminApi.importArtistByScUrl(scImportUrl.trim())
+      setScImportResult(res)
+      setScImportUrl('')
+      qc.invalidateQueries({ queryKey: ['admin', 'artists'] })
+    } catch (err) {
+      await showAlert((err as Error).message)
+    } finally {
+      setScImportPending(false)
     }
   }
 
@@ -874,6 +901,16 @@ export function ArtistsRoute() {
             >
               {t('admin.artists.importAi')}
             </MotionPress>
+            <MotionPress
+              variant="ghost"
+              onClick={() => {
+                setScImportUrl('')
+                setScImportResult(null)
+                setScImportModal(true)
+              }}
+            >
+              {t('admin.artists.importBySc')}
+            </MotionPress>
           </>
         }
         toolbarHint={t('admin.common.total', { count: total })}
@@ -1115,6 +1152,62 @@ export function ArtistsRoute() {
                   </li>
                 ))}
               </ul>
+            )}
+          </div>
+        )}
+      </FormModal>
+      <FormModal
+        open={scImportModal}
+        size="md"
+        title={t('admin.artists.scImportTitle')}
+        subtitle={t('admin.artists.scImportSubtitle')}
+        submitText={t('admin.artists.scImportSubmit')}
+        cancelText={t('admin.common.close')}
+        submitDisabled={!scImportUrl.trim() || scImportPending}
+        onClose={() => {
+          setScImportModal(false)
+          setScImportResult(null)
+        }}
+        onSubmit={() => handleScImport()}
+      >
+        <input
+          value={scImportUrl}
+          onChange={(e) => {
+            setScImportUrl(e.target.value)
+            setScImportResult(null)
+          }}
+          placeholder="https://soundcloud.com/artist-permalink"
+          disabled={scImportPending}
+          style={{ width: '100%' }}
+        />
+        <p className="admin-auth-hint">
+          {t('admin.artists.scImportHint')}
+        </p>
+        {scImportPending && (
+          <p className="admin-auth-hint">
+            {t('admin.common.loading')}
+          </p>
+        )}
+        {scImportResult && (
+          <div>
+            <p style={{ fontWeight: 600, margin: 0 }}>
+              {scImportResult.created
+                ? t('admin.artists.scImportCreated', {
+                    name: scImportResult.artist_name,
+                    id: scImportResult.artist_id,
+                  })
+                : t('admin.artists.scImportFound', {
+                    name: scImportResult.artist_name,
+                    id: scImportResult.artist_id,
+                  })}
+            </p>
+            {scImportResult.queued && (
+              <p className="admin-auth-hint">
+                {t('admin.artists.scImportQueued')}
+                {scImportResult.job_id
+                  ? ` (${scImportResult.job_id})`
+                  : ''}
+              </p>
             )}
           </div>
         )}

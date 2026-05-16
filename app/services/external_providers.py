@@ -81,8 +81,19 @@ async def scan_playlist_url(source: str, url: str) -> dict[str, Any]:
     Runs ``fetch_external_playlist`` in a bounded thread pool to cap
     concurrent yt-dlp threads under high load.
     """
+    import time
+
     loop = asyncio.get_event_loop()
     timeout = float(settings.scan_timeout_seconds)
+    t_start = time.monotonic()
+
+    logger.info(
+        "scan_playlist_url_start",
+        source=source,
+        url=url,
+        timeout_s=timeout,
+    )
+
     try:
         result: PlaylistScanResult = await asyncio.wait_for(
             loop.run_in_executor(
@@ -94,17 +105,30 @@ async def scan_playlist_url(source: str, url: str) -> dict[str, Any]:
             timeout=timeout,
         )
     except TimeoutError as exc:
+        elapsed = round(time.monotonic() - t_start, 2)
         logger.warning(
             "external_scan_timeout",
             source=source,
+            url=url,
             timeout_seconds=timeout,
+            elapsed_s=elapsed,
         )
         raise ProviderError(
             code="scan_timeout",
             message=f"Scan exceeded {int(timeout)}s",
         ) from exc
 
+    elapsed = round(time.monotonic() - t_start, 2)
+
     if result.status == "ok":
+        logger.info(
+            "scan_playlist_url_ok",
+            source=source,
+            url=url,
+            kind=result.kind,
+            tracks=len(result.tracks),
+            elapsed_s=elapsed,
+        )
         return {
             "kind": result.kind,
             "tracks": [
@@ -122,6 +146,15 @@ async def scan_playlist_url(source: str, url: str) -> dict[str, Any]:
         result.status
         if result.status in ALLOWED_ERROR_CODES
         else "provider_unavailable"
+    )
+    logger.info(
+        "scan_playlist_url_error",
+        source=source,
+        url=url,
+        status=result.status,
+        code=code,
+        message=result.error_message,
+        elapsed_s=elapsed,
     )
     raise ProviderError(
         code=code,

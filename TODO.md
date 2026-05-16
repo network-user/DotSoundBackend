@@ -3728,3 +3728,46 @@
   (5) Ring color from cover palette: RadioView → `extractCoverPalette(heroCover)`
   (кешируется AmbientStage) → `tones[0]` → `AudioRipple ringColor` →
   `hexToRgba` для stroke колец вместо белого.
+
+- [x] **Контроль автоматического парсинга артистов (catalog_sync_enabled) (2026-05-16)**:
+  Устранено геометрическое разрастание очереди синка — цепочка
+  `station sync → новые артисты → enrich → full catalog sync → снова станция`.
+
+  **PrivateCore** (`services/catalog_sync_policy.py`):
+  - Добавлен `STATION_SWEEP_MAX_ARTISTS_PER_RUN = 200` — жёсткий потолок
+    weekly sweep станций за один запуск (ранее — без лимита).
+
+  **Backend — Level 1 (без миграции):**
+  - `artist_enrichment_worker.py`: `enrich_artist_task` принимает
+    `skip_catalog_sync: bool = False`; передаётся в `ArtistEnrichmentService.enrich()`.
+  - `artist_enrichment_service.py`: `enrich()` принимает `skip_catalog_sync`;
+    добавлен `_schedule_catalog_sync_if_allowed(skip=...)` — три вызова
+    `_schedule_catalog_sync` заменены на него.
+  - `artist_service.py`: `resolve_and_link` и `_find_or_create` принимают
+    `skip_catalog_sync: bool = False`; при создании артиста передаётся в `enrich_artist_task.kiq()`.
+  - `artist_catalog_sync_service.py`: в station-контексте
+    (`_sync_one_album_expanded(is_station=True)`) вызов `resolve_and_link`
+    идёт с `skip_catalog_sync=True` → station-артисты не получают полный каталог автоматически.
+  - `artist_catalog.py` (repo): `find_stale_station_artist_ids` теперь принимает
+    `limit: int | None = None`.
+  - `artist_catalog_sync_worker.py`: `sync_stale_stations_batch_task` передаёт
+    `limit=STATION_SWEEP_MAX_ARTISTS_PER_RUN` в репозиторий.
+
+  **Backend — Level 2 (с миграцией 0107):**
+  - `app/models/artist.py`: новое поле `catalog_sync_enabled: Mapped[bool]`
+    (`server_default="true"`). Существующие артисты — без изменений.
+  - `alembic/versions/0107_add_artist_catalog_sync_enabled.py`: ADD COLUMN
+    + CREATE INDEX (b-tree on `catalog_sync_enabled`).
+  - `artist_service.py/_find_or_create`: station-артисты создаются с
+    `catalog_sync_enabled=False` → не попадают в sweep-ы автоматически.
+  - `artist_catalog.py` (repo): `find_stale_station_artist_ids` и
+    `find_stale_full_catalog_artist_ids` фильтруют только `catalog_sync_enabled=True`.
+  - `artist.py` (repo): добавлен `set_catalog_sync_enabled(artist_id, enabled)`.
+  - `artist_follow_service.py`: при первой подписке на station-артиста
+    (`catalog_sync_enabled=False`) флаг переключается в `True` и
+    запускаются обычные sync-и.
+  - `schemas/admin_artist_catalog.py`: добавлены
+    `AdminArtistCatalogSyncEnabledRequest` / `AdminArtistCatalogSyncEnabledResponse`.
+  - `api/v1/admin/artist_catalog.py`: новый endpoint
+    `PATCH /artists/{artist_id}/catalog-sync-enabled` (admin session required,
+    30/min) — позволяет вручную включить/выключить синк для любого артиста.

@@ -1738,6 +1738,7 @@ export const adminApi = {
       image_key: string | null
       soundcloud_user_id: number | null
       soundcloud_permalink: string | null
+      catalog_sync_enabled: boolean
       releases: Array<{
         id: number
         title: string
@@ -2328,4 +2329,26 @@ export const adminApi = {
         scanned_at: string
       }[]
     }>('/antivirus/events', { query: params }),
+
+  setCatalogSyncEnabled: (
+    artistId: number,
+    enabled: boolean,
+  ) =>
+    adminFetch<{ artist_id: number; catalog_sync_enabled: boolean }>(
+      `/artists/${artistId}/catalog-sync-enabled`,
+      { method: 'PATCH', body: { enabled } },
+    ),
+
+  importArtistByScUrl: (url: string) =>
+    adminFetch<{
+      artist_id: number
+      artist_name: string
+      created: boolean
+      catalog_sync_enabled: boolean
+      queued: boolean
+      job_id?: string | null
+    }>('/artists/import-by-sc-url', {
+      method: 'POST',
+      body: { url },
+    }),
 }

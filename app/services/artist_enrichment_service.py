@@ -139,6 +139,7 @@ class ArtistEnrichmentService:
         artist_id: int,
         bypass_cache: bool = False,
         progress_id: str | None = None,
+        skip_catalog_sync: bool = False,
     ) -> Artist:
         """Pull external metadata, persist, upload image to S3.
 
@@ -231,7 +232,9 @@ class ArtistEnrichmentService:
             await _log("error", f"provider error: {exc}")
             await self._finalize(artist, "failed")
             await self._schedule_supplemental(artist_id)
-            await self._schedule_catalog_sync(artist_id)
+            await self._schedule_catalog_sync_if_allowed(
+                artist_id, skip=skip_catalog_sync
+            )
             return artist
 
         if info is None or info.confidence < settings.artist_enrichment_min_confidence:
@@ -249,7 +252,9 @@ class ArtistEnrichmentService:
                 artist.enrichment_confidence = float(conf)
             await self._finalize(artist, "not_found")
             await self._schedule_supplemental(artist_id)
-            await self._schedule_catalog_sync(artist_id)
+            await self._schedule_catalog_sync_if_allowed(
+                artist_id, skip=skip_catalog_sync
+            )
             return artist
 
         await _log(
@@ -333,7 +338,9 @@ class ArtistEnrichmentService:
         artist.enrichment_confidence = float(info.confidence)
         await self._finalize(artist, "done")
         await _log("done", "saved to DB")
-        await self._schedule_catalog_sync(artist_id)
+        await self._schedule_catalog_sync_if_allowed(
+            artist_id, skip=skip_catalog_sync
+        )
         logger.info(
             "artist_enrichment_success",
             artist_id=artist_id,
@@ -397,7 +404,19 @@ class ArtistEnrichmentService:
                 artist_id=artist_id,
             )
 
-    async def schedule_enrich(self, artist_id: int) -> None:
+    async def _schedule_catalog_sync_if_allowed(
+        self,
+        artist_id: int,
+        *,
+        skip: bool,
+    ) -> None:
+        if skip:
+            logger.info(
+                "artist_catalog_auto_sync_skipped_station_artist",
+                artist_id=artist_id,
+            )
+            return
+        await self._schedule_catalog_sync(artist_id)
         """Fire-and-forget enqueue of the enrichment task."""
         try:
             from app.services.artist_enrichment_worker import (

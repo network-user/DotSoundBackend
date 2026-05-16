@@ -383,18 +383,29 @@ class ArtistCatalogRepository(BaseRepository[ArtistCatalogRelease]):
     async def find_stale_station_artist_ids(
         self,
         threshold_days: int,
+        *,
+        limit: int | None = None,
     ) -> list[int]:
         """Artists whose SC station row is stale or missing."""
+        from app.models.artist import Artist
+
         cutoff = datetime.now(UTC) - timedelta(days=threshold_days)
         stmt = (
             select(distinct(ArtistCatalogRelease.artist_id))
+            .join(
+                Artist,
+                Artist.id == ArtistCatalogRelease.artist_id,
+            )
             .where(
                 ArtistCatalogRelease.release_kind
                 == _ARTIST_STATION_KIND,
                 (ArtistCatalogRelease.synced_at.is_(None))
                 | (ArtistCatalogRelease.synced_at < cutoff),
+                Artist.catalog_sync_enabled.is_(True),
             )
         )
+        if limit is not None:
+            stmt = stmt.limit(limit)
         rows = await self._session.execute(stmt)
         return [r for (r,) in rows.all()]
 
@@ -432,6 +443,7 @@ class ArtistCatalogRepository(BaseRepository[ArtistCatalogRelease]):
             )
             .where(
                 Artist.soundcloud_user_id.isnot(None),
+                Artist.catalog_sync_enabled.is_(True),
                 or_(
                     last_sync_sq.c.last_sync.is_(None),
                     last_sync_sq.c.last_sync < cutoff,

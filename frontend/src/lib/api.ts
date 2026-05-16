@@ -25,6 +25,7 @@ import type {
   DislikeToggleResponse,
   EmailVerifyResponse,
   FollowToggleResponse,
+  ImportExternalTrackInfo,
   ImportJobResponse,
   LikeToggleResponse,
   LyricsAutoResponse,
@@ -1645,6 +1646,21 @@ export const api = {
 
   getImportStatus(jobId: number): Promise<ImportJobResponse> {
     return request(`/api/v1/import/${jobId}/status`)
+  },
+
+  getImportTracks(
+    jobId: number,
+    offset: number,
+    limit: number,
+  ): Promise<{
+    total: number
+    offset: number
+    limit: number
+    items: ImportExternalTrackInfo[]
+  }> {
+    return request(
+      `/api/v1/import/${jobId}/tracks?offset=${offset}&limit=${limit}`,
+    )
   },
 
   getActiveImport(): Promise<ImportJobResponse | null> {

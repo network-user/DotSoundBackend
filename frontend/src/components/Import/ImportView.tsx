@@ -1,10 +1,16 @@
 import { useEffect, useState, useCallback, useRef } from 'react'
 import { useTranslation } from 'react-i18next'
 import { api } from '@/lib/api'
-import type { ImportAudioInfo, ImportJobResponse } from '@/types/api'
+import type {
+  ImportAudioInfo,
+  ImportExternalTrackInfo,
+  ImportJobResponse,
+} from '@/types/api'
 import { ImportSourcePicker } from './ImportSourcePicker'
 import { MotionPress } from '@/components/ui/MotionPress'
 import {
+  EXTERNAL_SOURCES,
+  ACCOUNT_IMPORT_SOURCES,
   fmtDuration,
   fmtSize,
   normalizeJobTracks,
@@ -30,6 +36,7 @@ type Phase =
   | 'done'
 
 const MAX_FILE_SIZE = 20 * 1024 * 1024
+const PAGE_SIZE = 100
 
 interface ImportViewProps {
   active: boolean
@@ -58,7 +65,15 @@ export function ImportView({
   const [job, setJob] = useState<ImportJobData | null>(null)
   const [audios, setAudios] = useState<AudioInfo[]>([])
   const [selected, setSelected] = useState<Set<number>>(new Set())
-  const [error, setError] = useState<string | null>(null)
+  const [selectionMode, setSelectionMode] = useState<'all' | 'custom'>('all')
+  const [totalTracks, setTotalTracks] = useState(0)
+  const [loadedOffset, setLoadedOffset] = useState(0)
+  const [hasMore, setHasMore] = useState(false)
+  const [loadingMore, setLoadingMore] = useState(false)
+  const sentinelRef = useRef<HTMLDivElement | null>(null)
+  const observerRef = useRef<IntersectionObserver | null>(null)
+  const error = useRef<string | null>(null)
+  const [errorState, setErrorState] = useState<string | null>(null)
   const [scanningSource, setScanningSource] = useState<string | undefined>()
   const [yandexModalOpen, setYandexModalOpen] = useState(false)
   const [vkModalOpen, setVkModalOpen] = useState(false)
@@ -69,8 +84,75 @@ export function ImportView({
   >(null)
   const [cancelConfirmOpen, setCancelConfirmOpen] = useState(false)
   const [cancelling, setCancelling] = useState(false)
+  const [scanSlowHint, setScanSlowHint] = useState(false)
   const pollCountRef = useRef(0)
-  const MAX_POLLS = 150
+  const MAX_POLLS = 90
+  const SCAN_SLOW_POLLS = 15
+
+  const setError = useCallback((msg: string | null) => {
+    error.current = msg
+    setErrorState(msg)
+  }, [])
+
+  const isExternalSource = useCallback(
+    (src: string) =>
+      EXTERNAL_SOURCES.has(src) || ACCOUNT_IMPORT_SOURCES.has(src),
+    [],
+  )
+
+  const normalizePageItem = useCallback(
+    (t: ImportExternalTrackInfo, srcKey: string, idx: number): ImportAudioInfo => {
+      const raw = t as unknown as Record<string, unknown>
+      return {
+        file_id: `${srcKey}:${idx}`,
+        title: String(raw.title ?? ''),
+        performer: (raw.artist ?? raw.performer ?? null) as string | null,
+        duration: (raw.duration_seconds ?? raw.duration ?? null) as
+          | number
+          | null,
+        file_size: (raw.file_size ?? null) as number | null,
+      }
+    },
+    [],
+  )
+
+  const enterSelectPhaseFromJob = useCallback(
+    async (j: ImportJobData) => {
+      setJob(j)
+      setScanningSource(undefined)
+
+      if (isExternalSource(j.source)) {
+        const page = await api.getImportTracks(j.id, 0, PAGE_SIZE)
+        const tracks = page.items.map((t, i) =>
+          normalizePageItem(t, j.source, i),
+        )
+        setAudios(tracks)
+        setTotalTracks(page.total)
+        setLoadedOffset(page.items.length)
+        setHasMore(page.items.length < page.total)
+        setSelectionMode('all')
+        setSelected(new Set())
+      } else {
+        const list = normalizeJobTracks(j)
+        setAudios(list)
+        setTotalTracks(list.length)
+        setLoadedOffset(list.length)
+        setHasMore(false)
+        const all = new Set<number>(
+          list
+            .map((_, i) => i)
+            .filter(
+              (i) =>
+                !list[i].file_size || list[i].file_size! <= MAX_FILE_SIZE,
+            ),
+        )
+        setSelectionMode('custom')
+        setSelected(all)
+      }
+      setPhase('select')
+    },
+    [isExternalSource, normalizePageItem],
+  )
 
   useEffect(() => {
     if (!active) return
@@ -86,22 +168,10 @@ export function ImportView({
         setScanningSource(j.source)
         setPhase('scanning')
       } else if (j && j.status === 'ready') {
-        setJob(j)
-        const list = normalizeJobTracks(j)
-        setAudios(list)
-        const all = new Set<number>(
-          list
-            .map((_, i) => i)
-            .filter((i) => {
-              const a = list[i]
-              return !a.file_size || a.file_size <= MAX_FILE_SIZE
-            })
-        )
-        setSelected(all)
-        setPhase('select')
+        void enterSelectPhaseFromJob(j)
       }
     }).catch(() => {})
-  }, [active])
+  }, [active, enterSelectPhaseFromJob])
 
   const extScanError = useCallback(
     (code: string | undefined) => {
@@ -126,11 +196,19 @@ export function ImportView({
     )
       return
     pollCountRef.current = 0
+    setScanSlowHint(false)
     const interval = setInterval(async () => {
       pollCountRef.current++
+      if (
+        phase === 'scanning' &&
+        pollCountRef.current === SCAN_SLOW_POLLS
+      ) {
+        setScanSlowHint(true)
+      }
       if (pollCountRef.current > MAX_POLLS) {
         clearInterval(interval)
         setError(t('import.jobTimeout'))
+        setScanSlowHint(false)
         setPhase('pick')
         return
       }
@@ -141,29 +219,25 @@ export function ImportView({
         if (phase === 'scanning') {
           if (updated.status === 'ready') {
             clearInterval(interval)
-            setScanningSource(undefined)
-            const list = normalizeJobTracks(updated)
-            setAudios(list)
-            const all = new Set<number>(
-              list
-                .map((_, i) => i)
-                .filter(
-                  (i) =>
-                    !list[i].file_size ||
-                    list[i].file_size! <= MAX_FILE_SIZE,
-                ),
-            )
-            setSelected(all)
-            setPhase('select')
-          } else if (updated.status === 'failed') {
+            setScanSlowHint(false)
+            void enterSelectPhaseFromJob(updated)
+          } else if (
+            updated.status === 'failed' ||
+            updated.status === 'cancelled'
+          ) {
             clearInterval(interval)
+            setScanSlowHint(false)
             setScanningSource(undefined)
-            const code = updated.tracks_data?.error_code as
-              | string
-              | undefined
-            const fallback = extScanError(code)
-            setError(scanErrorMessage(fallback, updated))
-            setPhase('pick')
+            if (updated.status === 'cancelled') {
+              setPhase('pick')
+            } else {
+              const code = updated.tracks_data?.error_code as
+                | string
+                | undefined
+              const fallback = extScanError(code)
+              setError(scanErrorMessage(fallback, updated))
+              setPhase('pick')
+            }
           }
           return
         }
@@ -182,27 +256,56 @@ export function ImportView({
       } catch {}
     }, 2000)
     return () => clearInterval(interval)
-  }, [phase, job?.id, onImportComplete, extScanError, t])
+  }, [phase, job?.id, onImportComplete, extScanError, enterSelectPhaseFromJob, t])
 
-  const applyScanResult = useCallback((j: ImportJobData): boolean => {
-    setJob(j)
-    setScanningSource(undefined)
-    if (j.status === 'failed') {
-      return false
+  const applyScanResult = useCallback(
+    (j: ImportJobData): boolean => {
+      if (j.status === 'failed') {
+        setJob(j)
+        setScanningSource(undefined)
+        return false
+      }
+      void enterSelectPhaseFromJob(j)
+      return true
+    },
+    [enterSelectPhaseFromJob],
+  )
+
+  const loadMoreTracks = useCallback(async () => {
+    if (!job || !hasMore || loadingMore) return
+    setLoadingMore(true)
+    try {
+      const page = await api.getImportTracks(job.id, loadedOffset, PAGE_SIZE)
+      const baseIdx = loadedOffset
+      const tracks = page.items.map((t, i) =>
+        normalizePageItem(t, job.source, baseIdx + i),
+      )
+      setAudios((prev) => [...prev, ...tracks])
+      setLoadedOffset((prev) => prev + page.items.length)
+      setHasMore(baseIdx + page.items.length < page.total)
+    } catch {
+    } finally {
+      setLoadingMore(false)
     }
-    const list = normalizeJobTracks(j)
-    setAudios(list)
-    const all = new Set<number>(
-      list
-        .map((_, i) => i)
-        .filter(
-          i => !list[i].file_size || list[i].file_size! <= MAX_FILE_SIZE,
-        ),
+  }, [job, hasMore, loadingMore, loadedOffset, normalizePageItem])
+
+  useEffect(() => {
+    if (phase !== 'select' || !hasMore) return
+    const sentinel = sentinelRef.current
+    if (!sentinel) return
+    const obs = new IntersectionObserver(
+      (entries) => {
+        if (entries[0]?.isIntersecting) void loadMoreTracks()
+      },
+      { rootMargin: '200px' },
     )
-    setSelected(all)
-    setPhase('select')
-    return true
-  }, [])
+    obs.observe(sentinel)
+    observerRef.current = obs
+    return () => {
+      obs.disconnect()
+      observerRef.current = null
+    }
+  }, [phase, hasMore, loadMoreTracks])
 
   const handleSourceSelect = useCallback(async (sourceId: string) => {
     setError(null)
@@ -391,28 +494,47 @@ export function ImportView({
   )
 
   const toggleTrack = (idx: number) => {
-    setSelected((prev) => {
-      const next = new Set(prev)
-      if (next.has(idx)) next.delete(idx)
-      else next.add(idx)
-      return next
-    })
+    if (selectionMode === 'all') {
+      const next = new Set<number>()
+      for (let i = 0; i < totalTracks; i++) {
+        if (i !== idx) next.add(i)
+      }
+      setSelectionMode('custom')
+      setSelected(next)
+    } else {
+      setSelected((prev) => {
+        const next = new Set(prev)
+        if (next.has(idx)) next.delete(idx)
+        else next.add(idx)
+        return next
+      })
+    }
   }
 
   const selectAll = () => {
-    const all = new Set<number>(
-      audios.map((_, i) => i)
-        .filter((i) => !audios[i].file_size || audios[i].file_size! <= MAX_FILE_SIZE)
-    )
-    setSelected(all)
+    setSelectionMode('all')
+    setSelected(new Set())
   }
 
-  const deselectAll = () => setSelected(new Set())
+  const deselectAll = () => {
+    setSelectionMode('custom')
+    setSelected(new Set())
+  }
+
+  const selectedCount =
+    selectionMode === 'all' ? totalTracks : selected.size
+
+  const isTrackSelected = (idx: number): boolean =>
+    selectionMode === 'all' ? !selected.has(idx) : selected.has(idx)
 
   const handleStartImport = async () => {
     if (!job) return
     try {
-      const updated = await api.startImportJob(job.id, Array.from(selected))
+      const indices =
+        selectionMode === 'all'
+          ? Array.from({ length: totalTracks }, (_, i) => i)
+          : Array.from(selected)
+      const updated = await api.startImportJob(job.id, indices)
       setJob(updated)
       setPhase(updated.status === 'queued' ? 'queued' : 'importing')
     } catch {
@@ -425,8 +547,13 @@ export function ImportView({
     setJob(null)
     setAudios([])
     setSelected(new Set())
+    setSelectionMode('all')
+    setTotalTracks(0)
+    setLoadedOffset(0)
+    setHasMore(false)
     setError(null)
     setScanningSource(undefined)
+    setScanSlowHint(false)
     pollCountRef.current = 0
   }
 
@@ -449,8 +576,8 @@ export function ImportView({
 
   return (
     <div className="import-view">
-      {error && (
-        <div className="form-error" style={{ margin: '16px' }}>{error}</div>
+      {errorState && (
+        <div className="form-error" style={{ margin: '16px' }}>{errorState}</div>
       )}
 
       {phase === 'pick' && (
@@ -463,6 +590,21 @@ export function ImportView({
           <p className="empty-hint">
             {scanningLabel(job?.source ?? scanningSource)}
           </p>
+          {scanSlowHint && (
+            <p className="import-scan-slow-hint">
+              {t('import.scanSlowHint')}
+            </p>
+          )}
+          <MotionPress
+            type="button"
+            variant="ghost"
+            haptic="light"
+            className="btn-secondary import-scan-cancel-btn"
+            disabled={cancelling}
+            onClick={() => setCancelConfirmOpen(true)}
+          >
+            {cancelling ? t('import.cancelling') : t('playlists.cancel')}
+          </MotionPress>
         </div>
       )}
 
@@ -471,7 +613,7 @@ export function ImportView({
           <div className="view-header">
             <h2>
               {t('import.foundCount', {
-                count: audios.length,
+                count: totalTracks,
               })}
             </h2>
             <span className="hint">
@@ -511,7 +653,9 @@ export function ImportView({
 
           <div className="import-track-list">
             {audios.map((audio, i) => {
-              const tooBig = audio.file_size != null && audio.file_size > MAX_FILE_SIZE
+              const tooBig =
+                audio.file_size != null && audio.file_size > MAX_FILE_SIZE
+              const checked = isTrackSelected(i)
               return (
                 <label
                   key={audio.file_id || i}
@@ -519,16 +663,22 @@ export function ImportView({
                 >
                   <input
                     type="checkbox"
-                    checked={selected.has(i)}
+                    checked={checked}
                     disabled={tooBig}
                     onChange={() => toggleTrack(i)}
                   />
                   <div className="import-track-info">
-                    <span className="import-track-title">{audio.title}</span>
+                    <span className="import-track-title">
+                      {audio.title}
+                    </span>
                     <span className="import-track-meta">
                       {audio.performer || t('trackCard.unknownArtist')}
-                      {audio.duration ? ` · ${fmtDuration(audio.duration)}` : ''}
-                      {audio.file_size ? ` · ${fmtSize(audio.file_size)}` : ''}
+                      {audio.duration
+                        ? ` · ${fmtDuration(audio.duration)}`
+                        : ''}
+                      {audio.file_size
+                        ? ` · ${fmtSize(audio.file_size)}`
+                        : ''}
                     </span>
                     {tooBig && (
                       <span className="import-track-warning">
@@ -539,6 +689,20 @@ export function ImportView({
                 </label>
               )
             })}
+            {hasMore && (
+              <div
+                ref={sentinelRef}
+                className="import-load-sentinel"
+                aria-hidden="true"
+              >
+                {loadingMore && (
+                  <div
+                    className="loader"
+                    style={{ margin: '8px auto', width: 20, height: 20 }}
+                  />
+                )}
+              </div>
+            )}
           </div>
 
           <div className="rf-import-action-row">
@@ -547,11 +711,11 @@ export function ImportView({
               variant="primary"
               haptic="medium"
               className="btn-primary"
-              disabled={selected.size === 0}
+              disabled={selectedCount === 0}
               onClick={handleStartImport}
             >
               {t('import.importBtn', {
-                count: selected.size,
+                count: selectedCount,
               })}
             </MotionPress>
           </div>

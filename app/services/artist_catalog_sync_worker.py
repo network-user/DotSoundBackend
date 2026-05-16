@@ -67,13 +67,18 @@ async def sync_artist_similar_station_task(
 
 @broker.task
 async def sync_stale_stations_batch_task() -> dict[str, Any]:
-    """Weekly sweep: enqueue station sync for all stale artist stations."""
+    """Weekly sweep: enqueue station sync for stale artist stations."""
+    from dotsound_private_core.services.catalog_sync_policy import (
+        STATION_SWEEP_MAX_ARTISTS_PER_RUN,
+    )
+
     from app.config import settings
 
     async with AsyncSessionLocal() as session:
         repo = ArtistCatalogRepository(session)
         artist_ids = await repo.find_stale_station_artist_ids(
-            settings.artist_station_stale_threshold_days
+            settings.artist_station_stale_threshold_days,
+            limit=STATION_SWEEP_MAX_ARTISTS_PER_RUN,
         )
 
     enqueued = 0
@@ -87,6 +92,7 @@ async def sync_stale_stations_batch_task() -> dict[str, Any]:
         "station_stale_sweep_complete",
         enqueued=enqueued,
         total_stale=len(artist_ids),
+        cap=STATION_SWEEP_MAX_ARTISTS_PER_RUN,
     )
     return {"enqueued": enqueued}
 

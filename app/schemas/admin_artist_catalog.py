@@ -23,6 +23,7 @@ class AdminArtistCatalogOverviewResponse(BaseModel):
     image_key: str | None = None
     soundcloud_user_id: int | None = None
     soundcloud_permalink: str | None = None
+    catalog_sync_enabled: bool = True
     releases: list[AdminCatalogReleaseSummaryResponse]
     releases_total: int
     catalog_sync_state: Literal[
@@ -136,6 +137,28 @@ class AdminArtistListItemResponse(ArtistResponse):
 class AdminArtistListResponse(BaseModel):
     items: list[AdminArtistListItemResponse]
     total: int
+
+
+class AdminArtistCatalogSyncEnabledRequest(BaseModel):
+    enabled: bool
+
+
+class AdminArtistCatalogSyncEnabledResponse(BaseModel):
+    artist_id: int
+    catalog_sync_enabled: bool
+
+
+class AdminImportByScUrlRequest(BaseModel):
+    url: str = Field(..., min_length=3, max_length=1024)
+
+
+class AdminImportByScUrlResponse(BaseModel):
+    artist_id: int
+    artist_name: str
+    created: bool
+    catalog_sync_enabled: bool
+    queued: bool
+    job_id: str | None = None
 
 
 class ArtistPipelineHealthResponse(BaseModel):

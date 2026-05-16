@@ -53,6 +53,7 @@ async def enrich_artist_task(
     artist_id: int,
     progress_id: str = "",
     bypass_cache: bool = False,
+    skip_catalog_sync: bool = False,
 ) -> dict:
     import time
 
@@ -64,6 +65,7 @@ async def enrich_artist_task(
         artist_id=artist_id,
         progress_id=progress_id,
         bypass_cache=bypass_cache,
+        skip_catalog_sync=skip_catalog_sync,
     )
     t_start = time.monotonic()
     async with AsyncSessionLocal() as session:
@@ -73,6 +75,7 @@ async def enrich_artist_task(
                 artist_id,
                 bypass_cache=bypass_cache,
                 progress_id=progress_id or None,
+                skip_catalog_sync=skip_catalog_sync,
             )
             from app.services.search_index_notify import (
                 schedule_reindex_artist,

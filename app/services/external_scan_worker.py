@@ -4,8 +4,9 @@ Separates the slow network I/O of scanning from the HTTP request
 so the endpoint returns immediately with a ``scanning`` job, and
 the frontend polls ``GET /import/{job_id}/status`` for completion.
 """
+import time
+
 import structlog
-from taskiq import TaskiqDepends
 
 from app.core.db import AsyncSessionLocal
 from app.core.tkq import broker
@@ -23,9 +24,18 @@ async def scan_external_playlist_task(
 ) -> None:
     """Scan an external playlist/album URL and update the ImportJob.
 
-    Runs in a Taskiq worker. On completion sets job.status to
+    Runs in a Taskiq worker (or as an asyncio fallback when the broker
+    is unavailable). On completion sets job.status to
     ``"ready"`` or ``"failed"``.
     """
+    t_start = time.monotonic()
+    logger.info(
+        "external_scan_task_start",
+        job_id=job_id,
+        source=source,
+        url=url,
+    )
+
     async with AsyncSessionLocal() as session:
         job = await session.get(ImportJob, job_id)
         if job is None:
@@ -45,6 +55,7 @@ async def scan_external_playlist_task(
         try:
             result = await scan_playlist_url(source, url)
         except ProviderError as exc:
+            elapsed = round(time.monotonic() - t_start, 2)
             job.status = "failed"
             job.tracks_data = {
                 "error_code": exc.code,
@@ -57,10 +68,12 @@ async def scan_external_playlist_task(
                 source=source,
                 code=exc.code,
                 message=exc.message,
+                elapsed_s=elapsed,
             )
             await session.commit()
             return
         except Exception as exc:
+            elapsed = round(time.monotonic() - t_start, 2)
             job.status = "failed"
             job.tracks_data = {
                 "error_code": "provider_unavailable",
@@ -72,10 +85,12 @@ async def scan_external_playlist_task(
                 job_id=job_id,
                 source=source,
                 error=str(exc),
+                elapsed_s=elapsed,
             )
             await session.commit()
             return
 
+        elapsed = round(time.monotonic() - t_start, 2)
         tracks = result.get("tracks", [])
         job.status = "ready"
         job.total_tracks = len(tracks)
@@ -91,4 +106,5 @@ async def scan_external_playlist_task(
             job_id=job_id,
             source=source,
             total=len(tracks),
+            elapsed_s=elapsed,
         )

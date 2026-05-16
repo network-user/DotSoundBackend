@@ -512,6 +512,14 @@
       "workflowCopy": "1. Copy prompt",
       "workflowRun": "2. Get JSON",
       "workflowImport": "3. Import",
+      "importBySc": "Import from SoundCloud",
+      "scImportTitle": "Import artist from SoundCloud",
+      "scImportSubtitle": "Enter a SoundCloud artist URL or permalink to create the artist and start full catalog sync.",
+      "scImportSubmit": "Import & sync",
+      "scImportHint": "Example: https://soundcloud.com/kendrick-lamar — or just the permalink: kendrick-lamar. If the artist already exists in the database their catalog sync will be re-enabled and a full sync queued.",
+      "scImportCreated": "Created: {{name}} (id {{id}}). Full catalog sync queued.",
+      "scImportFound": "Found existing: {{name}} (id {{id}}). Catalog sync enabled and sync queued.",
+      "scImportQueued": "Full catalog sync task queued.",
       "catalog": {
         "open": "Catalog",
         "title": "Catalog — {{name}}",
@@ -581,7 +589,9 @@
         "saveTrackMeta": "Save track",
         "addTracksTitle": "Add tracks to this release",
         "allTracksTitle": "All tracks linked to this artist",
-        "allTracksHint": "Paged list of every track tied to this artist (any release). Open a release above to edit order and metadata."
+        "allTracksHint": "Paged list of every track tied to this artist (any release). Open a release above to edit order and metadata.",
+        "syncEnabledLabel": "Auto-sync enabled (catalog will be refreshed automatically)",
+        "syncEnabledHint": "When disabled, this artist's catalog is not picked up by the periodic sync sweeps and enrichment does not trigger a full catalog sync. Enable to resume automatic imports."
       }
     },
     "audioCompute": {

@@ -252,13 +252,32 @@ class ImportService:
             scan_external_playlist_task,
         )
 
-        await scan_external_playlist_task.kiq(job_id, source, url)
+        dispatched = False
+        try:
+            await scan_external_playlist_task.kiq(job_id, source, url)
+            dispatched = True
+        except Exception as kiq_exc:  # noqa: BLE001
+            logger.warning(
+                "external_scan_kiq_failed_fallback_asyncio",
+                job_id=job_id,
+                source=source,
+                error=str(kiq_exc),
+            )
+
+        if not dispatched:
+            import asyncio as _asyncio  # noqa: PLC0415
+
+            _asyncio.ensure_future(
+                scan_external_playlist_task(job_id, source, url)
+            )
+
         await _set_scan_cache(user.id, source, url, job_id)
 
         logger.info(
             "external_scan_dispatched",
             job_id=job_id,
             source=source,
+            via="taskiq" if dispatched else "asyncio_fallback",
         )
         return job
 

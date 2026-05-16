@@ -5,7 +5,7 @@ from dotsound_private_core.services import (
     is_allowed_vk_music_url,
     normalize_vk_music_url,
 )
-from fastapi import APIRouter, Depends, HTTPException, Request, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -63,6 +63,9 @@ class SpotifyImportRequest(BaseModel):
     url: str = Field(..., min_length=1, max_length=4096)
 
 
+_TRACKS_INLINE_THRESHOLD = 50
+
+
 class ImportJobResponse(BaseModel):
     id: int
     source: str
@@ -75,6 +78,49 @@ class ImportJobResponse(BaseModel):
 
     class Config:
         from_attributes = True
+
+    @classmethod
+    def from_job(
+        cls,
+        job: Any,
+        *,
+        include_tracks: bool | None = None,
+    ) -> "ImportJobResponse":
+        raw = dict(job.tracks_data) if job.tracks_data else {}
+        track_list: list[Any] = raw.get("tracks") or raw.get("audios") or []
+        total = len(track_list)
+        want_inline = (
+            include_tracks
+            if include_tracks is not None
+            else total <= _TRACKS_INLINE_THRESHOLD
+        )
+        if not want_inline:
+            raw.pop("tracks", None)
+            raw.pop("audios", None)
+        return cls(
+            id=job.id,
+            source=job.source,
+            status=job.status,
+            total_tracks=job.total_tracks,
+            completed_tracks=job.completed_tracks,
+            failed_tracks=job.failed_tracks,
+            tracks_data=raw or None,
+            queue_position=None,
+        )
+
+
+class ImportTrackItem(BaseModel):
+    title: str
+    artist: str | None = None
+    duration_seconds: int | None = None
+    external_id: str | None = None
+
+
+class ImportTracksPageResponse(BaseModel):
+    total: int
+    offset: int
+    limit: int
+    items: list[ImportTrackItem | dict[str, Any]]
 
 
 class AlbumFromUrlImportRequest(BaseModel):
@@ -312,7 +358,7 @@ async def get_import_status(
 ) -> ImportJobResponse:
     service = ImportService(session)
     job = await service.get_job_status(job_id, current_user.id)
-    response = ImportJobResponse.model_validate(job)
+    response = ImportJobResponse.from_job(job)
     if job.status == "queued":
         response.queue_position = await service.get_queue_position(
             job_id, current_user.id
@@ -334,12 +380,39 @@ async def get_active_import(
     job = await service.get_active_job(current_user.id)
     if not job:
         return None
-    response = ImportJobResponse.model_validate(job)
+    response = ImportJobResponse.from_job(job)
     if job.status == "queued":
         response.queue_position = await service.get_queue_position(
             job.id, current_user.id
         )
     return response
+
+
+@router.get(
+    "/{job_id}/tracks",
+    response_model=ImportTracksPageResponse,
+)
+@limiter.limit("120/minute")
+async def list_import_tracks(
+    request: Request,
+    job_id: int,
+    offset: int = Query(default=0, ge=0),
+    limit: int = Query(default=100, ge=1, le=500),
+    session: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> ImportTracksPageResponse:
+    service = ImportService(session)
+    job = await service.get_job_status(job_id, current_user.id)
+    data = job.tracks_data or {}
+    raw_tracks: list[Any] = data.get("tracks") or data.get("audios") or []
+    total = len(raw_tracks)
+    items = raw_tracks[offset : offset + limit]
+    return ImportTracksPageResponse(
+        total=total,
+        offset=offset,
+        limit=limit,
+        items=items,
+    )
 
 
 @router.post(

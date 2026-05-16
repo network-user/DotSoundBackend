@@ -31,11 +31,14 @@ from app.dependencies import (
 )
 from app.models.user import User
 from app.repositories.artist_catalog import ArtistCatalogRepository
+from app.repositories.artist import ArtistRepository
 from app.schemas.admin_artist_catalog import (
     AdminArtistBulkEnrichError,
     AdminArtistBulkEnrichRequest,
     AdminArtistBulkEnrichResponse,
     AdminArtistCatalogOverviewResponse,
+    AdminArtistCatalogSyncEnabledRequest,
+    AdminArtistCatalogSyncEnabledResponse,
     AdminArtistListItemResponse,
     AdminArtistListResponse,
     AdminArtistLyricsSyncRequest,
@@ -51,6 +54,8 @@ from app.schemas.admin_artist_catalog import (
     AdminCatalogReleaseSyncQueuedResponse,
     AdminCatalogReleaseTracksBody,
     AdminCatalogSyncQueuedResponse,
+    AdminImportByScUrlRequest,
+    AdminImportByScUrlResponse,
     ArtistPipelineHealthResponse,
 )
 from app.schemas.artist_catalog import ArtistCatalogReleaseDetailResponse
@@ -819,3 +824,58 @@ async def admin_catalog_enqueue_release_sync(
         soundcloud_album_id=sc_id,
         job_id=job_id,
     )
+
+
+@router.patch(
+    "/{artist_id}/catalog-sync-enabled",
+    response_model=AdminArtistCatalogSyncEnabledResponse,
+)
+@limiter.limit("30/minute")
+async def admin_set_catalog_sync_enabled(
+    request: Request,
+    artist_id: int,
+    body: AdminArtistCatalogSyncEnabledRequest,
+    session: AsyncSession = Depends(get_db),
+    _admin: User = Depends(require_admin_session),
+) -> AdminArtistCatalogSyncEnabledResponse:
+    repo = ArtistRepository(session)
+    artist = await repo.set_catalog_sync_enabled(
+        artist_id, enabled=body.enabled
+    )
+    if artist is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="artist not found",
+        )
+    await session.commit()
+    return AdminArtistCatalogSyncEnabledResponse(
+        artist_id=artist_id,
+        catalog_sync_enabled=artist.catalog_sync_enabled,
+    )
+
+
+@router.post(
+    "/import-by-sc-url",
+    response_model=AdminImportByScUrlResponse,
+)
+@limiter.limit("20/minute")
+async def admin_import_artist_by_sc_url(
+    request: Request,
+    body: AdminImportByScUrlRequest,
+    session: AsyncSession = Depends(get_db),
+    _admin: User = Depends(require_step_up("catalog.sync.run")),
+) -> AdminImportByScUrlResponse:
+    svc = AdminArtistCatalogService(session)
+    try:
+        return await svc.import_by_sc_url(body.url)
+    except ValueError as exc:
+        msg = str(exc)
+        if msg == "soundcloud_user_not_found":
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="SoundCloud artist not found for the given URL",
+            ) from exc
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=msg,
+        ) from exc

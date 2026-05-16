@@ -146,6 +146,10 @@ class ArtistFollowService:
             artist_id
         )
         if following:
+            if not artist.catalog_sync_enabled:
+                await self._artist_repo.set_catalog_sync_enabled(
+                    artist_id, enabled=True
+                )
             await self._enqueue_station_sync_if_stale(
                 artist_id
             )
@@ -179,6 +183,13 @@ class ArtistFollowService:
     ) -> None:
         for artist_id in artist_ids:
             await self._repo.add(user_id, artist_id)
+            artist = await self._artist_repo.get_by_id(
+                artist_id
+            )
+            if artist is not None and not artist.catalog_sync_enabled:
+                await self._artist_repo.set_catalog_sync_enabled(
+                    artist_id, enabled=True
+                )
             await self._enqueue_station_sync_if_stale(
                 artist_id
             )

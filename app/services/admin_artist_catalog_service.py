@@ -18,6 +18,7 @@ from app.schemas.admin_artist_catalog import (
     AdminCatalogReleaseCreate,
     AdminCatalogReleasePatch,
     AdminCatalogReleaseSummaryResponse,
+    AdminImportByScUrlResponse,
 )
 from app.schemas.artist_catalog import ArtistCatalogReleaseDetailResponse
 from app.services import artist_catalog_sync_progress as acsp
@@ -128,6 +129,7 @@ class AdminArtistCatalogService:
             image_key=artist.image_key,
             soundcloud_user_id=artist.soundcloud_user_id,
             soundcloud_permalink=artist.soundcloud_permalink,
+            catalog_sync_enabled=artist.catalog_sync_enabled,
             releases=items,
             releases_total=len(items),
             catalog_sync_state=cs_state,
@@ -598,3 +600,132 @@ class AdminArtistCatalogService:
             job_id=job_id,
         )
         return sc_album, job_id
+
+    async def import_by_sc_url(
+        self,
+        url_or_permalink: str,
+    ) -> AdminImportByScUrlResponse:
+        sc = SoundCloudService(settings.sc_client_id, self._session)
+        result = await sc._resolve_profile_permalink_to_user(
+            url_or_permalink.strip()
+        )
+        if result is None:
+            raise ValueError("soundcloud_user_not_found")
+        sc_user_id, sc_permalink = result
+
+        existing = await self._artists.find_by_soundcloud_user_id(
+            sc_user_id
+        )
+        if existing is not None:
+            if not existing.catalog_sync_enabled:
+                await self._artists.set_catalog_sync_enabled(
+                    existing.id, enabled=True
+                )
+                await self._session.commit()
+                await self._session.refresh(existing)
+            job_id = await self._enqueue_full_sync_for_artist(existing.id)
+            return AdminImportByScUrlResponse(
+                artist_id=existing.id,
+                artist_name=existing.name,
+                created=False,
+                catalog_sync_enabled=existing.catalog_sync_enabled,
+                queued=True,
+                job_id=job_id,
+            )
+
+        sc_user_data = await sc.fetch_soundcloud_user_by_id(sc_user_id)
+        display_name: str = sc_permalink
+        if sc_user_data and isinstance(
+            sc_user_data.get("username"), str
+        ):
+            display_name = sc_user_data["username"]
+        elif sc_user_data and isinstance(
+            sc_user_data.get("full_name"), str
+        ):
+            display_name = sc_user_data["full_name"]
+
+        from dotsound_private_core.services.artist_normalizer import (
+            normalize_name,
+        )
+
+        normalized = normalize_name(display_name) or sc_permalink
+        name_exists = await self._artists.find_by_normalized_name(normalized)
+        if name_exists is not None:
+            await self._artists.update_soundcloud_identity(
+                name_exists.id,
+                soundcloud_user_id=sc_user_id,
+                soundcloud_permalink=sc_permalink,
+            )
+            await self._artists.set_catalog_sync_enabled(
+                name_exists.id, enabled=True
+            )
+            await self._session.commit()
+            job_id = await self._enqueue_full_sync_for_artist(name_exists.id)
+            return AdminImportByScUrlResponse(
+                artist_id=name_exists.id,
+                artist_name=name_exists.name,
+                created=False,
+                catalog_sync_enabled=True,
+                queued=True,
+                job_id=job_id,
+            )
+
+        artist = await self._artists.create(
+            name=display_name,
+            name_normalized=normalized,
+            source="soundcloud",
+            external_id=str(sc_user_id),
+            catalog_sync_enabled=True,
+            soundcloud_user_id=sc_user_id,
+            soundcloud_permalink=sc_permalink,
+        )
+        await self._session.commit()
+
+        try:
+            from app.services.search_index_notify import (
+                schedule_reindex_artist,
+            )
+            await schedule_reindex_artist(artist.id)
+        except Exception:
+            pass
+
+        job_id = await self._enqueue_full_sync_for_artist(artist.id)
+        return AdminImportByScUrlResponse(
+            artist_id=artist.id,
+            artist_name=artist.name,
+            created=True,
+            catalog_sync_enabled=True,
+            queued=True,
+            job_id=job_id,
+        )
+
+    async def _enqueue_full_sync_for_artist(
+        self, artist_id: int
+    ) -> str | None:
+        from app.services import artist_catalog_sync_progress as acsp
+        from app.services.artist_catalog_sync_worker import (
+            sync_artist_catalog_task,
+        )
+        from app.services.background_jobs import IdempotencySkipped, enqueue
+
+        try:
+            await acsp.set_running(
+                artist_id,
+                mode="full",
+                soundcloud_album_id=None,
+                detail={"phase": "queued", "source": "admin_import"},
+            )
+        except Exception:
+            pass
+        try:
+            return await enqueue(
+                sync_artist_catalog_task,
+                payload={"artist_id": artist_id},
+                idempotency_key=f"artist-catalog-sync:{artist_id}",
+            )
+        except IdempotencySkipped:
+            logger.info(
+                "admin_import_sc_catalog_sync_already_queued",
+                artist_id=artist_id,
+            )
+            return None
