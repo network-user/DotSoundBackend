@@ -105,14 +105,19 @@ import {
 import { useLikes } from '@/store/LikesContext'
 import { usePlayerMeta } from '@/store/PlayerContext'
 import { useUploadQueueAutoResume } from '@/lib/uploadQueueAutoResume'
+import { recoverFromStaleBuild } from '@/lib/staleBuildRecovery'
 
 function lazyWithRetry<T extends ComponentType<any>>(
   fn: () => Promise<{ default: T }>,
 ) {
   return lazy(() =>
-    fn().catch(
-      () =>
-        new Promise<void>((r) => setTimeout(r, 1_000)).then(fn),
+    fn().catch((firstError: unknown) =>
+      new Promise<void>((r) => setTimeout(r, 1_000))
+        .then(fn)
+        .catch((secondError: unknown) => {
+          recoverFromStaleBuild(secondError || firstError)
+          throw secondError
+        }),
     ),
   )
 }

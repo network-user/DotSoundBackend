@@ -46,9 +46,6 @@ const adminDependencyChunk = (id: string): string | null => {
   ) {
     return 'admin-table'
   }
-  if (normalized.includes('node_modules/qrcode/')) {
-    return 'admin-qrcode'
-  }
   if (
     normalized.includes(
       'node_modules/@fingerprintjs/',
@@ -58,6 +55,40 @@ const adminDependencyChunk = (id: string): string | null => {
   }
   if (normalized.includes('node_modules/zustand/')) {
     return 'admin-state'
+  }
+  return null
+}
+
+const publicDependencyChunk = (id: string): string | null => {
+  const normalized = normalizeModuleId(id)
+  if (
+    normalized.includes('node_modules/react/') ||
+    normalized.includes('node_modules/react-dom/') ||
+    normalized.includes('node_modules/@twa-dev/sdk') ||
+    normalized.includes('node_modules/react-router') ||
+    normalized.includes('node_modules/i18next') ||
+    normalized.includes('node_modules/react-i18next') ||
+    normalized.includes('node_modules/framer-motion') ||
+    normalized.includes('node_modules/qrcode/')
+  ) {
+    return 'vendor'
+  }
+  return null
+}
+
+const publicSharedChunk = (id: string): string | null => {
+  const normalized = normalizeModuleId(id)
+  if (!normalized.includes('/src/')) return null
+  if (normalized.includes('/src/admin/')) return null
+  if (
+    normalized.includes('/src/lib/') ||
+    normalized.includes('/src/types/') ||
+    normalized.includes('/src/components/ui/') ||
+    normalized.includes('/src/components/Icon/') ||
+    normalized.includes('/src/components/CoverImage/') ||
+    normalized.includes('/src/components/Admin/')
+  ) {
+    return 'app-shared'
   }
   return null
 }
@@ -366,6 +397,16 @@ export default defineConfig({
           if (adminDepChunk) {
             return adminDepChunk
           }
+          const publicDepChunk =
+            publicDependencyChunk(normalized)
+          if (publicDepChunk) {
+            return publicDepChunk
+          }
+          const publicShared =
+            publicSharedChunk(normalized)
+          if (publicShared) {
+            return publicShared
+          }
           if (
             normalized.includes(
               '/src/admin/AdminApp.tsx',
@@ -383,17 +424,6 @@ export default defineConfig({
           }
           if (normalized.includes('node_modules/hls.js')) {
             return 'hls'
-          }
-          if (
-            normalized.includes('node_modules/react/') ||
-            normalized.includes(
-              'node_modules/react-dom/',
-            ) ||
-            normalized.includes(
-              'node_modules/@twa-dev/sdk',
-            )
-          ) {
-            return 'vendor'
           }
           return undefined
         },

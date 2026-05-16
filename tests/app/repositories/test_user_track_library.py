@@ -1,6 +1,7 @@
 import pytest
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.models.track import Track
 from app.models.user import User
 from app.repositories.base import BaseRepository
 from app.repositories.track import TrackRepository
@@ -22,7 +23,7 @@ async def _make_user(session: AsyncSession, telegram_id: int) -> User:
 
 async def _make_track(
     session: AsyncSession, uploader_id: int, title: str = "T"
-):
+) -> Track:
     track_repo = TrackRepository(session)
     return await track_repo.create(
         title=title, artist="A", uploaded_by_id=uploader_id
@@ -76,6 +77,46 @@ async def test_list_orders_by_imported_at_desc(
     assert total == 2
     assert tracks[0].id == t_new.id
     assert tracks[1].id == t_old.id
+
+
+async def test_list_includes_owned_track_without_library_row(
+    session: AsyncSession,
+) -> None:
+    user = await _make_user(session, telegram_id=714)
+    track = await _make_track(session, user.id, title="owned")
+
+    repo = UserTrackLibraryRepository(session)
+    tracks, total = await repo.list_by_user(user.id)
+
+    assert total == 1
+    assert [t.id for t in tracks] == [track.id]
+
+
+async def test_count_includes_owned_track_without_library_row(
+    session: AsyncSession,
+) -> None:
+    user = await _make_user(session, telegram_id=715)
+    await _make_track(session, user.id, title="owned")
+
+    repo = UserTrackLibraryRepository(session)
+
+    assert await repo.count_by_user(user.id) == 1
+
+
+async def test_owned_track_not_duplicated_by_other_user_library(
+    session: AsyncSession,
+) -> None:
+    owner = await _make_user(session, telegram_id=716)
+    other = await _make_user(session, telegram_id=717)
+    track = await _make_track(session, owner.id, title="shared")
+
+    repo = UserTrackLibraryRepository(session)
+    await repo.add(other.id, track.id, source="telegram")
+
+    tracks, total = await repo.list_by_user(owner.id)
+
+    assert total == 1
+    assert [t.id for t in tracks] == [track.id]
 
 
 async def test_remove(session: AsyncSession) -> None:

@@ -31,6 +31,11 @@ type Phase =
 
 const MAX_FILE_SIZE = 20 * 1024 * 1024
 
+interface ImportViewProps {
+  active: boolean
+  onImportComplete?: (job: ImportJobData) => void
+}
+
 function scanErrorMessage(
   fallback: string,
   job: ImportJobData,
@@ -44,7 +49,10 @@ function scanErrorMessage(
   return detail ? `${fallback} (${detail})` : fallback
 }
 
-export function ImportView({ active }: { active: boolean }) {
+export function ImportView({
+  active,
+  onImportComplete,
+}: ImportViewProps) {
   const { t } = useTranslation()
   const [phase, setPhase] = useState<Phase>('pick')
   const [job, setJob] = useState<ImportJobData | null>(null)
@@ -107,6 +115,9 @@ export function ImportView({ active }: { active: boolean }) {
         const updated = await api.getImportStatus(job.id)
         setJob(updated)
         if (updated.status === 'done' || updated.status === 'cancelled') {
+          if (updated.status === 'done') {
+            onImportComplete?.(updated)
+          }
           setPhase('done')
           clearInterval(interval)
         } else if (updated.status === 'importing' && phase === 'queued') {
@@ -117,7 +128,7 @@ export function ImportView({ active }: { active: boolean }) {
       } catch {}
     }, 2000)
     return () => clearInterval(interval)
-  }, [phase, job?.id, t])
+  }, [phase, job?.id, onImportComplete, t])
 
   const applyScanResult = useCallback((j: ImportJobData): boolean => {
     setJob(j)

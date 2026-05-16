@@ -1,5 +1,32 @@
 # DotSound - TODO Tracker
 
+- [x] **Telegram import visibility in profile (2026-05-16)**
+  - Profile data now refreshes when returning from the import subview and
+    immediately after an import job reaches `done`, so the imported tracks
+    and counters are not stuck on the old in-memory state.
+  - `/users/me/library` now includes tracks owned by the current user even
+    if the `user_track_library` row is missing, while still including
+    canonical tracks explicitly imported into the user's library.
+  - Added repository regression coverage for owned tracks without a library
+    row and duplicate-safe listing when another user has the same track in
+    their library.
+  - Verified targeted repository/import tests, Ruff, and `frontend`
+    production build with `npm run build`.
+
+- [x] **Mini App stale bundle recovery + onboarding event log fix (2026-05-16)**
+  - Fixed `/api/v1/onboarding/activation-event` logging: the client
+    activation event is now logged as `activation_event`, avoiding the
+    structlog reserved `event` field collision that caused HTTP 500.
+  - Added Mini App stale-build recovery for broken ESM/preload chunks:
+    unregister service workers, clear Workbox/Mini App caches, and reload
+    once with `nosw=1` and a cache-busting timestamp.
+  - Moved public shared dependencies/modules out of secure admin chunks so
+    public startup chunks no longer statically import `assets/secure/*`.
+  - Hardened the admin bundle build check to fail if a public JS chunk
+    statically imports secure admin assets again.
+  - Verified targeted onboarding regression, Ruff, and `frontend`
+    production build with `npm run build`.
+
 - [x] **Admin task cancellation hardening (2026-05-16)**
   - Playback repair jobs now receive their `BackgroundJob.id` in the
     Taskiq payload and check both Redis cancel signals and DB

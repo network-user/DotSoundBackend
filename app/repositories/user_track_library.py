@@ -1,5 +1,5 @@
 import structlog
-from sqlalchemy import delete, func, select
+from sqlalchemy import and_, delete, func, or_, select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -25,6 +25,20 @@ class UserTrackLibraryRepository:
         )
         return (~source_platform.in_(hidden)) & (
             ~imported_from.in_(hidden)
+        )
+
+    @staticmethod
+    def _current_user_link_condition(user_id: int):  # noqa: ANN205
+        return and_(
+            UserTrackLibrary.track_id == Track.id,
+            UserTrackLibrary.user_id == user_id,
+        )
+
+    @staticmethod
+    def _visible_to_library_owner(user_id: int):  # noqa: ANN205
+        return or_(
+            UserTrackLibrary.user_id == user_id,
+            Track.uploaded_by_id == user_id,
         )
 
     async def add(
@@ -80,11 +94,14 @@ class UserTrackLibraryRepository:
         playable_only: bool = False,
     ) -> tuple[list[Track], int]:
         count_stmt = (
-            select(func.count())
-            .select_from(UserTrackLibrary)
-            .join(Track, Track.id == UserTrackLibrary.track_id)
+            select(func.count(func.distinct(Track.id)))
+            .select_from(Track)
+            .outerjoin(
+                UserTrackLibrary,
+                self._current_user_link_condition(user_id),
+            )
             .where(
-                UserTrackLibrary.user_id == user_id,
+                self._visible_to_library_owner(user_id),
                 Track.is_active.is_(True),
                 self._exclude_hidden_sources(),
                 TrackRepository._playback_listing_allowed(),
@@ -98,12 +115,13 @@ class UserTrackLibraryRepository:
 
         list_stmt = (
             select(Track)
-            .join(
+            .select_from(Track)
+            .outerjoin(
                 UserTrackLibrary,
-                UserTrackLibrary.track_id == Track.id,
+                self._current_user_link_condition(user_id),
             )
             .where(
-                UserTrackLibrary.user_id == user_id,
+                self._visible_to_library_owner(user_id),
                 Track.is_active.is_(True),
                 self._exclude_hidden_sources(),
                 TrackRepository._playback_listing_allowed(),
@@ -114,7 +132,12 @@ class UserTrackLibraryRepository:
                 (Track.file_key.isnot(None)) | (Track.sc_url.isnot(None))
             )
         list_stmt = (
-            list_stmt.order_by(UserTrackLibrary.imported_at.desc())
+            list_stmt.order_by(
+                func.coalesce(
+                    UserTrackLibrary.imported_at,
+                    Track.created_at,
+                ).desc()
+            )
             .offset(offset)
             .limit(limit)
         )
@@ -123,11 +146,14 @@ class UserTrackLibraryRepository:
 
     async def count_by_user(self, user_id: int) -> int:
         result = await self._session.execute(
-            select(func.count())
-            .select_from(UserTrackLibrary)
-            .join(Track, Track.id == UserTrackLibrary.track_id)
+            select(func.count(func.distinct(Track.id)))
+            .select_from(Track)
+            .outerjoin(
+                UserTrackLibrary,
+                self._current_user_link_condition(user_id),
+            )
             .where(
-                UserTrackLibrary.user_id == user_id,
+                self._visible_to_library_owner(user_id),
                 Track.is_active.is_(True),
                 self._exclude_hidden_sources(),
                 TrackRepository._playback_listing_allowed(),

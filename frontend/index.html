@@ -75,6 +75,93 @@
     }
   </style>
   <script defer src="https://telegram.org/js/telegram-web-app.js"></script>
+  <script>
+    (function () {
+      var key = 'ds:stale-build-recovery-at';
+      var windowMs = 60000;
+      function messageFrom(value) {
+        if (!value) return '';
+        if (typeof value === 'string') return value;
+        if (value.type === 'vite:preloadError') {
+          return 'Failed to fetch dynamically imported module';
+        }
+        if (value.message) return String(value.message);
+        if (value.reason && value.reason.message) {
+          return String(value.reason.message);
+        }
+        if (typeof value.reason === 'string') return value.reason;
+        if (value.payload) return messageFrom(value.payload);
+        if (value.detail) return messageFrom(value.detail);
+        return '';
+      }
+      function isStaleBuildError(value) {
+        var text = messageFrom(value);
+        return (
+          text.indexOf('does not provide an export named') !== -1 ||
+          text.indexOf('Failed to fetch dynamically imported module') !== -1 ||
+          text.indexOf('error loading dynamically imported module') !== -1 ||
+          text.indexOf('Importing a module script failed') !== -1 ||
+          text.indexOf('ChunkLoadError') !== -1
+        );
+      }
+      function recover(event) {
+        var value =
+          event && (event.reason || event.error || event.message);
+        if (!isStaleBuildError(value)) return;
+        try {
+          var now = Date.now();
+          var previous = Number(
+            sessionStorage.getItem(key) || '0'
+          );
+          if (previous && now - previous < windowMs) return;
+          sessionStorage.setItem(key, String(now));
+        } catch (_e) {
+          return;
+        }
+        var cleanup = [];
+        if ('serviceWorker' in navigator) {
+          cleanup.push(
+            navigator.serviceWorker
+              .getRegistrations()
+              .then(function (registrations) {
+                return Promise.all(
+                  registrations.map(function (registration) {
+                    return registration.unregister();
+                  })
+                );
+              })
+          );
+        }
+        if ('caches' in window) {
+          cleanup.push(
+            caches.keys().then(function (names) {
+              return Promise.all(
+                names
+                  .filter(function (name) {
+                    return (
+                      name.indexOf('mini-app') !== -1 ||
+                      name.indexOf('workbox') !== -1
+                    );
+                  })
+                  .map(function (name) {
+                    return caches.delete(name);
+                  })
+              );
+            })
+          );
+        }
+        Promise.allSettled(cleanup).finally(function () {
+          var url = new URL(window.location.href);
+          url.searchParams.set('nosw', '1');
+          url.searchParams.set('v', String(Date.now()));
+          window.location.replace(url.toString());
+        });
+      }
+      window.addEventListener('error', recover, true);
+      window.addEventListener('unhandledrejection', recover);
+      window.addEventListener('vite:preloadError', recover);
+    })();
+  </script>
 </head>
 <body>
   <div id="ds-loader">

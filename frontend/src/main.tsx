@@ -14,6 +14,10 @@ import { installOnlineFlush } from '@/lib/pendingEvents'
 import { captureBeforeInstallPrompt } from '@/lib/pwaInstall'
 import { LazyMotion, domAnimation } from '@/lib/motion'
 import { OfflineErrorBoundary } from '@/components/OfflineErrorBoundary/OfflineErrorBoundary'
+import {
+  isStaleBuildError,
+  recoverFromStaleBuild,
+} from '@/lib/staleBuildRecovery'
 import { App } from './App'
 import './styles/tokens.css'
 import './styles/global.css'
@@ -32,14 +36,16 @@ captureBeforeInstallPrompt()
 
 window.addEventListener('unhandledrejection', (event) => {
   console.error('[unhandledRejection]', event.reason)
+  recoverFromStaleBuild(event.reason)
 })
 window.addEventListener('error', (event) => {
   if (event.error) console.error('[globalError]', event.error)
+  if (isStaleBuildError(event.error || event.message)) {
+    recoverFromStaleBuild(event.error || event.message)
+  }
 })
-// When Vite's module preloads 404 (stale chunks after a new deployment),
-// a hard reload is the only reliable recovery.
-window.addEventListener('vite:preloadError', () => {
-  window.location.reload()
+window.addEventListener('vite:preloadError', (event) => {
+  recoverFromStaleBuild(event)
 })
 
 void api.restoreSession()

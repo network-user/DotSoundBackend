@@ -357,7 +357,7 @@ async def activation_event(
     )
     _activation_logger.info(
         "activation_event",
-        event=body.event,
+        activation_event=body.event,
         user_id=user.id,
         meta=merged_meta,
     )

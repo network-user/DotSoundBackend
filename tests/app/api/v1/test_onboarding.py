@@ -263,6 +263,31 @@ async def test_taste_swipe_batch(
     assert r.json()["saved"] == 0
 
 
+async def test_activation_event_does_not_collide_with_structlog_event(
+    client: AsyncClient,
+) -> None:
+    await create_test_user(client, 8020)
+    headers = await auth_headers(client, 8020)
+
+    with patch(
+        "app.services.onboarding_service."
+        "OnboardingService.process_activation_event",
+        new_callable=AsyncMock,
+        return_value={"step": "home"},
+    ):
+        r = await client.post(
+            "/api/v1/onboarding/activation-event",
+            json={
+                "event": "home_first_session_start",
+                "meta": {"step": "home"},
+            },
+            headers=headers,
+        )
+
+    assert r.status_code == 200
+    assert r.json() == {"status": "ok"}
+
+
 @patch(
     "app.services.onboarding_service.preflight_telegram_profile_music",
     new_callable=AsyncMock,

@@ -1,4 +1,5 @@
 import {
+  useCallback,
   useEffect,
   useMemo,
   useRef,
@@ -103,6 +104,33 @@ export function ProfileView({
   const [serverDebug, setServerDebug] = useState(false)
 
   const tgUser = tg.initDataUnsafe?.user
+  const tgFirstName = tgUser?.first_name
+  const tgUsername = tgUser?.username
+
+  const refreshProfileData = useCallback(() => {
+    const internalId = getInternalUserId()
+    if (!internalId) return
+
+    api
+      .getUserStats(internalId)
+      .then(setStats)
+      .catch(() =>
+        setStats({
+          user_id: internalId,
+          total_tracks: 0,
+          total_plays: 0,
+          total_likes: 0,
+          followers_count: 0,
+          following_count: 0,
+          top_tracks: [],
+        }),
+      )
+
+    api
+      .getMyLibrary()
+      .then((data) => setMyTracks(data.items))
+      .catch(() => {})
+  }, [])
 
   useEffect(
     () => () => {
@@ -124,24 +152,10 @@ export function ProfileView({
   }, [])
 
   useEffect(() => {
+    refreshProfileData()
+
     const internalId = getInternalUserId()
     if (!internalId) return
-
-    api
-      .getUserStats(internalId)
-      .then(setStats)
-      .catch(() =>
-        setStats({
-          user_id: internalId,
-          total_tracks: 0,
-          total_plays: 0,
-          total_likes: 0,
-          followers_count: 0,
-          following_count: 0,
-          top_tracks: [],
-        }),
-      )
-
     api
       .getUserProfile(internalId)
       .then((profile) => {
@@ -153,12 +167,12 @@ export function ProfileView({
           ]
             .filter(Boolean)
             .join(' ') ||
-          tgUser?.first_name ||
+          tgFirstName ||
           fallbackName
         setDisplayName(name)
         setUsername(
           profile.username ||
-            tgUser?.username ||
+            tgUsername ||
             undefined,
         )
         api
@@ -170,15 +184,16 @@ export function ProfileView({
       })
       .catch(() =>
         setDisplayName(
-          tgUser?.first_name || fallbackName,
+          tgFirstName || fallbackName,
         ),
       )
+  }, [fallbackName, refreshProfileData, tgFirstName, tgUsername])
 
-    api
-      .getMyLibrary()
-      .then((data) => setMyTracks(data.items))
-      .catch(() => {})
-  }, [])
+  useEffect(() => {
+    if (tab === 'profile') {
+      refreshProfileData()
+    }
+  }, [refreshProfileData, tab])
 
   const clearPendingAvatar = () => {
     if (pendingBlobUrlRef.current) {
@@ -534,7 +549,10 @@ export function ProfileView({
             data-direction={navDirection}
           >
             {tab === 'import' && (
-              <ImportView active={tab === 'import'} />
+              <ImportView
+                active={tab === 'import'}
+                onImportComplete={refreshProfileData}
+              />
             )}
             {tab === 'complaints' && <MyComplaintsList />}
             {tab === 'dislikes' && <DislikedView />}
