@@ -19,6 +19,7 @@ import {
   getCachedIdsSync,
   markPlayed as markCachePlayed,
   trackProgressiveAudioUrl,
+  warmProgressiveAudioForPlayback,
 } from '@/lib/offlineCache'
 import { queueOrSend } from '@/lib/pendingEvents'
 import {
@@ -27,6 +28,7 @@ import {
 } from '@/lib/streamDebugOverride'
 import { isBenignPlayError, safePlay } from '@/lib/safePlay'
 import { getPrefetchManager } from '@/lib/prefetch/PrefetchManager'
+import { shouldUseInternalHlsPlayback } from '@/lib/playbackSourcePolicy'
 import { coverProxyUrl } from '@/lib/coverProxy'
 import type { Track } from '@/types/api'
 
@@ -677,6 +679,8 @@ export function PlayerProvider({
   const wantResumeAfterCardCloseRef = useRef(false)
   const prefetchAudioRef =
     useRef<HTMLAudioElement | null>(null)
+  const prefetchWarmAbortRef =
+    useRef<AbortController | null>(null)
   const manualQueueRef = useRef<Track[]>([])
   const analyserRef = useRef<AnalyserNode | null>(null)
   const streamExpiresAtRef = useRef<number | null>(null)
@@ -1129,23 +1133,30 @@ export function PlayerProvider({
             })
             .catch(() => {})
         } else {
-          const hlsUrl = `/api/v1/tracks/${restoredTrack.id}/hls/master.m3u8`
           const fallback = trackProgressiveAudioUrl(
             restoredTrack.id,
           )
 
-          const HlsMod = await loadHlsClass()
-          if (HlsMod.isSupported()) {
-            srcAssignedAtRef.current = Date.now()
-            startHlsPlayback(
-              audio,
-              hlsUrl,
-              fallback,
-              false,
-              restoredTrack.id,
+          if (shouldUseInternalHlsPlayback(restoredTrack)) {
+            const HlsMod = await loadHlsClass()
+            const hlsUrl = (
+              `/api/v1/tracks/${restoredTrack.id}/hls/master.m3u8`
             )
-              .then(seekAfterLoad)
-              .catch(() => {})
+            srcAssignedAtRef.current = Date.now()
+            if (HlsMod.isSupported()) {
+              startHlsPlayback(
+                audio,
+                hlsUrl,
+                fallback,
+                false,
+                restoredTrack.id,
+              )
+                .then(seekAfterLoad)
+                .catch(() => {})
+            } else {
+              audio.src = fallback
+              seekAfterLoad()
+            }
           } else {
             srcAssignedAtRef.current = Date.now()
             audio.src = fallback
@@ -2334,29 +2345,39 @@ export function PlayerProvider({
         return
       }
 
-      const hlsUrl = `/api/v1/tracks/${newTrack.id}/hls/master.m3u8`
       const fallback =
         overrideUrl ||
         trackProgressiveAudioUrl(newTrack.id)
 
-      const HlsMod = await loadHlsClass()
-      if (HlsMod.isSupported()) {
-        const preloaded =
-          preloadHlsRef.current &&
-          preloadHlsTrackIdRef.current ===
-            newTrack.id
-            ? preloadHlsRef.current
-            : null
-        if (preloaded) {
-          try {
-            preloaded.detachMedia()
-            preloaded.attachMedia(audio)
-            audio.volume = volume
-            await safePlay(audio)
-            hlsRef.current = preloaded
-            preloadHlsRef.current = null
-            preloadHlsTrackIdRef.current = null
-          } catch {
+      if (shouldUseInternalHlsPlayback(newTrack)) {
+        const hlsUrl = `/api/v1/tracks/${newTrack.id}/hls/master.m3u8`
+        const HlsMod = await loadHlsClass()
+        if (HlsMod.isSupported()) {
+          const preloaded =
+            preloadHlsRef.current &&
+            preloadHlsTrackIdRef.current ===
+              newTrack.id
+              ? preloadHlsRef.current
+              : null
+          if (preloaded) {
+            try {
+              preloaded.detachMedia()
+              preloaded.attachMedia(audio)
+              audio.volume = volume
+              await safePlay(audio)
+              hlsRef.current = preloaded
+              preloadHlsRef.current = null
+              preloadHlsTrackIdRef.current = null
+            } catch {
+              await startHlsPlayback(
+                audio,
+                hlsUrl,
+                fallback,
+                true,
+                newTrack.id,
+              )
+            }
+          } else {
             await startHlsPlayback(
               audio,
               hlsUrl,
@@ -2366,12 +2387,9 @@ export function PlayerProvider({
             )
           }
         } else {
-          await startHlsPlayback(
+          await startDirectPlayback(
             audio,
-            hlsUrl,
             fallback,
-            true,
-            newTrack.id,
           )
         }
       } else {
@@ -2699,6 +2717,10 @@ export function PlayerProvider({
         prefetchAudioRef.current.src = ''
         prefetchAudioRef.current = null
       }
+      if (prefetchWarmAbortRef.current) {
+        prefetchWarmAbortRef.current.abort()
+        prefetchWarmAbortRef.current = null
+      }
       teardownPreloadHls()
       if (
         next.access_mode === 'official_embed' ||
@@ -2713,7 +2735,20 @@ export function PlayerProvider({
       _applyPitchPreservation(pa)
       prefetchAudioRef.current = pa
 
+      if (getPrefetchManager().isEnabled()) {
+        const warmAbort = new AbortController()
+        prefetchWarmAbortRef.current = warmAbort
+        void warmProgressiveAudioForPlayback(next.id, {
+          signal: warmAbort.signal,
+        }).finally(() => {
+          if (prefetchWarmAbortRef.current === warmAbort) {
+            prefetchWarmAbortRef.current = null
+          }
+        })
+      }
+
       void (async () => {
+        if (!shouldUseInternalHlsPlayback(next)) return
         let HlsMod: Awaited<ReturnType<typeof loadHlsClass>>
         try {
           HlsMod = await loadHlsClass()
@@ -2721,10 +2756,7 @@ export function PlayerProvider({
           return
         }
         if (cancelled) return
-        const canHls =
-          next.is_public &&
-          next.access_mode === 'internal_stream' &&
-          HlsMod.isSupported()
+        const canHls = HlsMod.isSupported()
         if (!canHls) return
 
         try {
@@ -2801,6 +2833,10 @@ export function PlayerProvider({
       if (prefetchAudioRef.current) {
         prefetchAudioRef.current.src = ''
         prefetchAudioRef.current = null
+      }
+      if (prefetchWarmAbortRef.current) {
+        prefetchWarmAbortRef.current.abort()
+        prefetchWarmAbortRef.current = null
       }
       teardownPreloadHls()
     }

@@ -93,6 +93,23 @@ async def _admin_track_responses(
 
 
 @router.get(
+    "/tracks/visibility-counts",
+    response_model=dict,
+    summary="[Admin] Count hidden and visible (non-deleted) tracks",
+)
+@limiter.limit("60/minute")
+async def admin_track_visibility_counts(
+    request: Request,
+    search: str | None = Query(None, max_length=128),
+    session: AsyncSession = Depends(get_db),
+    _admin: User = Depends(require_admin_session),
+) -> dict:
+    service = AdminService(session)
+    hidden, visible = await service.get_visibility_counts(search=search)
+    return {"hidden": hidden, "visible": visible}
+
+
+@router.get(
     "/tracks",
     response_model=AdminTrackListResponse,
     summary="[Admin] List all tracks including hidden",
@@ -127,6 +144,13 @@ async def admin_list_tracks(
             "all active tracks that pass listing playability"
         ),
     ),
+    sort_by: str | None = Query(
+        None,
+        description=(
+            "Sort order: created_at_desc (default), "
+            "visibility_asc (hidden first), visibility_desc (visible first)"
+        ),
+    ),
     session: AsyncSession = Depends(get_db),
     _admin: User = Depends(require_admin_session),
 ) -> AdminTrackListResponse:
@@ -140,6 +164,7 @@ async def admin_list_tracks(
         search=search,
         for_playlist_owner_id=for_playlist_owner_id,
         playable_only=playable_only,
+        sort_by=sort_by,
     )
     return AdminTrackListResponse(
         items=await _admin_track_responses(service, tracks),

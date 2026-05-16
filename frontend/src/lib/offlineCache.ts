@@ -17,6 +17,29 @@ const UNPINNED_TTL_DEFAULT_DAYS = 7
 const RECOMMENDATION_TTL_HOURS = 48
 const GC_FILL_THRESHOLD = 0.8
 const GC_FILL_TARGET = 0.6
+const PLAYBACK_WARM_MAX_BYTES = 64 * 1024 * 1024
+const PLAYBACK_WARM_TOTAL_MAX_BYTES = 192 * 1024 * 1024
+const PLAYBACK_WARM_MAX_ENTRIES = 8
+const LS_PLAYBACK_WARM_INDEX = 'ds:playback-warm-index:v1'
+
+type FetchPriority = 'low' | 'high' | 'auto'
+
+interface FetchInitWithPriority extends RequestInit {
+  priority?: FetchPriority
+}
+
+interface PlaybackWarmRecord {
+  trackId: number
+  url: string
+  bytes: number
+  warmedAt: number
+}
+
+export interface PlaybackWarmResult {
+  ok: boolean
+  bytes: number
+  alreadyCached: boolean
+}
 
 export type CacheSource =
   | 'manual'
@@ -133,6 +156,172 @@ export async function getCachedAudioUrl(
     return URL.createObjectURL(blob)
   } catch {
     return null
+  }
+}
+
+function readPlaybackWarmIndex(): PlaybackWarmRecord[] {
+  try {
+    const raw = localStorage.getItem(LS_PLAYBACK_WARM_INDEX)
+    if (!raw) return []
+    const parsed = JSON.parse(raw) as unknown
+    if (!Array.isArray(parsed)) return []
+    return parsed
+      .map((item): PlaybackWarmRecord | null => {
+        if (!item || typeof item !== 'object') return null
+        const rec = item as Partial<PlaybackWarmRecord>
+        if (
+          typeof rec.trackId !== 'number' ||
+          typeof rec.url !== 'string' ||
+          typeof rec.bytes !== 'number' ||
+          typeof rec.warmedAt !== 'number'
+        ) {
+          return null
+        }
+        return rec as PlaybackWarmRecord
+      })
+      .filter((rec): rec is PlaybackWarmRecord => rec !== null)
+  } catch {
+    return []
+  }
+}
+
+function writePlaybackWarmIndex(records: PlaybackWarmRecord[]): void {
+  try {
+    localStorage.setItem(
+      LS_PLAYBACK_WARM_INDEX,
+      JSON.stringify(records),
+    )
+  } catch {
+    /* ignore */
+  }
+}
+
+function upsertPlaybackWarmRecord(
+  record: PlaybackWarmRecord,
+): PlaybackWarmRecord[] {
+  const next = readPlaybackWarmIndex().filter(
+    (item) =>
+      item.trackId !== record.trackId && item.url !== record.url,
+  )
+  next.push(record)
+  writePlaybackWarmIndex(next)
+  return next
+}
+
+async function trimPlaybackWarmCache(
+  cache: Cache,
+  records = readPlaybackWarmIndex(),
+): Promise<void> {
+  const unique = new Map<string, PlaybackWarmRecord>()
+  for (const rec of records) {
+    unique.set(`${rec.trackId}:${rec.url}`, rec)
+  }
+  const warmOnly: PlaybackWarmRecord[] = []
+  for (const rec of unique.values()) {
+    if (await isCached(rec.trackId)) continue
+    warmOnly.push(rec)
+  }
+  warmOnly.sort((a, b) => b.warmedAt - a.warmedAt)
+  let total = warmOnly.reduce((sum, rec) => sum + rec.bytes, 0)
+  const keep = [...warmOnly]
+  while (
+    keep.length > PLAYBACK_WARM_MAX_ENTRIES ||
+    total > PLAYBACK_WARM_TOTAL_MAX_BYTES
+  ) {
+    const evicted = keep.pop()
+    if (!evicted) break
+    total -= evicted.bytes
+    try {
+      await cache.delete(evicted.url)
+    } catch {
+      /* ignore */
+    }
+  }
+  writePlaybackWarmIndex(keep)
+}
+
+export async function warmProgressiveAudioForPlayback(
+  trackId: number,
+  options?: {
+    signal?: AbortSignal
+    maxBytes?: number
+  },
+): Promise<PlaybackWarmResult> {
+  const failed: PlaybackWarmResult = {
+    ok: false,
+    bytes: 0,
+    alreadyCached: false,
+  }
+  if (!isOfflineCacheSupported()) return failed
+  const signal = options?.signal
+  if (signal?.aborted) return failed
+  const url = trackProgressiveAudioUrl(trackId)
+  try {
+    if (await isCached(trackId)) {
+      return { ok: true, bytes: 0, alreadyCached: true }
+    }
+    const cache = await caches.open(CACHE_NAME)
+    const existing = await cache.match(url)
+    if (existing) {
+      const bytes = Number(existing.headers.get('content-length') || 0)
+      const records = upsertPlaybackWarmRecord({
+        trackId,
+        url,
+        bytes,
+        warmedAt: Date.now(),
+      })
+      await trimPlaybackWarmCache(cache, records)
+      return { ok: true, bytes, alreadyCached: true }
+    }
+    const init: FetchInitWithPriority = {
+      credentials: 'same-origin',
+      cache: 'default',
+      signal,
+      priority: 'low',
+    }
+    const res = await fetch(url, init)
+    if (!res.ok || res.status === 206) {
+      try {
+        await res.body?.cancel()
+      } catch {
+        /* ignore */
+      }
+      return failed
+    }
+    if (res.headers.get('X-Offline-Allowed') === '0') {
+      try {
+        await res.body?.cancel()
+      } catch {
+        /* ignore */
+      }
+      return failed
+    }
+    const maxBytes = options?.maxBytes ?? PLAYBACK_WARM_MAX_BYTES
+    const len = Number(res.headers.get('content-length') || 0)
+    if (!Number.isFinite(len) || len <= 0 || len > maxBytes) {
+      try {
+        await res.body?.cancel()
+      } catch {
+        /* ignore */
+      }
+      return failed
+    }
+    await cache.put(url, res.clone())
+    try {
+      await res.body?.cancel()
+    } catch {
+      /* ignore */
+    }
+    const records = upsertPlaybackWarmRecord({
+      trackId,
+      url,
+      bytes: len,
+      warmedAt: Date.now(),
+    })
+    await trimPlaybackWarmCache(cache, records)
+    return { ok: true, bytes: len, alreadyCached: false }
+  } catch {
+    return failed
   }
 }
 

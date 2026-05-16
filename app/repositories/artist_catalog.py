@@ -178,6 +178,8 @@ class ArtistCatalogRepository(BaseRepository[ArtistCatalogRelease]):
             )
             .where(
                 ArtistCatalogReleaseTrack.release_id == release_id,
+                Track.is_active.is_(True),
+                Track.is_public.is_(True),
             )
             .order_by(ArtistCatalogReleaseTrack.position)
         )

@@ -81,6 +81,7 @@ class LikeRepository:
             and_(
                 Like.user_id == user_id,
                 Track.is_active.is_(True),
+                Track.is_public.is_(True),
                 self._exclude_hidden_sources(),
                 TrackRepository._playback_listing_allowed(),
             ),

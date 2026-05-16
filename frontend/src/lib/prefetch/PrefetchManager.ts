@@ -7,10 +7,9 @@
  *   storage budget / network-aware degradation rules.
  * - Maintain a priority queue of upcoming tracks per trigger
  *   context (home, album, artist, radio, queue, playback, ...).
- * - Warm two layers per track: HLS master/variant manifests + the
- *   first ``warm_segments_per_track`` ``.ts`` segments. The Service
- *   Worker (via ``vite-plugin-pwa`` runtimeCaching) makes the warm
- *   bytes visible to the actual ``<audio>`` element transparently.
+ * - Warm the active playback path: progressive audio prefixes by
+ *   default, or HLS master/variant manifests + first segments if the
+ *   player policy re-enables internal HLS.
  * - Skip third-party stream platforms whose CDN URLs expire fast
  *   (SoundCloud, YouTube, Bandcamp).
  * - Persist a per-track LRU index in IndexedDB so a fresh session
@@ -49,7 +48,9 @@ import {
   getCachedIdsSync,
   isCachedSync,
   queueAutoCache,
+  warmProgressiveAudioForPlayback,
 } from '@/lib/offlineCache'
+import { shouldUseInternalHlsPlayback } from '@/lib/playbackSourcePolicy'
 
 const SMART_BUFFERING_FLAG = 'setting-smart-buffering'
 
@@ -108,8 +109,7 @@ function _isThirdPartyCacheableSafe(track: PrefetchInputTrack): boolean {
 }
 
 function _trackHlsManifestUrl(track: PrefetchInputTrack): string | null {
-  const isPublic = (track as { is_public?: boolean }).is_public ?? true
-  if (!isPublic) return null
+  if (!shouldUseInternalHlsPlayback(track)) return null
   if (!_isThirdPartyCacheableSafe(track)) return null
   return `/api/v1/tracks/${track.id}/hls/master.m3u8`
 }
@@ -521,7 +521,7 @@ export class PrefetchManager {
       if (task.hlsManifestUrl) {
         bytes = await this._warmHls(task)
       } else if (task.progressiveUrl) {
-        bytes = await this._warmProgressivePrefix(task)
+        bytes = await this._warmProgressivePlaybackCache(task)
       }
       if (bytes > 0) {
         this.warmTrackIds.add(task.trackId)
@@ -670,28 +670,24 @@ export class PrefetchManager {
     return order[0] ?? SEGMENT_VARIANT_PREFERENCE[0]
   }
 
-  private async _warmProgressivePrefix(
+  private async _warmProgressivePlaybackCache(
     task: PendingTask,
   ): Promise<number> {
     if (!task.progressiveUrl) return 0
     if (task.abort.signal.aborted) return 0
-    const initBytes = Math.max(0, this.policy.initialBytesPerTrack)
-    if (initBytes <= 0) return 0
-    const headers = new Headers()
-    headers.set('Range', `bytes=0-${initBytes - 1}`)
-    const res = await this._safeFetch(
-      task.progressiveUrl,
-      task.abort.signal,
-      headers,
-    )
-    if (!res) return 0
-    const len = Number(res.headers.get('content-length') || 0)
-    try {
-      await res.body?.cancel()
-    } catch {
-      /* ignore */
-    }
-    return len > 0 ? len : initBytes
+    const maxBytes =
+      this.policy.maxStorageBytes > 0
+        ? Math.min(
+            this.policy.maxStorageBytes,
+            64 * 1024 * 1024,
+          )
+        : 64 * 1024 * 1024
+    const result = await warmProgressiveAudioForPlayback(task.trackId, {
+      signal: task.abort.signal,
+      maxBytes,
+    })
+    if (!result.ok) return 0
+    return Math.max(1, result.bytes || this.policy.initialBytesPerTrack)
   }
 
   private async _safeFetch(

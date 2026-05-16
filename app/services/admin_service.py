@@ -112,6 +112,7 @@ class AdminService:
         search: str | None = None,
         for_playlist_owner_id: int | None = None,
         playable_only: bool = False,
+        sort_by: str | None = None,
     ) -> tuple[list[Track], int]:
         return await self._repo.list_tracks(
             page=page,
@@ -122,7 +123,15 @@ class AdminService:
             search=search,
             for_playlist_owner_id=for_playlist_owner_id,
             playable_only=playable_only,
+            sort_by=sort_by,
         )
+
+    async def get_visibility_counts(
+        self,
+        *,
+        search: str | None = None,
+    ) -> tuple[int, int]:
+        return await self._repo.get_visibility_counts(search=search)
 
     async def list_track_ids(
         self,
@@ -701,8 +710,42 @@ class AdminService:
         if was_active and not is_active:
             ab = AudioBlobService(self._session)
             await ab.try_release_for_track(track)
+            await self._invalidate_track_recommendation_caches(track_id)
         await self._session.flush()
         return track
+
+    async def _invalidate_track_recommendation_caches(
+        self, track_id: int
+    ) -> None:
+        from app.core.redis import get_redis_client
+
+        redis = get_redis_client()
+        patterns = [
+            "rec:global_top:*",
+            f"rec:radio:*:{track_id}:*",
+            f"rec:radio:last:*:{track_id}",
+            f"rec:radio:guard:*:{track_id}",
+        ]
+        try:
+            keys_to_delete: list[str] = []
+            for pattern in patterns:
+                async for key in redis.scan_iter(match=pattern):
+                    keys_to_delete.append(
+                        key.decode() if isinstance(key, bytes) else key
+                    )
+            if keys_to_delete:
+                await redis.delete(*keys_to_delete)
+                logger.info(
+                    "track_recommendation_caches_invalidated",
+                    track_id=track_id,
+                    deleted_keys=len(keys_to_delete),
+                )
+        except Exception:
+            logger.warning(
+                "track_recommendation_cache_invalidation_failed",
+                track_id=track_id,
+                exc_info=True,
+            )
 
     async def list_users(
         self,

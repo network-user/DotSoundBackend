@@ -15,6 +15,7 @@ from app.services.artist_catalog_sync_service import (
     ArtistCatalogSyncService,
 )
 from app.services.soundcloud_service import (
+    SoundCloudStationNotAvailable,
     synthetic_soundcloud_id_for_artist_station,
 )
 
@@ -636,3 +637,35 @@ async def test_station_sync_does_not_link_foreign_tracks_to_seed(
     assert (
         real_link is not None
     ), "Station tracks must be linked to their real artist."
+
+
+async def test_sync_artist_similar_station_not_available_returns_skipped(
+    session: AsyncSession,
+) -> None:
+    """When SC has no station for this artist the sync skips gracefully."""
+    artist = Artist(
+        name="Clout",
+        name_normalized="clout",
+        soundcloud_user_id=9_000_001,
+    )
+    session.add(artist)
+    await session.flush()
+
+    mock_sc = MagicMock()
+    mock_sc.sync_artist_soundcloud_uploader_profile = AsyncMock(
+        return_value=None
+    )
+    mock_sc.ensure_soundcloud_ids_for_artist = AsyncMock(return_value=True)
+    mock_sc.fetch_expanded_artist_station_playlist = AsyncMock(
+        side_effect=SoundCloudStationNotAvailable(9_000_001, "resolve_404")
+    )
+
+    with patch(
+        "app.services.artist_catalog_sync_service.SoundCloudService",
+        return_value=mock_sc,
+    ):
+        svc = ArtistCatalogSyncService(session)
+        result = await svc.sync_artist_similar_station(artist.id)
+
+    assert result["status"] == "skipped"
+    assert "no_station" in result["reason"]

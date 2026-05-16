@@ -16,6 +16,7 @@ from app.models.artist import Artist
 from app.services.soundcloud_service import (
     SoundCloudRateLimitError,
     SoundCloudService,
+    SoundCloudStationNotAvailable,
     extract_soundcloud_profile_permalink_from_url,
     normalize_soundcloud_permalink,
     synthetic_soundcloud_id_for_artist_station,
@@ -40,12 +41,16 @@ pytestmark = pytest.mark.anyio
 _MOD = "app.services.soundcloud_service"
 
 
+async def _noop_on_auth_failure() -> None:
+    return None
+
+
 @pytest.fixture(autouse=True)
 def _isolate_soundcloud_service(
     monkeypatch: pytest.MonkeyPatch,
 ) -> Iterator[None]:
     from app.config import settings
-    from app.services import soundcloud_service
+    from app.services import sc_client_id_manager, soundcloud_service
 
     soundcloud_service._sc_http_client_cache.clear()
     monkeypatch.setattr(soundcloud_service, "soundcloud_slot", _noop_slot)
@@ -65,14 +70,25 @@ def _isolate_soundcloud_service(
         False,
         raising=False,
     )
+    monkeypatch.setattr(
+        sc_client_id_manager,
+        "on_auth_failure",
+        _noop_on_auth_failure,
+    )
     yield
     soundcloud_service._sc_http_client_cache.clear()
 
 
 async def test_search_no_client_id(
     session: AsyncSession,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    svc = SoundCloudService("", session)
+    import app.services.sc_client_id_manager as _mgr
+
+    monkeypatch.setattr(_mgr, "_active", "")
+    monkeypatch.setattr("app.config.settings.sc_client_id", "")
+
+    svc = SoundCloudService(session=session)
 
     with pytest.raises(HTTPException) as exc:
         await svc.search("test")
@@ -171,8 +187,14 @@ async def test_search_best_match_converts_rate_limit_when_all_fail(
 
 async def test_resolve_url_no_client_id(
     session: AsyncSession,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    svc = SoundCloudService("", session)
+    import app.services.sc_client_id_manager as _mgr
+
+    monkeypatch.setattr(_mgr, "_active", "")
+    monkeypatch.setattr("app.config.settings.sc_client_id", "")
+
+    svc = SoundCloudService(session=session)
 
     with pytest.raises(HTTPException) as exc:
         await svc.resolve_url("https://soundcloud.com/x")
@@ -1552,6 +1574,81 @@ async def test_fetch_expanded_artist_station_playlist(
     called_url = mock_resolve.await_args[0][0]
     assert "artist-stations:7" in called_url
     mock_bulk.assert_awaited_once_with([11, 12])
+
+
+@patch.object(
+    SoundCloudService,
+    "resolve_url",
+    new_callable=AsyncMock,
+)
+async def test_fetch_expanded_artist_station_playlist_404_raises_not_available(
+    mock_resolve: AsyncMock,
+    session: AsyncSession,
+) -> None:
+    """SC returns 404 for the station URL → SoundCloudStationNotAvailable."""
+    mock_resolve.side_effect = HTTPException(
+        status_code=404, detail="not found"
+    )
+
+    svc = SoundCloudService("cid", session)
+    with pytest.raises(SoundCloudStationNotAvailable) as exc_info:
+        await svc.fetch_expanded_artist_station_playlist(7)
+
+    assert exc_info.value.soundcloud_user_id == 7
+    assert "resolve_404" in exc_info.value.reason
+
+
+@patch.object(
+    SoundCloudService,
+    "resolve_url",
+    new_callable=AsyncMock,
+)
+async def test_fetch_expanded_artist_station_playlist_wrong_kind(
+    mock_resolve: AsyncMock,
+    session: AsyncSession,
+) -> None:
+    """SC returns an unexpected kind → SoundCloudStationNotAvailable."""
+    mock_resolve.return_value = {
+        "kind": "user",
+        "id": 7,
+        "tracks": [],
+    }
+
+    svc = SoundCloudService("cid", session)
+    with pytest.raises(SoundCloudStationNotAvailable) as exc_info:
+        await svc.fetch_expanded_artist_station_playlist(7)
+
+    assert "unexpected_kind:user" in exc_info.value.reason
+
+
+@patch.object(
+    SoundCloudService,
+    "resolve_url",
+    new_callable=AsyncMock,
+)
+@patch.object(
+    SoundCloudService,
+    "fetch_tracks_by_ids_bulk",
+    new_callable=AsyncMock,
+)
+async def test_fetch_expanded_artist_station_accepts_playlist_kind(
+    mock_bulk: AsyncMock,
+    mock_resolve: AsyncMock,
+    session: AsyncSession,
+) -> None:
+    """kind='playlist' is accepted as a valid station response."""
+    mock_resolve.return_value = {
+        "kind": "playlist",
+        "id": "urn:soundcloud:...",
+        "tracks": [{"id": 99}],
+    }
+    mock_bulk.return_value = [{"id": 99, "title": "X"}]
+
+    svc = SoundCloudService("cid", session)
+    pl = await svc.fetch_expanded_artist_station_playlist(7)
+
+    assert pl["id"] == synthetic_soundcloud_id_for_artist_station(7)
+    assert len(pl["tracks"]) == 1
 
 
 class TestImportOrGetTrackPolicyRejection:

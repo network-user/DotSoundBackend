@@ -494,6 +494,32 @@ async def test_soundcloud_hls_stream_and_audio_redirect(
     assert r2.headers["location"] == hls
 
 
+async def test_soundcloud_resolver_prefers_progressive_stream(
+    db_session: AsyncSession,
+) -> None:
+    from app.api.v1.tracks import playback as mod
+
+    with patch(
+        "app.services.soundcloud_service.SoundCloudService.get_stream_info",
+        new=AsyncMock(
+            return_value=(
+                "https://media.sndcdn.com/x.mp3",
+                "progressive",
+            ),
+        ),
+    ) as get_stream_info:
+        result = await mod._resolve_third_party_stream(
+            SimpleNamespace(
+                source_platform="soundcloud",
+                sc_url="https://soundcloud.com/x/z",
+            ),
+            db_session,
+        )
+
+    assert result == ("https://media.sndcdn.com/x.mp3", "progressive")
+    assert get_stream_info.await_args.kwargs["prefer_hls"] is False
+
+
 async def test_soundcloud_stream_failure_returns_diagnostics(
     client: AsyncClient,
     db_session: AsyncSession,

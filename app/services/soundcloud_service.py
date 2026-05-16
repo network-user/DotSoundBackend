@@ -90,6 +90,23 @@ class _SCAllTranscodings404(Exception):
         self.attempted_protocols = attempted_protocols or []
 
 
+class SoundCloudStationNotAvailable(Exception):
+    """Raised when SC has no artist-station playlist for a given user id.
+
+    This is a *normal* condition for smaller or newer artists. Callers
+    should log it at INFO level and skip station sync gracefully — retrying
+    will not help until SC creates the station on their side.
+    """
+
+    def __init__(self, soundcloud_user_id: int, reason: str = "") -> None:
+        super().__init__(
+            f"No SC artist station for user {soundcloud_user_id}"
+            + (f": {reason}" if reason else "")
+        )
+        self.soundcloud_user_id = soundcloud_user_id
+        self.reason = reason
+
+
 def _sc_error_detail(
     *,
     code: str,
@@ -256,10 +273,30 @@ _SC_OEMBED_URL = "https://soundcloud.com/oembed"
 _MAX_SC_USER_SEARCH_QUERY_LEN = 120
 
 
+_SC_AUTH_FAILED_MSG = (
+    "SoundCloud: неверный или устаревший SC_CLIENT_ID. "
+    "Идёт автообновление — повторите запрос через несколько секунд."
+)
+
+
 class SoundCloudService:
-    def __init__(self, client_id: str, session: AsyncSession) -> None:
-        self._client_id = client_id
-        self._session = session
+    def __init__(
+        self,
+        client_id: str = "",
+        session: AsyncSession | None = None,
+    ) -> None:
+        self._session = session  # type: ignore[assignment]
+
+    @property
+    def _client_id(self) -> str:
+        from app.services.sc_client_id_manager import get_sync
+
+        return get_sync()
+
+    async def _handle_auth_failure(self) -> None:
+        from app.services.sc_client_id_manager import on_auth_failure
+
+        await on_auth_failure()
 
     @contextlib.asynccontextmanager
     async def _sc_client(
@@ -325,24 +362,26 @@ class SoundCloudService:
                 ),
                 self._sc_client() as client,
             ):
-                r = await client.get(
-                    f"{_SC_API_BASE}/search",
-                    params={
-                        "q": query,
-                        "facet": "model",
-                        "client_id": self._client_id,
-                        "limit": limit,
-                        "offset": 0,
-                        "linked_partitioning": 1,
-                    },
-                )
+                for _auth_attempt in range(2):
+                    r = await client.get(
+                        f"{_SC_API_BASE}/search",
+                        params={
+                            "q": query,
+                            "facet": "model",
+                            "client_id": self._client_id,
+                            "limit": limit,
+                            "offset": 0,
+                            "linked_partitioning": 1,
+                        },
+                    )
+                    if r.status_code == 401 and _auth_attempt == 0:
+                        await self._handle_auth_failure()
+                        continue
+                    break
                 if r.status_code == 401:
                     raise HTTPException(
-                        status_code=(status.HTTP_503_SERVICE_UNAVAILABLE),
-                        detail=(
-                            "SoundCloud: неверный или устаревший "
-                            "SC_CLIENT_ID. Обновите в .env и перезапустите."
-                        ),
+                        status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                        detail=_SC_AUTH_FAILED_MSG,
                     )
                 if r.status_code in (429, 503):
                     raw = r.headers.get("Retry-After")
@@ -601,13 +640,18 @@ class SoundCloudService:
                 ),
                 self._sc_client() as client,
             ):
-                r = await client.get(
-                    f"{_SC_API_BASE}/resolve",
-                    params={
-                        "url": sc_url,
-                        "client_id": self._client_id,
-                    },
-                )
+                for _auth_attempt in range(2):
+                    r = await client.get(
+                        f"{_SC_API_BASE}/resolve",
+                        params={
+                            "url": sc_url,
+                            "client_id": self._client_id,
+                        },
+                    )
+                    if r.status_code == 401 and _auth_attempt == 0:
+                        await self._handle_auth_failure()
+                        continue
+                    break
                 if r.status_code == 404:
                     logger.warning(
                         "sc_resolve_404",
@@ -629,11 +673,8 @@ class SoundCloudService:
                     )
                 if r.status_code == 401:
                     raise HTTPException(
-                        status_code=(status.HTTP_503_SERVICE_UNAVAILABLE),
-                        detail=(
-                            "SoundCloud: неверный или устаревший "
-                            "SC_CLIENT_ID. Обновите в .env и перезапустите."
-                        ),
+                        status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                        detail=_SC_AUTH_FAILED_MSG,
                     )
                 r.raise_for_status()
                 return r.json()
@@ -1098,19 +1139,22 @@ class SoundCloudService:
                     ),
                     self._sc_client() as client,
                 ):
-                    if params is not None:
-                        r = await client.get(next_url, params=params)
-                        params = None
-                    else:
-                        r = await client.get(next_url)
+                    for _auth_attempt in range(2):
+                        if params is not None:
+                            r = await client.get(
+                                next_url, params=params
+                            )
+                            params = None
+                        else:
+                            r = await client.get(next_url)
+                        if r.status_code == 401 and _auth_attempt == 0:
+                            await self._handle_auth_failure()
+                            continue
+                        break
                     if r.status_code == 401:
                         raise HTTPException(
-                            status_code=(status.HTTP_503_SERVICE_UNAVAILABLE),
-                            detail=(
-                                "SoundCloud: неверный или устаревший "
-                                "SC_CLIENT_ID. Обновите в .env "
-                                "и перезапустите."
-                            ),
+                            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                            detail=_SC_AUTH_FAILED_MSG,
                         )
                     r.raise_for_status()
                     data = r.json()
@@ -1156,18 +1200,19 @@ class SoundCloudService:
                 ),
                 self._sc_client() as client,
             ):
-                r = await client.get(
-                    f"{_SC_API_BASE}/playlists/{playlist_id}",
-                    params={"client_id": self._client_id},
-                )
+                for _auth_attempt in range(2):
+                    r = await client.get(
+                        f"{_SC_API_BASE}/playlists/{playlist_id}",
+                        params={"client_id": self._client_id},
+                    )
+                    if r.status_code == 401 and _auth_attempt == 0:
+                        await self._handle_auth_failure()
+                        continue
+                    break
                 if r.status_code == 401:
                     raise HTTPException(
-                        status_code=(status.HTTP_503_SERVICE_UNAVAILABLE),
-                        detail=(
-                            "SoundCloud: неверный или устаревший "
-                            "SC_CLIENT_ID. Обновите в .env "
-                            "и перезапустите."
-                        ),
+                        status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                        detail=_SC_AUTH_FAILED_MSG,
                     )
                 r.raise_for_status()
                 data = r.json()
@@ -1224,18 +1269,19 @@ class SoundCloudService:
                 ),
                 self._sc_client() as client,
             ):
-                r = await client.get(
-                    f"{_SC_API_BASE}/tracks/{soundcloud_track_id}",
-                    params={"client_id": self._client_id},
-                )
+                for _auth_attempt in range(2):
+                    r = await client.get(
+                        f"{_SC_API_BASE}/tracks/{soundcloud_track_id}",
+                        params={"client_id": self._client_id},
+                    )
+                    if r.status_code == 401 and _auth_attempt == 0:
+                        await self._handle_auth_failure()
+                        continue
+                    break
                 if r.status_code == 401:
                     raise HTTPException(
-                        status_code=(status.HTTP_503_SERVICE_UNAVAILABLE),
-                        detail=(
-                            "SoundCloud: неверный или устаревший "
-                            "SC_CLIENT_ID. Обновите в .env "
-                            "и перезапустите."
-                        ),
+                        status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                        detail=_SC_AUTH_FAILED_MSG,
                     )
                 r.raise_for_status()
                 data = r.json()
@@ -1298,21 +1344,22 @@ class SoundCloudService:
                     ),
                     self._sc_client() as client,
                 ):
-                    r = await client.get(
-                        f"{_SC_API_BASE}/tracks",
-                        params={
-                            "ids": ids_param,
-                            "client_id": self._client_id,
-                        },
-                    )
+                    for _auth_attempt in range(2):
+                        r = await client.get(
+                            f"{_SC_API_BASE}/tracks",
+                            params={
+                                "ids": ids_param,
+                                "client_id": self._client_id,
+                            },
+                        )
+                        if r.status_code == 401 and _auth_attempt == 0:
+                            await self._handle_auth_failure()
+                            continue
+                        break
                     if r.status_code == 401:
                         raise HTTPException(
-                            status_code=(status.HTTP_503_SERVICE_UNAVAILABLE),
-                            detail=(
-                                "SoundCloud: неверный или устаревший "
-                                "SC_CLIENT_ID. Обновите в .env "
-                                "и перезапустите."
-                            ),
+                            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                            detail=_SC_AUTH_FAILED_MSG,
                         )
                     r.raise_for_status()
                     payload = r.json()
@@ -1341,31 +1388,57 @@ class SoundCloudService:
         (id/kind/monetization_model/policy only). GET /tracks?ids=
         accepts at most 50 ids per request. /playlists/{encoded urn}
         returns 500; use resolve + tracks only.
+
+        Raises:
+            SoundCloudStationNotAvailable: when SC has no station for this
+                artist (404, unexpected kind, or missing tracks field).
+                Callers should log at INFO and skip — retrying will not help.
+            HTTPException: for auth / rate-limit / infra errors that may
+                resolve on retry.
         """
         sc_url = (
             "https://soundcloud.com/discover/sets/"
             f"artist-stations:{int(soundcloud_user_id)}"
         )
-        resolved = await self.resolve_url(sc_url)
+        try:
+            resolved = await self.resolve_url(sc_url)
+        except HTTPException as exc:
+            if exc.status_code == status.HTTP_404_NOT_FOUND:
+                logger.info(
+                    "sc_artist_station_not_found",
+                    soundcloud_user_id=soundcloud_user_id,
+                )
+                raise SoundCloudStationNotAvailable(
+                    soundcloud_user_id, "resolve_404"
+                ) from exc
+            raise
+
         if not isinstance(resolved, dict):
-            msg = "Unexpected SoundCloud resolve payload for artist station"
-            raise HTTPException(
-                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-                detail=msg,
+            raise SoundCloudStationNotAvailable(
+                soundcloud_user_id,
+                "resolve_payload_not_dict",
             )
-        if resolved.get("kind") != "system-playlist":
-            msg = "SoundCloud resolve is not an artist station playlist"
-            raise HTTPException(
-                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-                detail=msg,
+
+        resolved_kind = resolved.get("kind", "")
+        _STATION_KINDS = {"system-playlist", "playlist"}
+        if resolved_kind not in _STATION_KINDS:
+            logger.info(
+                "sc_artist_station_unexpected_kind",
+                soundcloud_user_id=soundcloud_user_id,
+                kind=resolved_kind,
             )
+            raise SoundCloudStationNotAvailable(
+                soundcloud_user_id,
+                f"unexpected_kind:{resolved_kind}",
+            )
+
         raw_tracks = resolved.get("tracks")
         if not isinstance(raw_tracks, list):
-            msg = "Artist station resolve missing tracks"
-            raise HTTPException(
-                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-                detail=msg,
+            raise SoundCloudStationNotAvailable(
+                soundcloud_user_id,
+                "missing_tracks_field",
             )
+
         tids: list[int] = []
         for item in raw_tracks:
             if not isinstance(item, dict):
@@ -1650,23 +1723,25 @@ class SoundCloudService:
                 ),
                 self._sc_client() as client,
             ):
-                r = await client.get(
-                    f"{_SC_API_BASE}/search/users",
-                    params={
-                        "q": q,
-                        "client_id": self._client_id,
-                        "limit": min(limit, 50),
-                        "offset": 0,
-                        "linked_partitioning": 1,
-                    },
-                )
+                for _auth_attempt in range(2):
+                    r = await client.get(
+                        f"{_SC_API_BASE}/search/users",
+                        params={
+                            "q": q,
+                            "client_id": self._client_id,
+                            "limit": min(limit, 50),
+                            "offset": 0,
+                            "linked_partitioning": 1,
+                        },
+                    )
+                    if r.status_code == 401 and _auth_attempt == 0:
+                        await self._handle_auth_failure()
+                        continue
+                    break
                 if r.status_code == 401:
                     raise HTTPException(
-                        status_code=(status.HTTP_503_SERVICE_UNAVAILABLE),
-                        detail=(
-                            "SoundCloud: неверный или устаревший "
-                            "SC_CLIENT_ID. Обновите в .env и перезапустите."
-                        ),
+                        status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                        detail=_SC_AUTH_FAILED_MSG,
                     )
                 r.raise_for_status()
                 data = r.json()

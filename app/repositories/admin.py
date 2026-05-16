@@ -162,6 +162,24 @@ class AdminRepository:
             )
         return query
 
+    def _apply_sort(
+        self,
+        query: Select,
+        *,
+        sort_by: str | None,
+    ) -> Select:
+        if sort_by == "visibility_asc":
+            return query.order_by(
+                Track.is_active.asc(),
+                Track.created_at.desc(),
+            )
+        if sort_by == "visibility_desc":
+            return query.order_by(
+                Track.is_active.desc(),
+                Track.created_at.desc(),
+            )
+        return query.order_by(Track.created_at.desc())
+
     async def list_tracks(
         self,
         *,
@@ -173,6 +191,7 @@ class AdminRepository:
         search: str | None = None,
         for_playlist_owner_id: int | None = None,
         playable_only: bool = False,
+        sort_by: str | None = None,
     ) -> tuple[list[Track], int]:
         query = self._apply_track_list_filters(
             select(Track),
@@ -193,7 +212,7 @@ class AdminRepository:
             playable_only=playable_only,
         )
         query = (
-            query.order_by(Track.created_at.desc())
+            self._apply_sort(query, sort_by=sort_by)
             .offset((page - 1) * size)
             .limit(size)
         )
@@ -201,6 +220,30 @@ class AdminRepository:
         rows = list(result.scalars().all())
         total_result = await self._session.execute(count_query)
         return rows, int(total_result.scalar_one())
+
+    async def get_visibility_counts(
+        self,
+        *,
+        search: str | None = None,
+    ) -> tuple[int, int]:
+        base = select(Track.is_active, func.count(Track.id).label("c"))
+        if search:
+            pattern = f"%{search}%"
+            base = base.where(
+                Track.title.ilike(pattern) | Track.artist.ilike(pattern)
+            )
+        base = base.where(
+            Track.deleted_at.is_(None),
+        ).group_by(Track.is_active)
+        result = await self._session.execute(base)
+        hidden = 0
+        visible = 0
+        for row in result.all():
+            if row[0]:
+                visible = int(row[1])
+            else:
+                hidden = int(row[1])
+        return hidden, visible
 
     async def list_track_ids(
         self,

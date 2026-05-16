@@ -21,6 +21,7 @@ from app.services import artist_catalog_sync_progress as acsp
 from app.services.artist_service import ArtistService
 from app.services.soundcloud_service import (
     SoundCloudService,
+    SoundCloudStationNotAvailable,
     synthetic_soundcloud_id_for_artist_station,
 )
 
@@ -180,13 +181,22 @@ class ArtistCatalogSyncService:
                 skip_background_lyrics=skip_background_lyrics,
             )
             await self._session.commit()
+        except SoundCloudStationNotAvailable as exc:
+            logger.info(
+                "catalog_sync_station_not_available",
+                artist_id=artist_id,
+                reason=exc.reason,
+            )
+            await self._session.rollback()
         except Exception as exc:
             logger.warning(
                 "catalog_sync_station_failed",
                 artist_id=artist_id,
                 error=str(exc),
+                exc_info=True,
             )
             await self._session.rollback()
+            await self._enqueue_station_retry(artist_id)
         stats["station_synced"] = st.get("synced", False)
         stats["station_skipped_manual"] = st.get(
             "skipped_manual",
@@ -228,11 +238,20 @@ class ArtistCatalogSyncService:
                 sc_uid,
                 skip_background_lyrics=skip_background_lyrics,
             )
+        except SoundCloudStationNotAvailable as exc:
+            logger.info(
+                "catalog_sync_station_not_available",
+                artist_id=artist_id,
+                reason=exc.reason,
+            )
+            await self._session.rollback()
+            return {"status": "skipped", "reason": f"no_station:{exc.reason}"}
         except Exception as exc:
             logger.warning(
                 "catalog_sync_station_failed",
                 artist_id=artist_id,
                 error=str(exc),
+                exc_info=True,
             )
             await self._session.rollback()
             return {"status": "error", "detail": str(exc)}
@@ -278,6 +297,31 @@ class ArtistCatalogSyncService:
             release_kind_override=DOTSOUND_SC_ARTIST_STATION_RELEASE_KIND,
         )
         return {"skipped_manual": False, "synced": True}
+
+    async def _enqueue_station_retry(self, artist_id: int) -> None:
+        """Enqueue a standalone station-sync task after a transient failure.
+
+        Only called when station sync fails with a real error (not
+        SoundCloudStationNotAvailable, which is a permanent condition).
+        The retry runs independently so the full catalog-sync result is
+        not blocked.
+        """
+        try:
+            from app.services.artist_catalog_sync_worker import (
+                sync_artist_similar_station_task,
+            )
+
+            await sync_artist_similar_station_task.kiq(artist_id)
+            logger.info(
+                "catalog_sync_station_retry_enqueued",
+                artist_id=artist_id,
+            )
+        except Exception as exc:
+            logger.warning(
+                "catalog_sync_station_retry_enqueue_failed",
+                artist_id=artist_id,
+                error=str(exc),
+            )
 
     async def sync_single_release(
         self,
@@ -409,11 +453,45 @@ class ArtistCatalogSyncService:
         for idx, tr in enumerate(clipped):
             if not isinstance(tr, dict):
                 continue
-            track = await sc.import_or_get_track(
-                tr,
-                settings.catalog_uploader_id,
-                skip_background_lyrics=skip_background_lyrics,
-            )
+            try:
+                track = await sc.import_or_get_track(
+                    tr,
+                    settings.catalog_uploader_id,
+                    skip_background_lyrics=skip_background_lyrics,
+                )
+            except Exception as _track_exc:
+                from fastapi import HTTPException as _HTTPException
+
+                _skip_codes = {
+                    "soundcloud_track_unverified",
+                    "soundcloud_track_not_importable",
+                }
+                _detail = (
+                    _track_exc.detail
+                    if isinstance(_track_exc, _HTTPException)
+                    else {}
+                )
+                _code = (
+                    _detail.get("code", "")
+                    if isinstance(_detail, dict)
+                    else ""
+                )
+                if _code in _skip_codes:
+                    logger.info(
+                        "catalog_sync_track_policy_skip",
+                        sc_url=tr.get("permalink_url"),
+                        soundcloud_album_id=soundcloud_album_id,
+                        code=_code,
+                        reason=_detail.get("reason"),
+                    )
+                    continue
+                logger.warning(
+                    "catalog_sync_track_import_error",
+                    sc_url=tr.get("permalink_url"),
+                    soundcloud_album_id=soundcloud_album_id,
+                    error=repr(_track_exc)[:300],
+                )
+                continue
             if is_station:
                 # Station tracks belong to *other* (similar) artists,
                 # not to the seed artist whose page hosts the station.

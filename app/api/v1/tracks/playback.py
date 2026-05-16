@@ -188,7 +188,7 @@ async def _resolve_third_party_stream(
         sc_service = SoundCloudService(settings.sc_client_id, session)  # type: ignore[arg-type]
         return await sc_service.get_stream_info(
             sc_url,
-            prefer_hls=True,
+            prefer_hls=False,
             use_cache=use_cache,
         )
 

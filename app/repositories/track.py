@@ -211,6 +211,8 @@ class TrackRepository(BaseRepository[Track]):
         result = await self._session.execute(
             select(Track).where(
                 Track.id.in_(track_ids),
+                Track.is_active.is_(True),
+                Track.is_public.is_(True),
                 self._exclude_hidden_sources(),
                 self._playback_listing_allowed(),
             )
@@ -230,6 +232,8 @@ class TrackRepository(BaseRepository[Track]):
             select(Track).where(
                 Track.id.in_(track_ids),
                 Track.is_active.is_(True),
+                Track.is_public.is_(True),
+                self._exclude_hidden_sources(),
             )
         )
         by_id = {t.id: t for t in result.scalars().all()}
@@ -248,10 +252,14 @@ class TrackRepository(BaseRepository[Track]):
         return list(result.scalars().all())
 
     async def list_popular_genres(self, *, limit: int = 50) -> list[str]:
-        """Top non-null genres ordered by track count."""
+        """Top non-null genres ordered by track count (active public only)."""
         result = await self._session.execute(
             select(Track.genre)
-            .where(Track.genre.is_not(None))
+            .where(
+                Track.genre.is_not(None),
+                Track.is_active.is_(True),
+                Track.is_public.is_(True),
+            )
             .group_by(Track.genre)
             .order_by(func.count(Track.id).desc())
             .limit(limit)

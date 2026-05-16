@@ -127,6 +127,13 @@ async def lifespan(application: FastAPI) -> AsyncIterator[None]:
     await ensure_bucket_exists()
     await ws_manager.startup()
 
+    try:
+        from app.services.sc_client_id_manager import initialize as _sc_init
+
+        await _sc_init()
+    except Exception as _sc_exc:  # noqa: BLE001
+        logger.warning("sc_client_id_init_failed", error=str(_sc_exc)[:200])
+
     play_stop: asyncio.Event | None = None
     drain_task: asyncio.Task[None] | None = None
     if (

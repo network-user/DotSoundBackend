@@ -43,6 +43,14 @@ _worker_tor_pool_started = False
 async def _worker_third_party_log_level(_st: TaskiqState) -> None:
     global _worker_tor_pool_started
     apply_third_party_log_levels(settings.log_third_party_level)
+
+    try:
+        from app.services.sc_client_id_manager import initialize as _sc_init
+
+        await _sc_init()
+    except Exception:
+        logger.exception("sc_client_id_worker_init_failed")
+
     from app.services.tor_pool import start_tor_pool_from_settings
 
     try:

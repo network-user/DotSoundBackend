@@ -139,7 +139,9 @@ def update_env_file(env_path: Path, key: str, value: str) -> bool:
     pattern = re.compile(rf"^{re.escape(key)}=.*$", re.MULTILINE)
     new_line = f"{key}={value}"
 
-    original = env_path.read_text(encoding="utf-8") if env_path.exists() else ""
+    original = (
+        env_path.read_text(encoding="utf-8") if env_path.exists() else ""
+    )
 
     if pattern.search(original):
         current_match = pattern.search(original)
@@ -162,7 +164,7 @@ def update_env_file(env_path: Path, key: str, value: str) -> bool:
 
 async def refresh_once() -> bool:
     """
-    Один цикл: спарсить → обновить .env.
+    Один цикл: спарсить → обновить .env + Redis.
     Возвращает True при успехе, False при неудаче.
     """
     logger.info("sc_refresh_starting")
@@ -172,7 +174,6 @@ async def refresh_once() -> bool:
         logger.error("sc_refresh_failed_no_client_id")
         return False
 
-    # Логируем только первые 8 символов
     partial = client_id[:8] + "..."
     changed = update_env_file(ENV_FILE, "SC_CLIENT_ID", client_id)
 
@@ -182,15 +183,19 @@ async def refresh_once() -> bool:
             partial_id=partial,
             env_file=str(ENV_FILE),
         )
-        logger.warning(
-            "sc_app_restart_required",
-            message=(
-                "Перезапустите FastAPI-приложение, "
-                "чтобы подхватить новый SC_CLIENT_ID"
-            ),
-        )
     else:
         logger.info("sc_client_id_unchanged", partial_id=partial)
+
+    try:
+        from app.services.sc_client_id_manager import store_external
+
+        await store_external(client_id)
+        logger.info("sc_client_id_stored_in_redis", partial_id=partial)
+    except Exception as exc:
+        logger.warning(
+            "sc_client_id_redis_store_failed",
+            error=str(exc)[:200],
+        )
 
     return True
 

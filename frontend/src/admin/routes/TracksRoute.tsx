@@ -207,6 +207,9 @@ export function TracksRoute() {
   const [statsPeriod, setStatsPeriod] = useState<
     'today' | '7d' | '30d' | 'all'
   >('7d')
+  const [sortBy, setSortBy] = useState<
+    'created_at_desc' | 'visibility_asc' | 'visibility_desc'
+  >('created_at_desc')
 
   // context feature state
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set())
@@ -325,6 +328,7 @@ export function TracksRoute() {
     return adminApi.listTracks({
       ...base,
       without_lyrics: withoutLyricsOnly || undefined,
+      sort_by: sortBy !== 'created_at_desc' ? sortBy : undefined,
     })
   }
 
@@ -337,6 +341,7 @@ export function TracksRoute() {
       withoutLyricsOnly,
       listView,
       playbackErrorFilter,
+      sortBy,
     ],
     queryFn: () => fetchTrackPage(page),
     placeholderData: keepPreviousData,
@@ -345,6 +350,16 @@ export function TracksRoute() {
     queryKey: ['admin', 'tracks', 'stats', statsPeriod],
     queryFn: () => adminApi.dashboardTrackStats(statsPeriod),
     refetchInterval: 30_000,
+    refetchIntervalInBackground: false,
+  })
+  const visibilityCounts = useQuery({
+    queryKey: ['admin', 'tracks', 'visibility-counts', search],
+    queryFn: () =>
+      adminApi.getTrackVisibilityCounts({
+        search: search || undefined,
+      }),
+    staleTime: 30_000,
+    refetchInterval: 60_000,
     refetchIntervalInBackground: false,
   })
   const playbackRepairSummary = useQuery({
@@ -404,7 +419,7 @@ export function TracksRoute() {
 
   useEffect(() => {
     setSelectedIds(new Set())
-  }, [search, withoutLyricsOnly, listView, playbackErrorFilter])
+  }, [search, withoutLyricsOnly, listView, playbackErrorFilter, sortBy])
 
   useEffect(() => {
     if (!sourceEditModal) return
@@ -1318,8 +1333,13 @@ export function TracksRoute() {
         />
         <KpiCard
           label={t('admin.tracks.visible')}
-          value={visibleCount}
-          hint={t('admin.tracks.hidden')}
+          value={visibilityCounts.data?.visible ?? visibleCount}
+          hint={t('admin.tracks.visibleHint', 'Active (not hidden)')}
+        />
+        <KpiCard
+          label={t('admin.tracks.hiddenLabel', 'Hidden')}
+          value={visibilityCounts.data?.hidden ?? 0}
+          hint={t('admin.tracks.hiddenHint', 'Hidden from all users')}
         />
         <KpiCard
           label="With genre"
@@ -1462,6 +1482,42 @@ export function TracksRoute() {
           />
           {t('admin.tracks.filterWithoutLyrics')}
         </label>
+        {listView === 'all' && (
+          <AdminRangeSwitch
+            groupId="admin-tracks-sort-by"
+            value={sortBy}
+            onChange={(v) => {
+              setSortBy(
+                v as
+                  | 'created_at_desc'
+                  | 'visibility_asc'
+                  | 'visibility_desc',
+              )
+              setPage(1)
+              setSelectedIds(new Set())
+            }}
+            options={[
+              {
+                value: 'created_at_desc',
+                label: t('admin.tracks.sortByDate', 'By date'),
+              },
+              {
+                value: 'visibility_asc',
+                label: t(
+                  'admin.tracks.sortHiddenFirst',
+                  'Hidden first',
+                ),
+              },
+              {
+                value: 'visibility_desc',
+                label: t(
+                  'admin.tracks.sortVisibleFirst',
+                  'Visible first',
+                ),
+              },
+            ]}
+          />
+        )}
         <BulkPageSelector
           currentPage={page}
           totalPages={totalPages}

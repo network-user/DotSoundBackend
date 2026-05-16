@@ -1,5 +1,103 @@
 # DotSound - TODO Tracker
 
+- [x] **Artist similar-station: SoundCloudStationNotAvailable + graceful retry (2026-05-16)**
+  - `app/services/soundcloud_service.py`: добавлен класс `SoundCloudStationNotAvailable`.
+    `fetch_expanded_artist_station_playlist` перехватывает `HTTPException(404)` от
+    `resolve_url` и поднимает `SoundCloudStationNotAvailable` вместо него.
+    Неожиданный `kind` (не `system-playlist` и не `playlist`) также превращается
+    в `SoundCloudStationNotAvailable`. Принятые `kind`: `system-playlist` (стандарт)
+    и `playlist` (альтернативный ответ SC для некоторых артистов).
+  - `app/services/artist_catalog_sync_service.py`:
+    - Импортирован `SoundCloudStationNotAvailable`.
+    - `sync_full_artist`: `SoundCloudStationNotAvailable` → `INFO`-лог + пропуск
+      (не ошибка); другие исключения → `WARNING` с `exc_info=True` + авто-ретрай
+      через `sync_artist_similar_station_task.kiq`.
+    - `sync_artist_similar_station`: аналогично; возвращает
+      `{"status": "skipped", "reason": "no_station:..."}` вместо `error`.
+    - Добавлен `_enqueue_station_retry` — ставит отдельную задачу на ретрай
+      при транзиентных ошибках (не 404).
+  - `tests/app/services/test_soundcloud_service.py`:
+    - Fixture `_isolate_soundcloud_service` расширена: `on_auth_failure`
+      замокан (`_noop_on_auth_failure`) — предотвращает реальные HTTP-запросы
+      к SC в 401-тестах.
+    - Тесты `test_search_no_client_id` и `test_resolve_url_no_client_id`
+      обновлены под новую property-based `_client_id`.
+    - 3 новых теста: 404→`SoundCloudStationNotAvailable`, wrong-kind→исключение,
+      `playlist`-kind принят как валидный.
+  - `tests/app/services/test_artist_catalog_sync_service.py`:
+    - Новый тест `test_sync_artist_similar_station_not_available_returns_skipped`.
+
+
+- [x] **Outbound allow_direct audit — all public-source callers fixed (2026-05-16)**
+  - `DotSoundPrivateCore/services/proxy_pool.py`: `proxied_get` добавлен `allow_direct=True` (service=generic, require_proxy=False).
+  - `DotSoundPrivateCore/services/yandex_music_lyrics.py`: `_ya_get` добавлен `allow_direct=True` (service=yandex_music, require_proxy=False, skip_tor=True — работает напрямую если нет прокси).
+  - `DotSoundPrivateCore/services/outbound/services.py`: `yandex_music.require_proxy` подтверждён `False` (уже было).
+  - `tests/test_proxy_pool.py`: переписан — убраны тесты `_parse_proxies`/`_mask`/`is_configured=False` (устарели после миграции на outbound); добавлены тесты нового shim.
+  - `tests/test_yandex_music_lyrics.py`: переписан — патчи `proxy_pool.proxied_get` заменены на `sync_get` (модуль мигрировал на outbound напрямую).
+  - `tests/test_outbound_direct_fallback.py`: добавлен `test_artist_info_http_get_allows_direct_fallback`.
+
+- [x] **Artist enrichment broken — allow_direct fix in outbound shim (2026-05-16)**
+  - `DotSoundPrivateCore/services/artist_info_provider/_http.py`:
+    при миграции на unified outbound layer (commit `4628d64`)
+    `sync_get` вызывался без `allow_direct=True`.
+    `TransportSelector._pick_fresh` поднимал `OutboundExhaustedError`
+    сразу при отсутствии Tor/прокси, даже для публичных источников
+    (Wikipedia, Genius, 24smi), у которых `require_proxy=False`.
+    Добавлен `allow_direct=True` — при отсутствии Tor/прокси запросы
+    идут напрямую, как и предполагает профиль сервиса.
+
+- [x] **Hidden track filtering + admin availability sort (2026-05-16)**
+  - `app/repositories/recommendation.py::get_tracks_by_ids`: добавлены
+    `is_active` + `is_public` фильтры — скрытые треки больше не попадают
+    в радио-очереди, global top и hydration кэша.
+  - `app/repositories/recommendation.py::get_incomplete_listens`: добавлены
+    `is_public` + `_exclude_hidden_sources` — раздел «Продолжить слушать»
+    больше не показывает скрытые / YouTube-треки.
+  - `app/repositories/track.py::get_by_ids_preserve_order`: добавлены
+    `is_active` + `is_public` — жанровые миксы и подборки больше не
+    возвращают скрытые треки.
+  - `app/repositories/track.py::list_popular_genres`: фильтрует только
+    активные/публичные треки для построения списка жанров.
+  - `app/repositories/admin.py`: добавлены `_apply_sort`, `sort_by` в
+    `list_tracks`, метод `get_visibility_counts` (hidden / visible без
+    учёта soft-deleted).
+  - `app/services/admin_service.py`: проброс `sort_by` и новый
+    `get_visibility_counts`.
+  - `app/api/v1/admin/tracks.py`: `sort_by` query param в
+    `admin_list_tracks`; новый эндпоинт
+    `GET /api/v1/admin/tracks/visibility-counts`.
+  - Фронтенд `TracksRoute.tsx`: переключатель сортировки «By date /
+    Hidden first / Visible first»; KPI-карточки «Visible» и «Hidden»
+    теперь показывают глобальные счётчики из нового эндпоинта.
+  - `repositories/track.py::list_active_by_ids_preserve_order`: добавлены
+    `is_public` + `_exclude_hidden_sources` — история прослушиваний не
+    показывает скрытые/YouTube-треки.
+  - `repositories/artist_catalog.py::get_release_tracks_ordered`: добавлены
+    `is_active` + `is_public` — страница релиза артиста не показывает
+    скрытые треки.
+  - `repositories/like.py::list_liked_tracks` и
+    `repositories/dislike.py::list_disliked_tracks`: добавлен `is_public` —
+    скрытые треки исчезают из «Лайков» и «Не нравится».
+  - `services/admin_service.py::set_track_visibility`: при скрытии трека
+    (`is_active=False`) вызывает `_invalidate_track_recommendation_caches` —
+    удаляет `rec:global_top:*` и все радио-кэши где трек был seed-ом.
+
+- [x] **SC_CLIENT_ID auto-refresh + catalog sync resilience (2026-05-16)**
+  - `sc_client_id_manager.py`: Redis-backed client_id cache with auto-scrape
+    from SoundCloud JS bundles on every app/worker startup.
+  - On 401 from SC API: force re-scrape, update Redis, retry the original
+    request once — six critical methods covered (search, resolve_url,
+    list_user_albums, fetch_playlist_by_id, fetch_track_by_id,
+    fetch_tracks_by_ids_bulk, search_users).
+  - `SoundCloudService._client_id` is now a property reading from the manager
+    so all callers get the live credential without any call-site changes.
+  - `sc_id_refresher.py` now also writes to Redis after updating `.env`,
+    so a running app picks up the fresh ID without restart.
+  - `artist_catalog_sync_service._sync_one_album_expanded`: per-track
+    `soundcloud_track_unverified` / `soundcloud_track_not_importable`
+    exceptions are caught and logged (skip the track, continue the album sync)
+    instead of failing the entire background job.
+
 - [x] **SoundCloud encrypted-only playback guard (2026-05-16)**
   - Git history check found that the old working playback path handled
     plain SoundCloud `hls` / `progressive`; the regression was the
@@ -27,6 +125,24 @@
     Recoverable HLS media errors with a progressive fallback no longer
     leave a stale `HLS playback failed: bufferAppendError` toast after
     playback recovers.
+  - Follow-up fix: first-party/internal playback is back on the stable
+    progressive `/audio?force_progressive=true` path by default.
+    Internal HLS is no longer attempted before playback, so a fatal
+    browser MSE `bufferAppendError` cannot cause the audible
+    "plays for a second, restarts from fallback" loop. Smart buffering
+    now warms the same progressive path instead of HLS manifests unless
+    internal HLS is explicitly re-enabled.
+  - Added progressive-native warm cache for the next track: playback
+    preloads the next `/audio?force_progressive=true` response into the
+    same browser Cache API used by the player, preserving fast transitions
+    without relying on HLS preloaded instances.
+  - Smart Buffering now warms the full progressive playback response for
+    the configured lookahead window, not just the immediate next track.
+    A transient warm-cache index caps this at 8 tracks / 192 MB and avoids
+    deleting manually pinned offline tracks.
+  - SoundCloud stream resolution now prefers `progressive` before
+    provider HLS when SoundCloud exposes both, reducing frontend HLS
+    dependency for imported tracks.
 
 - [x] **Admin Network runtime mode fix (2026-05-16)**
   - Admin `GET /api/v1/admin/system/outbound-status` now overlays the

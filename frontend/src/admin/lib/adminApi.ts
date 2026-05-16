@@ -965,6 +965,11 @@ export const adminApi = {
       method: 'POST',
       body: { text },
     }),
+  getTrackVisibilityCounts: (params?: { search?: string }) =>
+    adminFetch<{ hidden: number; visible: number }>(
+      '/tracks/visibility-counts',
+      { query: params },
+    ),
   listTracks: (params: {
     page?: number
     size?: number
@@ -974,6 +979,7 @@ export const adminApi = {
     search?: string
     for_playlist_owner_id?: number
     playable_only?: boolean
+    sort_by?: 'created_at_desc' | 'visibility_asc' | 'visibility_desc'
   }) =>
     adminFetch<{
       items: Array<Record<string, unknown>>

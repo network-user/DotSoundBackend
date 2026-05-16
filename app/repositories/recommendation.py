@@ -278,6 +278,8 @@ class RecommendationRepository:
             .join(subq, subq.c.track_id == Track.id)
             .where(
                 Track.is_active.is_(True),
+                Track.is_public.is_(True),
+                self._exclude_hidden_sources(),
                 TrackRepository._playback_listing_allowed(),
             )
         )
@@ -289,6 +291,8 @@ class RecommendationRepository:
         result = await self._session.execute(
             select(Track).where(
                 Track.id.in_(ids),
+                Track.is_active.is_(True),
+                Track.is_public.is_(True),
                 self._exclude_hidden_sources(),
                 TrackRepository._playback_listing_allowed(),
             )
