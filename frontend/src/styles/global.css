@@ -4670,26 +4670,30 @@ html.le-lyrics-sync-open body {
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  padding: 60px 24px 120px;
+  padding: 32px 28px 160px;
   z-index: 2;
   position: relative;
 }
 .fl-content::-webkit-scrollbar { display: none; }
 .fl-line {
-  font-size: 20px;
+  font-size: clamp(18px, 4.6vw, 22px);
   font-weight: 500;
-  color: var(--text-muted);
+  color: var(--text);
   padding: 10px 0;
   text-align: center;
-  transition: color 0.3s, font-size 0.3s, opacity 0.3s;
-  opacity: 0.4;
-  line-height: 1.5;
+  transition: color 0.25s, font-size 0.25s, opacity 0.25s;
+  opacity: 0.32;
+  line-height: 1.55;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+  letter-spacing: var(--ls-snug, -0.006em);
 }
 .fl-line-active {
   color: var(--text);
-  font-size: 24px;
+  font-size: clamp(22px, 5.6vw, 28px);
   font-weight: 700;
   opacity: 1;
+  letter-spacing: var(--ls-display, -0.028em);
 }
 .fl-word {
   transition: color 0.12s ease-out;
@@ -4703,51 +4707,56 @@ html.le-lyrics-sync-open body {
   text-shadow: 0 0 12px rgba(255, 255, 255, 0.25);
 }
 .fl-toolbar {
-  position: absolute;
-  top: 14px;
-  left: 18px;
   display: flex;
-  gap: 12px;
+  gap: 8px;
   align-items: center;
-  color: var(--text-secondary);
+  flex-wrap: wrap;
+  padding: 4px 16px 8px;
   z-index: 3;
+  flex-shrink: 0;
   font-size: 12px;
 }
 .fl-toolbar-btn {
-  background: rgba(255, 255, 255, 0.06);
+  background: rgba(255, 255, 255, 0.08);
   color: var(--text-secondary);
   border: 1px solid rgba(255, 255, 255, 0.12);
-  border-radius: 14px;
-  padding: 4px 10px;
+  border-radius: var(--r-pill);
+  padding: 5px 12px;
   cursor: pointer;
-  font-size: 12px;
+  font-size: var(--fs-12);
+  font-weight: 500;
+  letter-spacing: 0.02em;
+  transition:
+    background var(--dur-fast) var(--ease-out),
+    color var(--dur-fast) var(--ease-out),
+    border-color var(--dur-fast) var(--ease-out);
 }
 .fl-toolbar-btn-active {
-  background: rgba(255, 255, 255, 0.15);
+  background: rgba(255, 255, 255, 0.16);
   color: var(--text);
-  border-color: rgba(255, 255, 255, 0.4);
+  border-color: rgba(255, 255, 255, 0.36);
 }
-.fl-offset {
-  display: inline-flex;
-  gap: 6px;
-  align-items: center;
-  white-space: nowrap;
-}
-.fl-offset input[type='range'] {
-  width: 120px;
-}
-.fl-offset-value {
-  min-width: 56px;
-  text-align: right;
-  font-variant-numeric: tabular-nums;
+.fl-lang-select {
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--text-secondary);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: var(--r-pill);
+  padding: 5px 10px;
+  font-size: var(--fs-12);
+  font-weight: 500;
+  cursor: pointer;
+  outline: none;
+  -webkit-appearance: none;
+  appearance: none;
 }
 .fl-plain {
-  font-size: 16px;
+  font-size: clamp(15px, 3.8vw, 17px);
   color: var(--text-secondary);
   white-space: pre-wrap;
-  line-height: 1.7;
+  line-height: 1.75;
   text-align: center;
   font-family: inherit;
+  letter-spacing: var(--ls-snug, -0.006em);
 }
 .fl-no-lyrics {
   color: var(--text-muted);
@@ -4759,23 +4768,64 @@ html.le-lyrics-sync-open body {
   left: 0;
   right: 0;
   z-index: 3;
-  background: linear-gradient(transparent, rgba(10,10,10,0.95));
-  padding: 20px 16px calc(var(--nav-h) + 16px);
+  background: linear-gradient(
+    to bottom,
+    transparent 0%,
+    rgba(10, 10, 10, 0.82) 28%,
+    rgba(10, 10, 10, 0.97) 100%
+  );
+  padding: 28px 20px calc(var(--nav-h, 60px) + env(safe-area-inset-bottom, 0px) + 16px);
 }
-.fl-seek-wrap { padding-bottom: 8px; }
+.fl-seek-wrap {
+  padding-bottom: 10px;
+  cursor: pointer;
+}
 .fl-seek {
   width: 100%;
-  height: 3px;
+  height: 20px;
   -webkit-appearance: none;
   appearance: none;
-  background: var(--surface-2);
-  border-radius: 2px;
+  background: transparent;
+  border-radius: 999px;
   outline: none;
+  cursor: pointer;
+}
+.fl-seek::-webkit-slider-runnable-track {
+  height: 3px;
+  background: linear-gradient(
+    to right,
+    var(--text) 0%,
+    var(--text) var(--progress, 0%),
+    rgba(255, 255, 255, 0.18) var(--progress, 0%),
+    rgba(255, 255, 255, 0.18) 100%
+  );
+  border-radius: 999px;
+}
+.fl-seek::-moz-range-track {
+  height: 3px;
+  background: rgba(255, 255, 255, 0.18);
+  border-radius: 999px;
+}
+.fl-seek::-moz-range-progress {
+  height: 3px;
+  background: var(--text);
+  border-radius: 999px;
 }
 .fl-seek::-webkit-slider-thumb {
   -webkit-appearance: none;
-  width: 10px;
-  height: 10px;
+  width: 12px;
+  height: 12px;
+  margin-top: -4.5px;
+  border-radius: 50%;
+  background: var(--text);
+  cursor: pointer;
+  border: none;
+  box-shadow: 0 0 6px rgba(0, 0, 0, 0.4);
+}
+.fl-seek::-moz-range-thumb {
+  width: 12px;
+  height: 12px;
+  border: none;
   border-radius: 50%;
   background: var(--text);
   cursor: pointer;
@@ -4784,13 +4834,19 @@ html.le-lyrics-sync-open body {
   display: flex;
   align-items: center;
   justify-content: space-between;
+  gap: 12px;
 }
-.fl-btns { display: flex; align-items: center; gap: 8px; }
+.fl-btns {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
 .fl-time {
-  font-size: 11px;
+  font-size: var(--fs-12, 12px);
   color: var(--text-muted);
   font-variant-numeric: tabular-nums;
   min-width: 36px;
+  letter-spacing: var(--ls-snug, -0.006em);
 }
 
 /* ?????? Equalizer ?????? */

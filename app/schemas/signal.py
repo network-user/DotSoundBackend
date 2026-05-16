@@ -24,7 +24,11 @@ class SearchClickRequest(BaseModel):
 
 
 class ClientPlaybackEventRequest(BaseModel):
-    event_name: Literal["radio_auto_skip_exhausted", "hls_fatal_error"]
+    event_name: Literal[
+        "radio_auto_skip_exhausted",
+        "hls_fatal_error",
+        "playback_source_chosen",
+    ]
     surface: Literal["player", "radio"]
     current_track_id: int | None = Field(default=None, ge=1)
     radio_seed_track_id: int | None = Field(default=None, ge=1)
@@ -39,3 +43,11 @@ class ClientPlaybackEventRequest(BaseModel):
     hls_fatal: bool | None = None
     hls_message: str | None = Field(default=None, max_length=240)
     hls_url: str | None = Field(default=None, max_length=512)
+    chosen_source: (
+        Literal["hls", "progressive", "third_party_stream", "cached"]
+        | None
+    ) = None
+    tt_canplay_ms: int | None = Field(default=None, ge=0, le=120_000)
+    effective_type: str | None = Field(default=None, max_length=24)
+    save_data: bool | None = None
+    downlink_mbps: float | None = Field(default=None, ge=0, le=10_000)

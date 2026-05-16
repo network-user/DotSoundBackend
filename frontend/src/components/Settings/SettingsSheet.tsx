@@ -37,6 +37,11 @@ import {
   type CacheLimitChoice,
   type StorageBreakdown,
 } from '@/lib/offlineCache'
+import {
+  getHlsQualityPreference,
+  setHlsQualityPreference,
+  type HlsQualityPreference,
+} from '@/lib/hlsQualityPreference'
 import { AccountDangerZone } from './AccountDangerZone'
 import { ResetRecommendationsSection } from './ResetRecommendationsSection'
 import { SettingsLegalSection } from './SettingsLegalSection'
@@ -118,6 +123,10 @@ export function SettingsSheet({
   const [cacheLimitModalOpen, setCacheLimitModalOpen] =
     useState(false)
   const [ttlModalOpen, setTtlModalOpen] = useState(false)
+  const [hlsQualityModalOpen, setHlsQualityModalOpen] =
+    useState(false)
+  const [hlsQuality, setHlsQuality] =
+    useState<HlsQualityPreference>(() => getHlsQualityPreference())
   const [profilePrivacyModalOpen, setProfilePrivacyModalOpen] =
     useState(false)
   const [accountExpanded, setAccountExpanded] =
@@ -294,6 +303,14 @@ export function SettingsSheet({
     hapticSelection()
   }
 
+  const handleHlsQualityChange = (value: string) => {
+    const next: HlsQualityPreference =
+      value === 'lo' || value === 'hi' ? value : 'auto'
+    setHlsQuality(next)
+    setHlsQualityPreference(next)
+    hapticSelection()
+  }
+
   const handleClearOffline = async () => {
     feedbackTap()
     await clearAllOffline()
@@ -412,6 +429,47 @@ export function SettingsSheet({
     TTL_OPTIONS.find(
       (o) => o.value === String(ttlDays),
     )?.label ?? `${ttlDays} дн.`
+
+  const hlsQualityOptions = useMemo(
+    () => [
+      {
+        value: 'auto',
+        label: t('settings.qualityAuto', {
+          defaultValue: 'Авто',
+        }),
+        sublabel: t('settings.qualityAutoSub', {
+          defaultValue:
+            'Подбирается под скорость соединения и режим экономии трафика.',
+        }),
+      },
+      {
+        value: 'lo',
+        label: t('settings.qualityLow', {
+          defaultValue: 'Эконом',
+        }),
+        sublabel: t('settings.qualityLowSub', {
+          defaultValue:
+            'Меньше трафика и быстрый старт. Подходит для слабой сети.',
+        }),
+      },
+      {
+        value: 'hi',
+        label: t('settings.qualityHigh', {
+          defaultValue: 'Высокое',
+        }),
+        sublabel: t('settings.qualityHighSub', {
+          defaultValue:
+            'Максимальное доступное качество. Расход трафика выше.',
+        }),
+      },
+    ],
+    [t],
+  )
+
+  const hlsQualityLabel =
+    hlsQualityOptions.find((o) => o.value === hlsQuality)?.label ??
+    hlsQualityOptions[0]?.label ??
+    'Авто'
 
   const profilePrivacyLabel =
     profilePrivacyOptions.find(
@@ -566,6 +624,32 @@ export function SettingsSheet({
                 defaultValue: 'Оффлайн',
               })}
             </div>
+
+            <MotionPress
+              type="button"
+              variant="ghost"
+              haptic="light"
+              className="settings-item settings-item--nav"
+              onClick={() => {
+                feedbackTap()
+                setHlsQualityModalOpen(true)
+              }}
+            >
+              <Icon name="headphones" size={20} />
+              <span>
+                {t('settings.streamQuality', {
+                  defaultValue: 'Качество звука',
+                })}
+              </span>
+              <span className="settings-item-value">
+                {hlsQualityLabel}
+              </span>
+              <Icon
+                name="chevron"
+                size={16}
+                className="settings-chevron"
+              />
+            </MotionPress>
 
             <div
               className="settings-item"
@@ -1016,6 +1100,22 @@ export function SettingsSheet({
             value as 'public' | 'followers_only' | 'hidden',
           )
         }
+        optionLayout="stacked"
+      />
+
+      <SettingsPickerModal
+        open={hlsQualityModalOpen}
+        onClose={() => setHlsQualityModalOpen(false)}
+        title={t('settings.streamQuality', {
+          defaultValue: 'Качество звука',
+        })}
+        description={t('settings.streamQualityDesc', {
+          defaultValue:
+            'Управляет HLS-вариантом, который выбирается при включении и предзагрузке треков. «Авто» подстраивается под скорость соединения и режим экономии трафика.',
+        })}
+        options={hlsQualityOptions}
+        value={hlsQuality}
+        onChange={handleHlsQualityChange}
         optionLayout="stacked"
       />
     </>

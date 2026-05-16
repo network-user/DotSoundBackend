@@ -64,6 +64,41 @@ def test_track_response_cover_url_none() -> None:
     assert resp.cover_url is None
 
 
+def test_track_response_has_hls_when_manifest_set() -> None:
+    resp = TrackResponse(
+        id=1,
+        title="S",
+        artist=None,
+        duration_seconds=60,
+        play_count=0,
+        is_active=True,
+        created_at="2024-01-01T00:00:00",
+        hls_manifest_key=(
+            "hls-blobs/ab/abcdef0123/master.m3u8"
+        ),
+    )
+    assert resp.has_hls is True
+    dumped = resp.model_dump()
+    assert dumped["has_hls"] is True
+    assert "hls_manifest_key" not in dumped
+
+
+def test_track_response_has_hls_false_when_missing() -> None:
+    resp = TrackResponse(
+        id=1,
+        title="S",
+        artist=None,
+        duration_seconds=60,
+        play_count=0,
+        is_active=True,
+        created_at="2024-01-01T00:00:00",
+    )
+    assert resp.has_hls is False
+    dumped = resp.model_dump()
+    assert dumped["has_hls"] is False
+    assert "hls_manifest_key" not in dumped
+
+
 def test_track_response_provenance_fields() -> None:
     resp = TrackResponse(
         id=1,

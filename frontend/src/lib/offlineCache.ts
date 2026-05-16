@@ -22,6 +22,13 @@ const PLAYBACK_WARM_HARD_CAP_BYTES = 2 * 1024 * 1024
 const LS_PLAYBACK_WARM_INDEX_LEGACY = 'ds:playback-warm-index:v1'
 const LS_PLAYBACK_WARM_CLEANED = 'ds:playback-warm-cleaned:v1'
 
+const PROGRESSIVE_SW_CACHE_NAME = 'progressive-audio-cache'
+// Cap full-body prefetches at ~12 MB so a misconfigured CDN can't
+// drain the user's data plan on a single skipped track. 12 MB covers
+// a 5-minute track at 320kbps with margin and matches the SW
+// CacheFirst quota expectations.
+const PROGRESSIVE_SW_PREFETCH_MAX_BYTES = 12 * 1024 * 1024
+
 type FetchPriority = 'low' | 'high' | 'auto'
 
 interface FetchInitWithPriority extends RequestInit {
@@ -225,6 +232,145 @@ export async function warmProgressiveAudioForPlayback(
     return { ok: true, bytes, alreadyCached: false }
   } catch {
     return failed
+  }
+}
+
+/**
+ * Force the progressive audio body of ``trackId`` into the
+ * Workbox-managed ``progressive-audio-cache`` so the next track
+ * switch hits Cache API instead of the network. Critical on mobile:
+ * native ``<audio preload='auto'>`` issues partial-content (206)
+ * Range requests, and the Workbox ``cacheableResponse: [200]`` filter
+ * (intentional, to avoid poisoning the cache with partial bodies)
+ * causes those probes to *never* be cached. Without this helper the
+ * runtime Cache for audio is effectively always empty, every track
+ * switch is a cold network round-trip, and the UI surfaces the
+ * "buffering" toast after a few seconds.
+ *
+ * This helper issues a *full-body* GET (no Range header) so the
+ * server responds 200 OK and Workbox's CacheFirst route writes the
+ * whole file. We drain the body via a streaming reader so the fetch
+ * actually completes and Workbox finalises the cache entry; the
+ * stream is aborted as soon as the caller cancels (the radio engine
+ * calls cancel on every track switch).
+ *
+ * Skipped when:
+ *   - Network info reports ``saveData`` (user opted out of background
+ *     downloads) or 2g / slow-2g effective type;
+ *   - Cache API is missing (Telegram in-app browser, private mode);
+ *   - The track is already in the SW cache;
+ *   - The track is already pinned offline in our IndexedDB store
+ *     (downloadTrack covers that case).
+ *
+ * Returns ``true`` when the cache entry was written, ``false`` on
+ * skip / failure. Never throws.
+ */
+export async function prefetchProgressiveBodyForCache(
+  trackId: number,
+  options?: {
+    signal?: AbortSignal
+  },
+): Promise<boolean> {
+  if (typeof window === 'undefined') return false
+  if (typeof fetch !== 'function') return false
+  if (typeof caches === 'undefined') return false
+  const signal = options?.signal
+  if (signal?.aborted) return false
+  if (cachedIds.has(trackId)) return false
+  const nav = navigator as Navigator & {
+    connection?: {
+      effectiveType?: string
+      saveData?: boolean
+    }
+  }
+  const conn = nav.connection
+  if (conn?.saveData) return false
+  if (
+    conn?.effectiveType === '2g' ||
+    conn?.effectiveType === 'slow-2g'
+  ) {
+    return false
+  }
+  const url = trackProgressiveAudioUrl(trackId)
+  let cache: Cache
+  try {
+    cache = await caches.open(PROGRESSIVE_SW_CACHE_NAME)
+  } catch {
+    return false
+  }
+  try {
+    const existing = await cache.match(url)
+    if (existing) return false
+  } catch {
+    /* fall through and try fetching */
+  }
+  try {
+    const init: FetchInitWithPriority = {
+      credentials: 'same-origin',
+      cache: 'default',
+      signal,
+      priority: 'low',
+    }
+    const res = await fetch(url, init)
+    if (!res.ok || res.status !== 200) {
+      try {
+        await res.body?.cancel()
+      } catch {
+        /* ignore */
+      }
+      return false
+    }
+    const lenHeader = Number(
+      res.headers.get('content-length') || 0,
+    )
+    if (
+      Number.isFinite(lenHeader) &&
+      lenHeader > PROGRESSIVE_SW_PREFETCH_MAX_BYTES
+    ) {
+      try {
+        await res.body?.cancel()
+      } catch {
+        /* ignore */
+      }
+      return false
+    }
+    if (!res.body) return false
+    const reader = res.body.getReader()
+    let received = 0
+    while (true) {
+      if (signal?.aborted) {
+        try {
+          await reader.cancel()
+        } catch {
+          /* ignore */
+        }
+        return false
+      }
+      let done: boolean
+      let value: Uint8Array | undefined
+      try {
+        const r = await reader.read()
+        done = r.done
+        value = r.value
+      } catch {
+        return false
+      }
+      if (done) break
+      if (value) {
+        received += value.byteLength
+        if (received > PROGRESSIVE_SW_PREFETCH_MAX_BYTES) {
+          try {
+            await reader.cancel()
+          } catch {
+            /* ignore */
+          }
+          return false
+        }
+      }
+    }
+    return received > 0
+  } catch {
+    return false
   }
 }
 

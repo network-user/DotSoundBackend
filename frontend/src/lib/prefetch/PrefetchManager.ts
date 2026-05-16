@@ -48,6 +48,10 @@ import {
   warmProgressiveAudioForPlayback,
 } from '@/lib/offlineCache'
 import { shouldUseInternalHlsPlayback } from '@/lib/playbackSourcePolicy'
+import {
+  getHlsQualityPreference,
+  type HlsQualityPreference,
+} from '@/lib/hlsQualityPreference'
 
 const SMART_BUFFERING_FLAG = 'setting-smart-buffering'
 
@@ -591,10 +595,26 @@ export class PrefetchManager {
     return net.downlinkMbps !== null && net.downlinkMbps >= 5.0
   }
 
+  private _qualityPreference(): HlsQualityPreference {
+    try {
+      return getHlsQualityPreference()
+    } catch {
+      return 'auto'
+    }
+  }
+
   private _pickVariant(masterText: string): string | null {
-    const order: readonly string[] = this._shouldPreferHiVariant()
-      ? (['hi', 'lo'] as const)
-      : SEGMENT_VARIANT_PREFERENCE
+    const pref = this._qualityPreference()
+    let order: readonly string[]
+    if (pref === 'hi') {
+      order = ['hi', 'lo'] as const
+    } else if (pref === 'lo') {
+      order = ['lo', 'hi'] as const
+    } else {
+      order = this._shouldPreferHiVariant()
+        ? (['hi', 'lo'] as const)
+        : SEGMENT_VARIANT_PREFERENCE
+    }
     for (const v of order) {
       if (masterText.includes(`${v}/playlist.m3u8`)) return v
     }

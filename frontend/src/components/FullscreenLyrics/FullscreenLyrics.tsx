@@ -25,7 +25,6 @@ import {
   useReducedMotion,
 } from '@/lib/motion'
 
-const SYNC_OFFSET_KEY = 'setting-lyrics-sync-offset-ms'
 const KARAOKE_KEY = 'setting-lyrics-karaoke'
 
 function fmt(sec: number) {
@@ -35,12 +34,6 @@ function fmt(sec: number) {
     .toString()
     .padStart(2, '0')
   return `${mins}:${s}`
-}
-
-function readOffset(): number {
-  const raw = localStorage.getItem(SYNC_OFFSET_KEY)
-  const n = raw ? Number(raw) : 0
-  return Number.isFinite(n) ? n : 0
 }
 
 function readKaraoke(): boolean {
@@ -97,7 +90,6 @@ export function FullscreenLyrics({
   )
   const [loading, setLoading] = useState(false)
   const [videoFailed, setVideoFailed] = useState(false)
-  const [offsetMs, setOffsetMs] = useState<number>(readOffset)
   const [karaoke, setKaraoke] = useState<boolean>(readKaraoke)
   const [selectedLang, setSelectedLang] =
     useState<string>('original')
@@ -169,7 +161,7 @@ export function FullscreenLyrics({
     let cancelled = false
     const loop = () => {
       if (cancelled) return
-      const ms = getPreciseTime() * 1000 + offsetMs
+      const ms = getPreciseTime() * 1000
       const nextLine = activeLineIndex(lines, ms)
       setActiveIdx((prev) =>
         prev === nextLine ? prev : nextLine,
@@ -195,7 +187,6 @@ export function FullscreenLyrics({
     panelOpen,
     isPlaying,
     lyrics,
-    offsetMs,
     karaokeActive,
     getPreciseTime,
   ])
@@ -208,7 +199,7 @@ export function FullscreenLyrics({
       return
     }
     if (isPlaying) return
-    const ms = currentTime * 1000 + offsetMs
+    const ms = currentTime * 1000
     const nextLine = activeLineIndex(lines, ms)
     setActiveIdx((prev) =>
       prev === nextLine ? prev : nextLine,
@@ -224,7 +215,6 @@ export function FullscreenLyrics({
     panelOpen,
     isPlaying,
     lyrics,
-    offsetMs,
     karaokeActive,
     currentTime,
   ])
@@ -256,13 +246,6 @@ export function FullscreenLyrics({
     seek((timeMs / 1000 / duration) * 100)
   }
 
-  const handleOffsetChange = (val: number) => {
-    setOffsetMs(val)
-    try {
-      localStorage.setItem(SYNC_OFFSET_KEY, String(val))
-    } catch {}
-  }
-
   const toggleKaraoke = () => {
     const next = !karaoke
     setKaraoke(next)
@@ -278,7 +261,8 @@ export function FullscreenLyrics({
     uid != null &&
     track.uploaded_by_id === uid
 
-  const toolbar = (
+  const showToolbar = hasWordTimes || translationItems.length > 0
+  const toolbar = showToolbar ? (
     <div
       className={`fl-toolbar${embed ? ' fl-toolbar--embed' : ''}`}
     >
@@ -293,57 +277,30 @@ export function FullscreenLyrics({
           {t('lyrics.karaokeMode', 'Karaoke')}
         </MotionPress>
       )}
-      <label className="fl-offset">
-        <span>{t('lyrics.syncOffset', 'Offset')}</span>
-        <input
-          type="range"
-          min={-2000}
-          max={2000}
-          step={50}
-          value={offsetMs}
-          onChange={(e) =>
-            handleOffsetChange(Number(e.target.value))
-          }
-        />
-        <span className="fl-offset-value">
-          {offsetMs >= 0 ? '+' : ''}
-          {offsetMs} ms
-        </span>
-      </label>
       {translationItems.length > 0 && (
-        <label className="fl-offset">
-          <span>
-            {t(
-              'redesign.player.lyricsLanguage',
-              'Language',
-            )}
-          </span>
-          <select
-            className="form-input"
-            value={selectedLang}
-            onChange={(e) =>
-              setSelectedLang(e.target.value)
-            }
-          >
-            <option value="original">
-              {t(
-                'redesign.player.lyricsOriginal',
-                'Original',
-              )}
+        <select
+          className="fl-lang-select"
+          value={selectedLang}
+          onChange={(e) =>
+            setSelectedLang(e.target.value)
+          }
+          aria-label={t('redesign.player.lyricsLanguage', 'Language')}
+        >
+          <option value="original">
+            {t('redesign.player.lyricsOriginal', 'Original')}
+          </option>
+          {translationItems.map((tr) => (
+            <option
+              key={tr.language_code}
+              value={tr.language_code}
+            >
+              {tr.language_code.toUpperCase()}
             </option>
-            {translationItems.map((tr) => (
-              <option
-                key={tr.language_code}
-                value={tr.language_code}
-              >
-                {tr.language_code.toUpperCase()}
-              </option>
-            ))}
-          </select>
-        </label>
+          ))}
+        </select>
       )}
     </div>
-  )
+  ) : null
 
   const content = (
     <div

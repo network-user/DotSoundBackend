@@ -205,6 +205,47 @@ async def test_record_client_hls_fatal_event(
     assert recorded_reasons == []
 
 
+async def test_record_client_playback_source_chosen(
+    client: AsyncClient,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    await create_test_user(client, 9006)
+    headers = await auth_headers(client, 9006)
+
+    observed: list[tuple[str, str]] = []
+
+    def fake_observed(
+        *,
+        event_name: str,
+        surface: str,
+    ) -> None:
+        observed.append((event_name, surface))
+
+    monkeypatch.setattr(
+        "app.api.v1.signals.client_playback_event_observed",
+        fake_observed,
+    )
+
+    r = await client.post(
+        "/api/v1/signals/client/playback-event",
+        json={
+            "event_name": "playback_source_chosen",
+            "surface": "player",
+            "current_track_id": 42,
+            "chosen_source": "hls",
+            "tt_canplay_ms": 480,
+            "effective_type": "4g",
+            "save_data": False,
+            "downlink_mbps": 12.5,
+        },
+        headers=headers,
+    )
+
+    assert r.status_code == 200
+    assert r.json()["status"] == "ok"
+    assert observed == [("playback_source_chosen", "player")]
+
+
 async def test_record_listen_invalid(
     client: AsyncClient,
 ) -> None:

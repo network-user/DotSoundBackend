@@ -67,6 +67,7 @@ class TrackResponse(BaseModel):
         ge=0,
     )
     has_lyrics: bool = False
+    hls_manifest_key: str | None = Field(default=None, exclude=True)
 
     @computed_field  # type: ignore[prop-decorator]
     @property
@@ -76,6 +77,17 @@ class TrackResponse(BaseModel):
         return (
             f"/api/v1/tracks/cover_proxy?key={quote(self.cover_key, safe='')}"
         )
+
+    @computed_field  # type: ignore[prop-decorator]
+    @property
+    def has_hls(self) -> bool:
+        """True iff the backend has a transcoded HLS bundle for this
+        track. The frontend uses this flag to skip the master.m3u8
+        round-trip when HLS is not yet available (e.g. an upload that
+        is still mid-transcode), avoiding an extra 404 + fallback
+        latency on every track switch.
+        """
+        return bool(self.hls_manifest_key)
 
 
 class TrackListResponse(BaseModel):

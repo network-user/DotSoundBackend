@@ -261,8 +261,14 @@ export default defineConfig({
             options: {
               cacheName: 'hls-manifests-cache',
               expiration: {
-                maxEntries: 80,
-                maxAgeSeconds: 60 * 60,
+                // Manifests are tiny (<2 KB each) and almost never
+                // change for a given track once HLS is transcoded
+                // (CAS path is content-addressed). Holding 320 of
+                // them costs a few hundred KB and lets a long radio
+                // / library browsing session re-use them across
+                // navigations without round-tripping the backend.
+                maxEntries: 320,
+                maxAgeSeconds: 60 * 60 * 24,
                 purgeOnQuotaError: true,
               },
             },
@@ -273,8 +279,14 @@ export default defineConfig({
             options: {
               cacheName: 'hls-segments-cache',
               expiration: {
-                maxEntries: 240,
-                maxAgeSeconds: 60 * 60 * 24,
+                // ~10 segments/track for our typical 3-min track at
+                // 10s segments. 600 entries lets a radio session of
+                // ~60 tracks stay fully cached locally so seeking
+                // back inside a played track is instant. 7-day TTL
+                // matches the default unpinned offline TTL so the
+                // GC pressure is consistent.
+                maxEntries: 600,
+                maxAgeSeconds: 60 * 60 * 24 * 7,
                 purgeOnQuotaError: true,
               },
               rangeRequests: true,

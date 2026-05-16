@@ -17,7 +17,9 @@ import i18n from '@/lib/i18n'
 import {
   getCachedAudioUrl,
   getCachedIdsSync,
+  isCachedSync,
   markPlayed as markCachePlayed,
+  prefetchProgressiveBodyForCache,
   trackProgressiveAudioUrl,
 } from '@/lib/offlineCache'
 import { queueOrSend } from '@/lib/pendingEvents'
@@ -28,6 +30,8 @@ import {
 import { isBenignPlayError, safePlay } from '@/lib/safePlay'
 import { getPrefetchManager } from '@/lib/prefetch/PrefetchManager'
 import { shouldUseInternalHlsPlayback } from '@/lib/playbackSourcePolicy'
+import { readNetworkSnapshot } from '@/lib/prefetch/network'
+import { getHlsQualityPreference } from '@/lib/hlsQualityPreference'
 import { coverProxyUrl } from '@/lib/coverProxy'
 import type { Track } from '@/types/api'
 
@@ -706,6 +710,8 @@ export function PlayerProvider({
   const preloadHlsTrackIdRef = useRef<number | null>(
     null,
   )
+  const swCachePrefetchAbortRef = useRef<AbortController | null>(null)
+  const swCachePrefetchTrackIdRef = useRef<number | null>(null)
   const audioCtxRef =
     useRef<AudioContext | null>(null)
   const filtersRef = useRef<BiquadFilterNode[]>([])
@@ -1524,6 +1530,80 @@ export function PlayerProvider({
     [volume],
   )
 
+  const recordPlaybackSourceTelemetry = useCallback(
+    (
+      audio: HTMLAudioElement,
+      trackId: number,
+      chosenSource:
+        | 'hls'
+        | 'progressive'
+        | 'third_party_stream'
+        | 'cached',
+    ) => {
+      // Fire-and-forget signal that records which playback path was
+      // selected for this track switch and how long it took to reach
+      // canplay. Backed by ``client_playback_event`` so we get the
+      // same Prometheus counter + structured log other client signals
+      // already use; no new endpoint, no new schema migration.
+      const startedAt =
+        typeof performance !== 'undefined' &&
+        typeof performance.now === 'function'
+          ? performance.now()
+          : Date.now()
+      const network = readNetworkSnapshot()
+      let sent = false
+      const send = (canplayAt: number | null) => {
+        if (sent) return
+        sent = true
+        cleanup()
+        if (lastTrackIdRef.current !== trackId) return
+        const ttMs =
+          canplayAt != null
+            ? Math.max(0, Math.round(canplayAt - startedAt))
+            : null
+        void queueOrSend(
+          'client-telemetry',
+          '/api/v1/signals/client/playback-event',
+          {
+            event_name: 'playback_source_chosen',
+            surface: radioModeRef.current ? 'radio' : 'player',
+            current_track_id: trackId,
+            chosen_source: chosenSource,
+            tt_canplay_ms: ttMs,
+            effective_type: network.effectiveType,
+            save_data: network.saveData,
+            downlink_mbps: network.downlinkMbps,
+          },
+          { silent: true },
+        )
+      }
+      const onReady = () => {
+        const t =
+          typeof performance !== 'undefined' &&
+          typeof performance.now === 'function'
+            ? performance.now()
+            : Date.now()
+        send(t)
+      }
+      const cleanup = () => {
+        audio.removeEventListener('canplay', onReady)
+        audio.removeEventListener('playing', onReady)
+        if (timeoutId != null) {
+          window.clearTimeout(timeoutId)
+        }
+      }
+      audio.addEventListener('canplay', onReady, { once: true })
+      audio.addEventListener('playing', onReady, { once: true })
+      const timeoutId = window.setTimeout(() => {
+        // Don't leak listeners forever; if the track never reaches
+        // canplay (network stall, fatal error before fallback), we
+        // still want a row in telemetry to surface the failure rate.
+        send(null)
+      }, 30_000)
+    },
+    [],
+  )
+
   const recordHlsFatalTelemetry = useCallback(
     (
       trackId: number | null | undefined,
@@ -1571,6 +1651,7 @@ export function PlayerProvider({
       trackId?: number | null,
     ) => {
       const Hls = await loadHlsClass()
+      const qualityPref = getHlsQualityPreference()
       return new Promise<void>((resolve, reject) => {
         let settled = false
         let readyTimer: number | null = null
@@ -1594,6 +1675,24 @@ export function PlayerProvider({
           if (readyTimer != null) {
             window.clearTimeout(readyTimer)
             readyTimer = null
+          }
+        }
+        const _applyQualityPin = () => {
+          if (qualityPref === 'auto') return
+          const levels = hls.levels
+          if (!Array.isArray(levels) || levels.length === 0) return
+          const want = qualityPref === 'hi' ? 'hi' : 'lo'
+          for (let i = 0; i < levels.length; i += 1) {
+            const lvl = levels[i] as { url?: readonly string[] }
+            const urls = lvl?.url ?? []
+            if (urls.some((u) => u.includes(`/${want}/`))) {
+              try {
+                hls.currentLevel = i
+              } catch {
+                /* level pinning is best-effort */
+              }
+              return
+            }
           }
         }
         const startFallback = () => {
@@ -1643,6 +1742,7 @@ export function PlayerProvider({
           Hls.Events.MANIFEST_PARSED,
           () => {
             audio.volume = volume
+            _applyQualityPin()
           },
         )
         hls.on(Hls.Events.FRAG_BUFFERED, onReady)
@@ -2175,6 +2275,15 @@ export function PlayerProvider({
     streamLoadFailedTrackIdRef.current = null
     setHlsError(null)
     void loadEqSettings()
+    // Fire-and-forget: kick off the hls.js dynamic import in parallel
+    // with the cache lookup / src reset / state updates below. After
+    // the first call its promise is memoised, so by the time we hit
+    // ``await loadHlsClass()`` further down it is already resolved
+    // and adds zero async barrier between assigning the new src and
+    // calling play() (the gap that breaks iOS Safari autoplay).
+    if (shouldUseInternalHlsPlayback(newTrack)) {
+      void loadHlsClass()
+    }
     if (bail()) return
     _initAudioCtx()
     if (hlsRef.current) {
@@ -2183,15 +2292,16 @@ export function PlayerProvider({
     }
     playCountSentRef.current = false
     listenSignalSentRef.current = false
-    if (!audio.paused) {
-      audio.pause()
-    }
-    audio.src = ''
-    audio.load()
-    try {
-      audio.currentTime = 0
-    } catch {
-    }
+    // Avoid the audio.pause()/src=''/load() reset trio here: on iOS
+    // Safari and some Android Chromium builds, that sequence breaks
+    // the user-gesture chain that the *previous* play() acquired.
+    // After it, the autoplay sentinel forbids the next play() until
+    // the user taps again -- which is exactly the symptom the user
+    // reports ("on track switch the player goes paused, I have to
+    // press play and wait ~5s for buffering"). Assigning the new
+    // src below cancels the in-flight network request automatically.
+    // We still snap UI state so the timeline doesn't visibly jump
+    // through the previous track's tail before the new src loads.
     setIsPlaying(false)
     setIsPlayingFromCache(false)
     setCurrentTime(0)
@@ -2248,12 +2358,23 @@ export function PlayerProvider({
     try {
       audio.crossOrigin = 'anonymous'
 
-      const cachedUrl = await getCachedAudioUrl(
-        newTrack.id,
-      )
+      // Sync gate: skip the IDB / Cache API lookup entirely when
+      // we know synchronously that the track was never pinned for
+      // offline. ``isCachedSync`` reads an in-memory Set populated
+      // by ensureCachedIdsLoaded(), so on the radio hot path we
+      // shave another async barrier off the gap between the user
+      // gesture and audio.src=newUrl.
+      const cachedUrl = isCachedSync(newTrack.id)
+        ? await getCachedAudioUrl(newTrack.id)
+        : null
       if (bail()) return
       if (cachedUrl) {
         setIsPlayingFromCache(true)
+        recordPlaybackSourceTelemetry(
+          audio,
+          newTrack.id,
+          'cached',
+        )
         await startDirectPlayback(audio, cachedUrl)
         if (bail()) return
         void markCachePlayed(newTrack.id).catch(() => {})
@@ -2300,6 +2421,11 @@ export function PlayerProvider({
         streamExpiresAtRef.current = stream.expires_in
           ? Date.now() + stream.expires_in * 1000
           : null
+        recordPlaybackSourceTelemetry(
+          audio,
+          newTrack.id,
+          'third_party_stream',
+        )
         const HlsMod = await loadHlsClass()
         if (
           stream.stream_type === 'hls' &&
@@ -2336,6 +2462,11 @@ export function PlayerProvider({
         streamExpiresAtRef.current = stream.expires_in
           ? Date.now() + stream.expires_in * 1000
           : null
+        recordPlaybackSourceTelemetry(
+          audio,
+          newTrack.id,
+          'progressive',
+        )
         await startDirectPlayback(audio, stream.url)
         if (bail()) return
         _updateMediaSession(newTrack, audio, () => playNext(), () => playPrev())
@@ -2346,35 +2477,57 @@ export function PlayerProvider({
         overrideUrl ||
         trackProgressiveAudioUrl(newTrack.id)
 
-      if (shouldUseInternalHlsPlayback(newTrack)) {
+      const useHls = shouldUseInternalHlsPlayback(newTrack)
+      recordPlaybackSourceTelemetry(
+        audio,
+        newTrack.id,
+        useHls ? 'hls' : 'progressive',
+      )
+      if (useHls) {
         const hlsUrl = `/api/v1/tracks/${newTrack.id}/hls/master.m3u8`
-        const HlsMod = await loadHlsClass()
-        if (HlsMod.isSupported()) {
-          const preloaded =
-            preloadHlsRef.current &&
-            preloadHlsTrackIdRef.current ===
-              newTrack.id
-              ? preloadHlsRef.current
-              : null
-          if (preloaded) {
-            try {
-              preloaded.detachMedia()
-              preloaded.attachMedia(audio)
-              audio.volume = volume
-              await safePlay(audio)
-              hlsRef.current = preloaded
-              preloadHlsRef.current = null
-              preloadHlsTrackIdRef.current = null
-            } catch {
-              await startHlsPlayback(
-                audio,
-                hlsUrl,
-                fallback,
-                true,
-                newTrack.id,
-              )
+        // Fast path: a preloaded Hls instance already attached to a
+        // detached <audio> sink for this trackId. Reattach to the
+        // real audio element synchronously so play() runs in the
+        // same tick as the user-gesture / autoplay continuation
+        // (no await loadHlsClass() barrier here -- otherwise iOS
+        // Safari forbids the next play() and we silent-fail in
+        // safePlay, which is what surfaces as "track is paused
+        // after switch, user has to press play".
+        const preloaded =
+          preloadHlsRef.current &&
+          preloadHlsTrackIdRef.current === newTrack.id
+            ? preloadHlsRef.current
+            : null
+        if (preloaded) {
+          try {
+            preloaded.detachMedia()
+            preloaded.attachMedia(audio)
+            audio.volume = volume
+            const pinPref = getHlsQualityPreference()
+            if (pinPref !== 'auto') {
+              const want = pinPref === 'hi' ? 'hi' : 'lo'
+              const levels = preloaded.levels as
+                | ReadonlyArray<{ url?: readonly string[] }>
+                | undefined
+              if (levels && levels.length > 0) {
+                for (let i = 0; i < levels.length; i += 1) {
+                  const urls = levels[i]?.url ?? []
+                  if (urls.some((u) => u.includes(`/${want}/`))) {
+                    try {
+                      preloaded.currentLevel = i
+                    } catch {
+                      /* best-effort */
+                    }
+                    break
+                  }
+                }
+              }
             }
-          } else {
+            void safePlay(audio)
+            hlsRef.current = preloaded
+            preloadHlsRef.current = null
+            preloadHlsTrackIdRef.current = null
+          } catch {
             await startHlsPlayback(
               audio,
               hlsUrl,
@@ -2384,10 +2537,21 @@ export function PlayerProvider({
             )
           }
         } else {
-          await startDirectPlayback(
-            audio,
-            fallback,
-          )
+          const HlsMod = await loadHlsClass()
+          if (HlsMod.isSupported()) {
+            await startHlsPlayback(
+              audio,
+              hlsUrl,
+              fallback,
+              true,
+              newTrack.id,
+            )
+          } else {
+            await startDirectPlayback(
+              audio,
+              fallback,
+            )
+          }
         }
       } else {
         await startDirectPlayback(
@@ -2403,6 +2567,33 @@ export function PlayerProvider({
         () => playNext(),
         () => playPrev(),
       )
+
+      // Detect autoplay block on programmatic advance (radio /
+      // ended / queue auto-advance): play() returned without
+      // throwing but the audio stayed paused because the browser
+      // refused autoplay. Surface a toast prompting the user to
+      // press play, instead of letting the player sit silently
+      // paused with no feedback.
+      if (isInjectedAdvance) {
+        window.setTimeout(() => {
+          const a = audioRef.current
+          if (!a) return
+          if (lastTrackIdRef.current !== newTrack.id) return
+          if (!a.paused) return
+          if (a.error != null) return
+          if (streamLoadFailedTrackIdRef.current === newTrack.id) {
+            return
+          }
+          showIsland({
+            kind: 'toast',
+            title: i18n.t('redesign.playerErrors.tapToPlay', {
+              defaultValue:
+                'Нажмите Play, чтобы продолжить воспроизведение',
+            }),
+            durationMs: 3500,
+          })
+        }, 1500)
+      }
     } catch (e) {
       if (isBenignPlayError(e)) return
       console.error('playTrack error', e)
@@ -2715,6 +2906,18 @@ export function PlayerProvider({
       preloadHlsTrackIdRef.current = null
     }
 
+    const teardownSwCachePrefetch = () => {
+      if (swCachePrefetchAbortRef.current) {
+        try {
+          swCachePrefetchAbortRef.current.abort()
+        } catch {
+          /* ignore */
+        }
+        swCachePrefetchAbortRef.current = null
+      }
+      swCachePrefetchTrackIdRef.current = null
+    }
+
     const preloadFirst = (tracks: Track[]) => {
       if (cancelled || !tracks.length) return
       const next = tracks[0]
@@ -2723,6 +2926,7 @@ export function PlayerProvider({
         prefetchAudioRef.current = null
       }
       teardownPreloadHls()
+      teardownSwCachePrefetch()
       if (
         next.access_mode === 'official_embed' ||
         next.access_mode === 'external_link'
@@ -2730,11 +2934,45 @@ export function PlayerProvider({
         return
       }
 
+      // Native disk-cache prewarm: a hidden <Audio preload='auto'>
+      // gets the browser to issue Range probes and pin them to its
+      // own HTTP cache. This helps Chrome on desktop but on mobile
+      // browsers the disk cache eviction is so aggressive that we
+      // cannot rely on it for radio mode -- we also need the SW
+      // cache to be populated (see below).
       const pa = new Audio()
       pa.preload = 'auto'
       pa.src = trackProgressiveAudioUrl(next.id)
       _applyPitchPreservation(pa)
       prefetchAudioRef.current = pa
+
+      // Real SW Cache prefetch: full-body GET (status 200) so
+      // workbox's CacheFirst route writes the entire file into
+      // ``progressive-audio-cache``. The next track switch then
+      // hits the SW cache instead of the network and starts
+      // playing in <200ms instead of waiting for the OS network
+      // stack + CDN to ramp up. This is the difference between
+      // "track pauses on switch, user has to press play, waits 5s
+      // for buffering" and "next track plays seamlessly".
+      // Skipped for HLS-eligible tracks (they have their own
+      // segment-level prefetch via preloadHlsRef and shouldn't
+      // burn data plan on a duplicate progressive download).
+      if (!shouldUseInternalHlsPlayback(next)) {
+        const ctrl = new AbortController()
+        swCachePrefetchAbortRef.current = ctrl
+        swCachePrefetchTrackIdRef.current = next.id
+        void prefetchProgressiveBodyForCache(next.id, {
+          signal: ctrl.signal,
+        }).finally(() => {
+          if (
+            swCachePrefetchTrackIdRef.current === next.id &&
+            swCachePrefetchAbortRef.current === ctrl
+          ) {
+            swCachePrefetchAbortRef.current = null
+            swCachePrefetchTrackIdRef.current = null
+          }
+        })
+      }
 
       void (async () => {
         if (!shouldUseInternalHlsPlayback(next)) return
@@ -2824,6 +3062,7 @@ export function PlayerProvider({
         prefetchAudioRef.current = null
       }
       teardownPreloadHls()
+      teardownSwCachePrefetch()
     }
   }, [track?.id])
 
@@ -2884,7 +3123,7 @@ export function PlayerProvider({
     try {
     const prev = historyRef.current.pop()
     if (prev) {
-      await playTrack(prev)
+      await playTrack(prev, { preserveQueue: true })
       return
     }
     try {
@@ -2893,7 +3132,7 @@ export function PlayerProvider({
       )
       if (adj.prev_id) {
         const t = await api.getTrack(adj.prev_id)
-        await playTrack(t)
+        await playTrack(t, { preserveQueue: true })
       }
     } catch {}
     } finally {
@@ -2912,7 +3151,7 @@ export function PlayerProvider({
         streamLoadFailedTrackIdRef.current ===
         track.id
       ) {
-        void playTrack(track)
+        void playTrack(track, { preserveQueue: true })
         return
       }
       void safePlay(a, {

@@ -19,10 +19,6 @@ from app.models.import_job import ImportJob
 from app.models.user import User
 from app.models.user_linked_account import UserLinkedAccount
 from app.repositories.user import UserRepository
-from app.services.external_providers import (
-    ProviderError,
-    scan_playlist_url,
-)
 
 logger: structlog.stdlib.BoundLogger = structlog.get_logger(__name__)
 
@@ -228,11 +224,12 @@ class ImportService:
         cached_job_id = await _get_scan_cache_job_id(user.id, source, url)
         if cached_job_id is not None:
             cached_job = await self._session.get(ImportJob, cached_job_id)
-            if cached_job and cached_job.status == "ready":
+            if cached_job and cached_job.status in ("ready", "scanning"):
                 logger.info(
                     "external_scan_cache_hit",
                     job_id=cached_job_id,
                     source=source,
+                    status=cached_job.status,
                 )
                 return cached_job
 
@@ -244,59 +241,25 @@ class ImportService:
             user_id=user.id,
             source=source,
             status="scanning",
+            tracks_data={"source_url": url},
         )
         self._session.add(job)
         await self._session.flush()
         await self._session.refresh(job)
+        job_id = job.id
 
-        try:
-            result = await scan_playlist_url(source, url)
-        except ProviderError as exc:
-            job.status = "failed"
-            job.tracks_data = {
-                "error_code": exc.code,
-                "error_message": exc.message,
-                "source_url": url,
-            }
-            logger.info(
-                "external_scan_provider_error",
-                job_id=job.id,
-                source=source,
-                code=exc.code,
-                message=exc.message,
-            )
-            return job
-        except Exception as exc:
-            job.status = "failed"
-            job.tracks_data = {
-                "error_code": "provider_unavailable",
-                "error_message": str(exc),
-                "source_url": url,
-            }
-            logger.error(
-                "external_scan_error",
-                job_id=job.id,
-                source=source,
-                error=str(exc),
-            )
-            return job
+        from app.services.external_scan_worker import (  # noqa: PLC0415
+            scan_external_playlist_task,
+        )
 
-        tracks = result.get("tracks", [])
-        job.status = "ready"
-        job.total_tracks = len(tracks)
-        job.tracks_data = {
-            "kind": result.get("kind"),
-            "source_url": url,
-            "tracks": tracks,
-        }
+        await scan_external_playlist_task.kiq(job_id, source, url)
+        await _set_scan_cache(user.id, source, url, job_id)
 
         logger.info(
-            "external_scan_complete",
-            job_id=job.id,
+            "external_scan_dispatched",
+            job_id=job_id,
             source=source,
-            total=len(tracks),
         )
-        await _set_scan_cache(user.id, source, url, job.id)
         return job
 
     async def scan_account_library(

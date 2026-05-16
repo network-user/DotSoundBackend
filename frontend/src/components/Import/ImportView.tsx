@@ -81,6 +81,10 @@ export function ImportView({
       } else if (j && j.status === 'queued') {
         setJob(j)
         setPhase('queued')
+      } else if (j && j.status === 'scanning') {
+        setJob(j)
+        setScanningSource(j.source)
+        setPhase('scanning')
       } else if (j && j.status === 'ready') {
         setJob(j)
         const list = normalizeJobTracks(j)
@@ -99,8 +103,27 @@ export function ImportView({
     }).catch(() => {})
   }, [active])
 
+  const extScanError = useCallback(
+    (code: string | undefined) => {
+      if (code === 'not_found') {
+        return t('import.listNotFound')
+      }
+      if (code === 'private') {
+        return t('import.listPrivate')
+      }
+      if (code === 'invalid_url') {
+        return t('import.listBadUrl')
+      }
+      return t('import.listGeneric')
+    },
+    [t],
+  )
+
   useEffect(() => {
-    if ((phase !== 'importing' && phase !== 'queued') || !job)
+    if (
+      (phase !== 'importing' && phase !== 'queued' && phase !== 'scanning') ||
+      !job
+    )
       return
     pollCountRef.current = 0
     const interval = setInterval(async () => {
@@ -114,6 +137,37 @@ export function ImportView({
       try {
         const updated = await api.getImportStatus(job.id)
         setJob(updated)
+
+        if (phase === 'scanning') {
+          if (updated.status === 'ready') {
+            clearInterval(interval)
+            setScanningSource(undefined)
+            const list = normalizeJobTracks(updated)
+            setAudios(list)
+            const all = new Set<number>(
+              list
+                .map((_, i) => i)
+                .filter(
+                  (i) =>
+                    !list[i].file_size ||
+                    list[i].file_size! <= MAX_FILE_SIZE,
+                ),
+            )
+            setSelected(all)
+            setPhase('select')
+          } else if (updated.status === 'failed') {
+            clearInterval(interval)
+            setScanningSource(undefined)
+            const code = updated.tracks_data?.error_code as
+              | string
+              | undefined
+            const fallback = extScanError(code)
+            setError(scanErrorMessage(fallback, updated))
+            setPhase('pick')
+          }
+          return
+        }
+
         if (updated.status === 'done' || updated.status === 'cancelled') {
           if (updated.status === 'done') {
             onImportComplete?.(updated)
@@ -128,7 +182,7 @@ export function ImportView({
       } catch {}
     }, 2000)
     return () => clearInterval(interval)
-  }, [phase, job?.id, onImportComplete, t])
+  }, [phase, job?.id, onImportComplete, extScanError, t])
 
   const applyScanResult = useCallback((j: ImportJobData): boolean => {
     setJob(j)
@@ -149,22 +203,6 @@ export function ImportView({
     setPhase('select')
     return true
   }, [])
-
-  const extScanError = useCallback(
-    (code: string | undefined) => {
-      if (code === 'not_found') {
-        return t('import.listNotFound')
-      }
-      if (code === 'private') {
-        return t('import.listPrivate')
-      }
-      if (code === 'invalid_url') {
-        return t('import.listBadUrl')
-      }
-      return t('import.listGeneric')
-    },
-    [t],
-  )
 
   const handleSourceSelect = useCallback(async (sourceId: string) => {
     setError(null)
@@ -207,6 +245,11 @@ export function ImportView({
     setScanningSource('yandex_music')
     try {
       const j = await api.startYandexMusicImport(url)
+      if (j.status === 'scanning') {
+        setJob(j)
+        setYandexModalOpen(false)
+        return
+      }
       if (j.status === 'failed') {
         const code = j.tracks_data?.error_code
         const msg =
@@ -237,6 +280,11 @@ export function ImportView({
       setScanningSource('vk_music')
       try {
         const j = await api.startVkMusicImport(url)
+        if (j.status === 'scanning') {
+          setJob(j)
+          setVkModalOpen(false)
+          return
+        }
         if (j.status === 'failed') {
           const code = j.tracks_data?.error_code
           const msg =
@@ -269,6 +317,11 @@ export function ImportView({
       setScanningSource('soundcloud_playlist')
       try {
         const j = await api.startSoundCloudPlaylistImport(url)
+        if (j.status === 'scanning') {
+          setJob(j)
+          setScModalOpen(false)
+          return
+        }
         if (j.status === 'failed') {
           const code = j.tracks_data?.error_code as string | undefined
           setPhase('pick')
@@ -293,6 +346,11 @@ export function ImportView({
       setScanningSource('spotify')
       try {
         const j = await api.startSpotifyImport(url)
+        if (j.status === 'scanning') {
+          setJob(j)
+          setSpotifyModalOpen(false)
+          return
+        }
         if (j.status === 'failed') {
           const code = j.tracks_data?.error_code as string | undefined
           setPhase('pick')

@@ -49,6 +49,7 @@ export interface Track {
   last_listen_at?: string | null
   last_listen_seconds?: number | null
   has_lyrics?: boolean
+  has_hls?: boolean
 }
 
 export interface TrackListResponse {

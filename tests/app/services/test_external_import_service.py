@@ -4,13 +4,14 @@ import pytest
 from fastapi import HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.models.import_job import ImportJob
 from app.models.user import User
 from app.services.external_providers import ProviderError
 from app.services.import_service import ImportService
 
 pytestmark = pytest.mark.anyio
 
-_MOD = "app.services.import_service"
+_WORKER = "app.services.external_scan_worker"
 
 
 async def _make_user(
@@ -43,21 +44,14 @@ async def test_scan_external_rejects_unknown_source(
 
 
 @patch(
-    f"{_MOD}.scan_playlist_url",
-    new_callable=AsyncMock,
+    "app.services.external_scan_worker.scan_external_playlist_task",
 )
-async def test_scan_external_success(
-    mock_scan: AsyncMock,
+async def test_scan_external_dispatches_background_task(
+    mock_task: object,
     session: AsyncSession,
 ) -> None:
+    mock_task.kiq = AsyncMock(return_value=None)  # type: ignore[attr-defined]
     user = await _make_user(session, telegram_id=3101)
-    mock_scan.return_value = {
-        "kind": "playlist",
-        "tracks": [
-            {"title": "A", "artist": "X"},
-            {"title": "B", "artist": "Y"},
-        ],
-    }
 
     svc = ImportService(session)
     job = await svc.scan_external_playlist(
@@ -66,80 +60,24 @@ async def test_scan_external_success(
         "https://music.yandex.ru/users/u/playlists/1",
     )
 
-    assert job.status == "ready"
+    assert job.status == "scanning"
     assert job.source == "yandex_music"
-    assert job.total_tracks == 2
-    assert job.tracks_data is not None
-    assert len(job.tracks_data["tracks"]) == 2
-
-
-@patch(
-    f"{_MOD}.scan_playlist_url",
-    new_callable=AsyncMock,
-)
-async def test_scan_external_private_playlist(
-    mock_scan: AsyncMock,
-    session: AsyncSession,
-) -> None:
-    user = await _make_user(session, telegram_id=3102)
-    mock_scan.side_effect = ProviderError(
-        "private", "playlist is private"
-    )
-
-    svc = ImportService(session)
-    job = await svc.scan_external_playlist(
-        user.id,
+    mock_task.kiq.assert_called_once_with(  # type: ignore[attr-defined]
+        job.id,
         "yandex_music",
         "https://music.yandex.ru/users/u/playlists/1",
     )
 
-    assert job.status == "failed"
-    assert job.tracks_data is not None
-    assert job.tracks_data["error_code"] == "private"
-    assert job.tracks_data["error_message"] == "playlist is private"
-    assert (
-        job.tracks_data["source_url"]
-        == "https://music.yandex.ru/users/u/playlists/1"
-    )
-
 
 @patch(
-    f"{_MOD}.scan_playlist_url",
-    new_callable=AsyncMock,
+    "app.services.external_scan_worker.scan_external_playlist_task",
 )
-async def test_scan_external_unknown_exception_maps_to_unavailable(
-    mock_scan: AsyncMock,
+async def test_scan_external_returns_active_scanning_job(
+    mock_task: object,
     session: AsyncSession,
 ) -> None:
-    user = await _make_user(session, telegram_id=3103)
-    mock_scan.side_effect = RuntimeError("boom")
-
-    svc = ImportService(session)
-    job = await svc.scan_external_playlist(
-        user.id,
-        "yandex_music",
-        "https://music.yandex.ru/album/1",
-    )
-
-    assert job.status == "failed"
-    assert (
-        job.tracks_data["error_code"] == "provider_unavailable"
-    )
-
-
-@patch(
-    f"{_MOD}.scan_playlist_url",
-    new_callable=AsyncMock,
-)
-async def test_scan_external_returns_active_job(
-    mock_scan: AsyncMock,
-    session: AsyncSession,
-) -> None:
+    mock_task.kiq = AsyncMock(return_value=None)  # type: ignore[attr-defined]
     user = await _make_user(session, telegram_id=3104)
-    mock_scan.return_value = {
-        "kind": "playlist",
-        "tracks": [{"title": "A", "artist": "X"}],
-    }
 
     svc = ImportService(session)
     first = await svc.scan_external_playlist(
@@ -154,33 +92,134 @@ async def test_scan_external_returns_active_job(
     )
 
     assert first.id == second.id
-    assert mock_scan.call_count == 1
+    assert mock_task.kiq.call_count == 1  # type: ignore[attr-defined]
 
 
-@patch(
-    f"{_MOD}.scan_playlist_url",
-    new_callable=AsyncMock,
-)
-async def test_scan_external_vk_music_stores_kind(
-    mock_scan: AsyncMock,
+async def _run_worker_task(
+    session: AsyncSession,
+    job_id: int,
+    source: str,
+    url: str,
+    scan_side_effect: object,
+) -> None:
+    """Call scan_external_playlist_task with the test session injected."""
+    from contextlib import asynccontextmanager
+
+    @asynccontextmanager  # type: ignore[arg-type]
+    async def _fake_session_factory() -> object:
+        yield session
+
+    with (
+        patch(
+            "app.services.external_scan_worker.AsyncSessionLocal",
+            _fake_session_factory,
+        ),
+        patch(
+            "app.services.external_scan_worker.scan_playlist_url",
+            new_callable=AsyncMock,
+        ) as mock_scan,
+    ):
+        if isinstance(scan_side_effect, Exception):
+            mock_scan.side_effect = scan_side_effect
+        else:
+            mock_scan.return_value = scan_side_effect
+
+        from app.services.external_scan_worker import (
+            scan_external_playlist_task,
+        )
+
+        await scan_external_playlist_task(job_id, source, url)
+
+
+async def test_scan_external_worker_success(
     session: AsyncSession,
 ) -> None:
-    user = await _make_user(session, telegram_id=3105)
-    mock_scan.return_value = {
-        "kind": "album",
-        "tracks": [{"title": "A", "artist": "X"}],
-    }
+    user = await _make_user(session, telegram_id=3201)
+    job = ImportJob(
+        user_id=user.id,
+        source="yandex_music",
+        status="scanning",
+        tracks_data={"source_url": "https://music.yandex.ru/album/1"},
+    )
+    session.add(job)
+    await session.flush()
+    await session.refresh(job)
 
-    svc = ImportService(session)
-    u = "https://vk.com/music/album/x"
-    job = await svc.scan_external_playlist(
-        user.id,
-        "vk_music",
-        u,
+    await _run_worker_task(
+        session,
+        job.id,
+        "yandex_music",
+        "https://music.yandex.ru/album/1",
+        scan_side_effect={
+            "kind": "album",
+            "tracks": [
+                {"title": "A", "artist": "X"},
+                {"title": "B", "artist": "Y"},
+            ],
+        },
     )
 
+    await session.refresh(job)
     assert job.status == "ready"
-    assert job.source == "vk_music"
+    assert job.total_tracks == 2
     assert job.tracks_data is not None
+    assert len(job.tracks_data["tracks"]) == 2
     assert job.tracks_data["kind"] == "album"
-    assert job.tracks_data["source_url"] == u
+
+
+async def test_scan_external_worker_provider_error(
+    session: AsyncSession,
+) -> None:
+    user = await _make_user(session, telegram_id=3202)
+    url = "https://music.yandex.ru/users/u/playlists/1"
+    job = ImportJob(
+        user_id=user.id,
+        source="yandex_music",
+        status="scanning",
+        tracks_data={"source_url": url},
+    )
+    session.add(job)
+    await session.flush()
+    await session.refresh(job)
+
+    await _run_worker_task(
+        session,
+        job.id,
+        "yandex_music",
+        url,
+        scan_side_effect=ProviderError("private", "playlist is private"),
+    )
+
+    await session.refresh(job)
+    assert job.status == "failed"
+    assert job.tracks_data is not None
+    assert job.tracks_data["error_code"] == "private"
+    assert job.tracks_data["error_message"] == "playlist is private"
+    assert job.tracks_data["source_url"] == url
+
+
+async def test_scan_external_worker_unknown_exception(
+    session: AsyncSession,
+) -> None:
+    user = await _make_user(session, telegram_id=3203)
+    job = ImportJob(
+        user_id=user.id,
+        source="yandex_music",
+        status="scanning",
+        tracks_data={"source_url": "https://music.yandex.ru/album/1"},
+    )
+    session.add(job)
+    await session.flush()
+    await session.refresh(job)
+
+    await _run_worker_task(
+        session,
+        job.id,
+        "yandex_music",
+        "https://music.yandex.ru/album/1",
+        scan_side_effect=RuntimeError("boom"),
+    )
+
+    await session.refresh(job)
+    assert job.status == "failed"
+    assert job.tracks_data["error_code"] == "provider_unavailable"

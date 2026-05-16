@@ -1,5 +1,26 @@
 # DotSound - TODO Tracker
 
+- [x] **Яндекс.Музыка: переход на api.music.yandex.net + прогрессивная загрузка (2026-05-16)**
+  - `DotSoundPrivateCore/services/outbound/profiles.py`: заменён профиль `firefox124` → `edge101`
+    (curl_cffi 0.7.4 не поддерживает firefox), добавлен `resolve_impersonate` + fallback на chrome124.
+  - `DotSoundPrivateCore/services/outbound/backend.py`: retry при `ImpersonateError`, авто-откат к chrome124.
+  - `DotSoundPrivateCore/services/external_playlist_scanner.py`: полная миграция с
+    устаревших `/handlers/*.jsx` (декомиссированы ~март 2025) на `api.music.yandex.net` REST API.
+    Новые функции: `_ym_api_get`, `_ym_api_headers`, `_ym_api_token`, `_ym_api_geo_blocked`,
+    `_scan_yandex_music_album`, `_scan_yandex_music_playlist`. Ошибка 451 (геоблок) возвращает
+    понятный `provider_unavailable` с инструкцией `YANDEX_MUSIC_PROXIES`. Тела ошибок усечены
+    до `_YM_DIAG_BODY_MAX` символов для диагностики. Поддержка `YANDEX_MUSIC_TOKEN` (OAuth).
+  - `DotSoundPrivateCore/.env.example`: обновлены комментарии Яндекс.Музыки.
+  - `DotSoundBackend/app/services/external_scan_worker.py`: новый Taskiq-воркер
+    `scan_external_playlist_task` — выполняет сетевое сканирование в фоне.
+  - `DotSoundBackend/app/services/import_service.py`: `scan_external_playlist` теперь создаёт
+    job(status="scanning") и сразу диспатчит таск, не блокируя HTTP-соединение.
+  - `frontend/src/components/Import/ImportView.tsx`: polling для статуса `"scanning"` —
+    фронт показывает спиннер и опрашивает `GET /import/{id}/status` каждые 2 с до
+    `"ready"` / `"failed"`. Поддержка восстановления сессии (getActiveImport возвращает scanning-job).
+  - Тесты: полностью переписаны YM-тесты в PrivateCore под новый API; добавлены
+    новые тесты воркера (dispatch + success/provider_error/unknown_exc) в Backend.
+
 - [x] **Mini App buffering regression + radio mode reset bug (2026-05-16)**
   - Регрессия после `3120c5a fix(playback): stabilize SoundCloud and progressive
     buffering`: на каждое переключение трека стартовало 2–3 параллельных загрузки
@@ -65,6 +86,125 @@
     публичную схему — пока в `Track` его нет, гейт мягкий).
   - Итог: 23 frontend-теста + 7 backend HLS-тестов зелёные;
     `npx tsc --noEmit` чисто.
+
+- [x] **Mobile track-switch latency: real SW prefetch + iOS user-gesture preserve (2026-05-16)**
+  - Симптом (мобильная версия, особенно iOS Safari / Telegram in-app):
+    при автоматическом переключении трека плеер уходит в paused,
+    нужно нажать Play повторно, спустя ~5 c появляется тост
+    «буферизация» и только потом трек начинает играть. То есть это
+    был сразу двойной баг: (a) автозапуск нового трека блокировался,
+    (b) с момента нажатия до старта была заметная сетевая задержка.
+  - **(a) Сохранили user-gesture chain в `playTrack`.** Удалён
+    блок `audio.pause()` + `audio.src = ''` + `audio.load()`, который
+    делался перед сменой трека. На iOS Safari (и некоторых сборках
+    Android Chromium) эта последовательность ломает «autoplay
+    sentinel» — следующий `play()` отвергается с `NotAllowedError`,
+    которая молча проглатывается в `safePlay` (см. ниже). Достаточно
+    просто присвоить новый `audio.src` — браузер сам корректно
+    отменяет in-flight загрузку. UI-state мы и так обнуляем
+    синхронно через `setIsPlaying(false)` / `setCurrentTime(0)`.
+  - **Fast-path для предзагруженного HLS.** Проверка
+    `preloadHlsRef.current && preloadHlsTrackIdRef.current === newTrack.id`
+    теперь идёт ДО `await loadHlsClass()`. При hot-reuse hls-инстанс
+    реаттачится к основному `<audio>` синхронно, без async-барьера,
+    и `play()` вызывается в том же тике, что и user-gesture. Если
+    preload-нет — фоллбэк на старый медленный путь с динамическим
+    импортом.
+  - **Параллельный prewarm `loadHlsClass()` в `playTrack`.**
+    Запускается fire-and-forget сразу же, как только мы решили,
+    что трек HLS-eligible (`shouldUseInternalHlsPlayback`). Промис
+    `hlsClassPromise` мемоизирован, поэтому к моменту реального
+    `await loadHlsClass()` ниже он уже зарезолвен.
+  - **(b) Реальный SW Cache prefetch следующего трека:** новая
+    `prefetchProgressiveBodyForCache` в `frontend/src/lib/offlineCache.ts`.
+    Делает full-body GET (без Range), сервер отвечает 200 OK,
+    Workbox-роут `progressive-audio-cache` (CacheFirst) кладёт
+    весь файл в Cache API. Тело дренируется через streaming
+    reader, чтобы fetch завершился и Workbox финализировал запись;
+    стрим прерывается при abort. Нужен потому, что нативный
+    `<audio preload='auto'>` шлёт partial-content (206) Range-пробы,
+    а наш SW-фильтр `cacheableResponse: [200]` (включён намеренно,
+    чтобы не плодить «дырявые» entries) исключает 206 — то есть
+    runtime SW-кэш для прогрессивного аудио был эффективно всегда
+    пустой, и каждый track switch упирался в холодный сетевой
+    round-trip.
+  - **Защита трафика:** prefetch скипается при `navigator.connection.saveData`,
+    `effectiveType === '2g' | 'slow-2g'`, треках уже в IDB
+    `offline-tracks-v1`, треках с Content-Length > 12 МБ. AbortController
+    кладётся в `swCachePrefetchAbortRef`, при смене трека
+    `teardownSwCachePrefetch()` отменяет загрузку — пользователь
+    скипает быстро → следующий download не успел добежать до конца
+    → не платит за трафик.
+  - HLS-варианту prefetch не нужен — у него уже есть
+    `preloadHlsRef`, который через автоматический `autoStartLoad`
+    подтягивает первые `.ts`-сегменты, и Workbox-роут
+    `hls-segments-cache` корректно их кэширует (статус 200, не 206).
+  - **Sync-gate для оффлайн-cache lookup в `playTrack`:** заменил
+    безусловный `await getCachedAudioUrl()` на
+    `isCachedSync(trackId) ? await getCachedAudioUrl(...) : null`.
+    `isCachedSync` читает in-memory `cachedIds`-Set, поэтому на
+    радио hot-path исчезает ещё один async-барьер ~10–50 мс между
+    user-gesture и `audio.src = newUrl`.
+  - **Surfaced autoplay-block fallback:** при programmatic advance
+    (`isInjectedAdvance`) после `playTrack` ждём 1.5 c и проверяем
+    `audio.paused && !audio.error`. Если ровно тот же трек висит
+    paused без MediaError, значит браузер тихо отверг autoplay —
+    показываем toast «Нажмите Play, чтобы продолжить
+    воспроизведение». Раньше пользователь молча видел `paused`
+    state без понимания, что делать.
+  - Verify: `npx tsc --noEmit` — чисто; `npx vitest run` — 26/26
+    passed; ESLint по изменённым файлам — чисто.
+
+- [x] **Playback follow-up: has_hls schema, telemetry, SW cache, quality override (2026-05-16)**
+  - `app/schemas/track.py`: `TrackResponse` теперь несёт computed-field
+    `has_hls: bool` (вычисляется из `hls_manifest_key`), сам ключ
+    объявлен `Field(exclude=True)` — публично виден только bool, без
+    утечки CAS/legacy путей. `frontend/src/types/api.ts`: добавлен
+    `has_hls?: boolean`. `playbackSourcePolicy.shouldUseInternalHlsPlayback`
+    теперь жёстко отсекает треки с `has_hls === false` → клиент сразу
+    идёт в progressive вместо `master.m3u8` 404 + fallback round-trip.
+    `tests/app/schemas/test_track.py`: 2 новых unit-теста (manifest set
+    vs missing, hls_manifest_key не серилизуется).
+  - `app/api/v1/signals.py` + `app/schemas/signal.py`: `ClientPlaybackEventRequest`
+    расширен новым event `playback_source_chosen` с полями
+    `chosen_source` (`hls`/`progressive`/`third_party_stream`/`cached`),
+    `tt_canplay_ms`, `effective_type`, `save_data`, `downlink_mbps`.
+    `frontend/src/store/PlayerContext.tsx`: добавлен
+    `recordPlaybackSourceTelemetry` — вешается на `canplay`/`playing`
+    в момент выбора источника, замеряет TT-canplay, отправляет
+    fire-and-forget через `queueOrSend`. Покрыты все четыре пути:
+    cached, internal HLS, progressive, third-party stream.
+    `tests/app/api/v1/test_signals.py`: новый тест на
+    `playback_source_chosen`.
+  - `frontend/vite.config.ts`: бамп лимитов `hls-manifests-cache`
+    (320 entries × 24 ч) и `hls-segments-cache` (600 entries × 7 дней),
+    чтобы длинная радио-сессия укладывалась в SW-кэш и сегменты
+    переигрывались с диска без сети.
+  - **Аудит `playTrack(...)`:** все «опасные» вызовы без
+    `preserveQueue` найдены и закрыты. `playPrev` (history pop +
+    adjacent fallback) теперь сохраняет `manualQueue` пользователя.
+    `togglePlay` в ветке retry после `streamLoadFailed` тоже идёт
+    с `preserveQueue: true`, чтобы повторный нажатый play не сбрасывал
+    радио-сессию. Внутренние пути `playNext` / `_fallbackToCachedTrack` /
+    `applyRadioTimelineBack` остались с `preserveQueue: true`.
+  - `scripts/audit_hls_manifests.py` (новый, read-only): обходит активные
+    публичные internal-stream треки и сверяет `Track.hls_manifest_key`
+    с фактическими S3-объектами через `object_exists`. Также флагает
+    треки с `file_key` но без `hls_manifest_key` (transcode не
+    закончился). Поддерживает `--limit`, `--concurrency`, `--json`.
+    Возвращает `0/1/2` exit code для CI.
+  - `frontend/src/lib/hlsQualityPreference.ts` (новый):
+    persistent user preference (`auto`/`lo`/`hi`) в localStorage,
+    pub/sub через `dotsound:hls-quality` + storage events. Подключён в:
+    `PrefetchManager._pickVariant` (порядок обхода вариантов в
+    зависимости от настройки), `PlayerContext.startHlsPlayback`
+    (`_applyQualityPin` пинит `hls.currentLevel` после
+    `MANIFEST_PARSED` если выбран `lo`/`hi`), и preload-HLS reuse-путь
+    (тоже пинит уровень при reattach). UI: новый пункт «Качество звука»
+    в `SettingsSheet`, picker через `SettingsPickerModal` (auto/эконом/высокое).
+  - Итог: 26 frontend-тестов + 24 backend track-schema + 15
+    signals/HLS зелёные; `npx tsc --noEmit` чисто; `ruff check`
+    чисто; mypy на изменённых файлах не вносит новых ошибок.
 
 - [x] **Artist similar-station: SoundCloudStationNotAvailable + graceful retry (2026-05-16)**
   - `app/services/soundcloud_service.py`: добавлен класс `SoundCloudStationNotAvailable`.
