@@ -74,6 +74,11 @@
     protocols as the HLS protocol family and normalizes the resolved
     stream protocol to `hls`. PrivateCore importability policy also
     counts them as playable.
+  - Frontend follow-up: switched lazy HLS loader from
+    `hls.js/light` to full `hls.js` and enabled HLS EME support on
+    playback startup. The light build explicitly ignores some
+    encrypted `EXT-X-KEY` tags, which can make SoundCloud `/cbcs/...`
+    encrypted-HLS manifests load but never produce audible playback.
   - Backend stream-error UX: `_third_party_error_detail` now
     enriches SC 502/4xx responses with `user_message` (RU)
     derived from the structured `reason`, so the frontend can
