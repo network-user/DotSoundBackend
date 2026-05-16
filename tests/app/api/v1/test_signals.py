@@ -151,6 +151,60 @@ async def test_record_client_playback_event_rejects_unknown_event(
     assert r.status_code == 422
 
 
+async def test_record_client_hls_fatal_event(
+    client: AsyncClient,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    await create_test_user(client, 9006)
+    headers = await auth_headers(client, 9006)
+    observed: list[tuple[str, str]] = []
+    recorded_reasons: list[tuple[str | None, str | None]] = []
+
+    def fake_observed(
+        *,
+        event_name: str,
+        surface: str,
+    ) -> None:
+        observed.append((event_name, surface))
+
+    monkeypatch.setattr(
+        "app.api.v1.signals.client_playback_event_observed",
+        fake_observed,
+    )
+
+    async def fake_record_reason(
+        *,
+        error_code: str | None,
+        error_reason: str | None,
+    ) -> None:
+        recorded_reasons.append((error_code, error_reason))
+
+    monkeypatch.setattr(
+        "app.api.v1.signals.record_radio_auto_skip_reason",
+        fake_record_reason,
+    )
+
+    r = await client.post(
+        "/api/v1/signals/client/playback-event",
+        json={
+            "event_name": "hls_fatal_error",
+            "surface": "player",
+            "current_track_id": 12,
+            "hls_type": "mediaError",
+            "hls_details": "fragLoadError",
+            "hls_status": 403,
+            "hls_fatal": True,
+            "hls_url": "https://cdn.example.test/a.m4s?...",
+        },
+        headers=headers,
+    )
+
+    assert r.status_code == 200
+    assert r.json()["status"] == "ok"
+    assert observed == [("hls_fatal_error", "player")]
+    assert recorded_reasons == []
+
+
 async def test_record_listen_invalid(
     client: AsyncClient,
 ) -> None:

@@ -607,6 +607,60 @@ class TrackRepository(BaseRepository[Track]):
         )
         return list(result.scalars().all())
 
+    async def list_soundcloud_playback_audit_ids(
+        self,
+        *,
+        limit: int,
+        search: str | None = None,
+        include_recently_checked: bool = False,
+    ) -> list[int]:
+        if limit <= 0:
+            return []
+        source_platform = func.lower(
+            func.coalesce(Track.source_platform, "")
+        )
+        soundcloud = (source_platform == "soundcloud") | (
+            Track.sc_url.isnot(None)
+        )
+        needs_attention = (
+            Track.playback_last_checked_at.is_(None)
+            | Track.playback_last_failure_at.isnot(None)
+            | Track.playback_recovery_failed_at.isnot(None)
+            | (
+                Track.playback_suppressed_until.isnot(None)
+                & (Track.playback_suppressed_until > func.now())
+            )
+        )
+        query = select(Track.id).where(
+            Track.is_active.is_(True),
+            Track.is_public.is_(True),
+            Track.deleted_at.is_(None),
+            Track.access_mode == "third_party_stream",
+            soundcloud,
+        )
+        if not include_recently_checked:
+            query = query.where(needs_attention)
+        if search:
+            pattern = f"%{search.strip()}%"
+            query = query.where(
+                Track.title.ilike(pattern) | Track.artist.ilike(pattern)
+            )
+        needs_rank = case((needs_attention, 0), else_=1)
+        checked_rank = case(
+            (Track.playback_last_checked_at.is_(None), 0),
+            else_=1,
+        )
+        result = await self._session.execute(
+            query.order_by(
+                needs_rank.asc(),
+                Track.playback_last_failure_at.desc(),
+                checked_rank.asc(),
+                Track.playback_last_checked_at.asc(),
+                Track.id.asc(),
+            ).limit(limit)
+        )
+        return [int(track_id) for track_id in result.scalars().all()]
+
     async def find_existing_by_normalized_title_artist(
         self,
         pairs: list[tuple[str, str]],

@@ -124,6 +124,8 @@ function _hlsErrorTelemetry(data: HlsErrorData) {
   }
 }
 
+type HlsErrorTelemetry = ReturnType<typeof _hlsErrorTelemetry>
+
 function _hlsErrorMessage(data: HlsErrorData) {
   const telemetry = _hlsErrorTelemetry(data)
   const detail =
@@ -674,6 +676,10 @@ export function PlayerProvider({
   const streamExpiresAtRef = useRef<number | null>(null)
   const lastStreamUrlRef = useRef<string | null>(null)
   const lastTrackIdRef = useRef<number | null>(null)
+  const lastHlsFatalTelemetryRef = useRef<{
+    key: string
+    atMs: number
+  } | null>(null)
   const streamLoadFailedTrackIdRef = useRef<
     number | null
   >(null)
@@ -1102,7 +1108,13 @@ export function PlayerProvider({
           const HlsMod = await loadHlsClass()
           if (HlsMod.isSupported()) {
             srcAssignedAtRef.current = Date.now()
-            startHlsPlayback(audio, hlsUrl, fallback, false)
+            startHlsPlayback(
+              audio,
+              hlsUrl,
+              fallback,
+              false,
+              restoredTrack.id,
+            )
               .then(seekAfterLoad)
               .catch(() => {})
           } else {
@@ -1475,12 +1487,51 @@ export function PlayerProvider({
     [volume],
   )
 
+  const recordHlsFatalTelemetry = useCallback(
+    (
+      trackId: number | null | undefined,
+      telemetry: HlsErrorTelemetry,
+    ) => {
+      const effectiveTrackId = trackId ?? lastTrackIdRef.current
+      const key = [
+        effectiveTrackId ?? 'none',
+        telemetry.type ?? '',
+        telemetry.details ?? '',
+        telemetry.status ?? '',
+        telemetry.url ?? '',
+      ].join('|')
+      const now = Date.now()
+      const last = lastHlsFatalTelemetryRef.current
+      if (last?.key === key && now - last.atMs < 30_000) return
+      lastHlsFatalTelemetryRef.current = { key, atMs: now }
+      void queueOrSend(
+        'client-telemetry',
+        '/api/v1/signals/client/playback-event',
+        {
+          event_name: 'hls_fatal_error',
+          surface: radioModeRef.current ? 'radio' : 'player',
+          current_track_id: effectiveTrackId ?? undefined,
+          hls_type: telemetry.type,
+          hls_details: telemetry.details,
+          hls_reason: telemetry.reason,
+          hls_status: telemetry.status,
+          hls_fatal: telemetry.fatal,
+          hls_message: telemetry.message,
+          hls_url: telemetry.url,
+        },
+        { silent: true },
+      )
+    },
+    [],
+  )
+
   const startHlsPlayback = useCallback(
     async (
       audio: HTMLAudioElement,
       sourceUrl: string,
       fallbackUrl?: string,
       autoplay = true,
+      trackId?: number | null,
     ) => {
       const Hls = await loadHlsClass()
       return new Promise<void>((resolve, reject) => {
@@ -1552,6 +1603,7 @@ export function PlayerProvider({
           }
           const message = _hlsErrorMessage(d)
           console.warn('dotsound:hls_fatal_error', telemetry)
+          recordHlsFatalTelemetry(trackId, telemetry)
           setHlsError(message)
           if (settled) {
             if (fallbackUrl) startFallback()
@@ -1561,7 +1613,7 @@ export function PlayerProvider({
         })
       })
     },
-    [volume],
+    [recordHlsFatalTelemetry, volume],
   )
 
   const rebindThirdPartyStream = useCallback(
@@ -1593,6 +1645,7 @@ export function PlayerProvider({
             stream.url,
             undefined,
             false,
+            tr.id,
           )
           const afterReady = () => {
             if (atSec > 0.25) {
@@ -2164,6 +2217,9 @@ export function PlayerProvider({
           await startHlsPlayback(
             audio,
             stream.url,
+            undefined,
+            true,
+            newTrack.id,
           )
         } else {
           await startDirectPlayback(
@@ -2222,6 +2278,8 @@ export function PlayerProvider({
               audio,
               hlsUrl,
               fallback,
+              true,
+              newTrack.id,
             )
           }
         } else {
@@ -2229,6 +2287,8 @@ export function PlayerProvider({
             audio,
             hlsUrl,
             fallback,
+            true,
+            newTrack.id,
           )
         }
       } else {

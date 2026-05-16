@@ -626,6 +626,28 @@ export function TracksRoute() {
     }
   }
 
+  const handleAuditSoundCloudPlayback = async () => {
+    if (bulkRepairBusy) return
+    const ok = await showConfirm(
+      'Queue SoundCloud playback audit for matching imported tracks?',
+    )
+    if (!ok) return
+    setBulkRepairBusy(true)
+    try {
+      const result = await adminApi.auditSoundCloudPlayback({
+        search: search || undefined,
+        limit: 500,
+        include_recently_checked: false,
+      })
+      await showRepairBulkResult(result)
+      refresh()
+    } catch (err) {
+      await showAlert((err as Error).message)
+    } finally {
+      setBulkRepairBusy(false)
+    }
+  }
+
   const handleClearPlaybackDiagnostics = async (id: number) => {
     setBusyId(id)
     try {
@@ -1469,6 +1491,13 @@ export function TracksRoute() {
           onClick={handleRepairAllPlaybackIssues}
         >
           {t('admin.tracks.repairAllIssuesBtn')}
+        </MotionPress>
+        <MotionPress
+          variant="ghost"
+          disabled={bulkRepairBusy}
+          onClick={handleAuditSoundCloudPlayback}
+        >
+          Audit SC playback
         </MotionPress>
         <MotionPress
           variant="ghost"

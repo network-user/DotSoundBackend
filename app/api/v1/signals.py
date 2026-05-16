@@ -86,10 +86,11 @@ async def record_client_playback_event(
         event_name=body.event_name,
         surface=body.surface,
     )
-    await record_radio_auto_skip_reason(
-        error_code=body.error_code,
-        error_reason=body.error_reason,
-    )
+    if body.event_name == "radio_auto_skip_exhausted":
+        await record_radio_auto_skip_reason(
+            error_code=body.error_code,
+            error_reason=body.error_reason,
+        )
     logger.info(
         "client_playback_event",
         event_name=body.event_name,
@@ -101,5 +102,12 @@ async def record_client_playback_event(
         queue_size=body.queue_size,
         error_code=body.error_code,
         error_reason=body.error_reason,
+        hls_type=body.hls_type,
+        hls_details=body.hls_details,
+        hls_reason=body.hls_reason,
+        hls_status=body.hls_status,
+        hls_fatal=body.hls_fatal,
+        hls_message=body.hls_message,
+        hls_url=body.hls_url,
     )
     return {"status": "ok"}

@@ -87,10 +87,20 @@
     redacted first-lines preview, detects `EXT-X-KEY`/key methods and
     key formats, and surfaces CORS headers for the playlist request.
     The admin modal summarizes ok/encrypted/keyed probe counts.
+  - Admin Tracks now has a SoundCloud playback audit action backed by
+    `POST /api/v1/admin/tracks/playback-health/audit-soundcloud`.
+    It queues the existing playback repair worker for imported
+    SoundCloud rows that are unchecked or already marked unhealthy, so
+    old encrypted-only phantom rows are verified and auto-hidden through
+    the same suppression path as scheduled repair.
   - Frontend HLS startup now waits for actual media readiness/first
     fragment instead of resolving on `MANIFEST_PARSED`; fatal hls.js
     errors are logged with type/details/fatal/reason/status/redacted
     URL and shown through the existing `hlsError` UI.
+  - Client-side fatal HLS errors are now posted to
+    `/api/v1/signals/client/playback-event` as `hls_fatal_error`
+    with redacted URL/status/details, giving production telemetry for
+    browser-side failures that never reach backend stream resolution.
   - Backend stream-error UX: `_third_party_error_detail` now
     enriches SC 502/4xx responses with `user_message` (RU)
     derived from the structured `reason`, so the frontend can

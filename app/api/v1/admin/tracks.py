@@ -25,6 +25,7 @@ from app.schemas.admin_playback import (
     AdminPlaybackRepairBulkResponse,
     AdminPlaybackRepairEnqueueResponse,
     AdminPlaybackVerifyResponse,
+    AdminSoundCloudPlaybackAuditRequest,
 )
 from app.schemas.track import TrackUpdateRequest
 from app.services.admin_lyrics_import_service import (
@@ -371,6 +372,34 @@ async def admin_repair_tracks_playback(
         queued=result.queued,
         skipped=result.skipped,
         missing=result.missing,
+    )
+    return result
+
+
+@router.post(
+    "/tracks/playback-health/audit-soundcloud",
+    response_model=AdminPlaybackRepairBulkResponse,
+    summary="[Admin] Queue playback audit for imported SoundCloud tracks",
+)
+@limiter.limit("5/minute")
+async def admin_audit_soundcloud_playback(
+    request: Request,
+    body: AdminSoundCloudPlaybackAuditRequest,
+    session: AsyncSession = Depends(get_db),
+    admin: User = Depends(require_admin_session),
+) -> AdminPlaybackRepairBulkResponse:
+    service = AdminService(session)
+    result = await service.enqueue_soundcloud_playback_audit(
+        body,
+        actor_id=admin.id,
+    )
+    logger.info(
+        "admin_soundcloud_playback_audit_queued",
+        requested=result.requested,
+        queued=result.queued,
+        skipped=result.skipped,
+        missing=result.missing,
+        include_recently_checked=body.include_recently_checked,
     )
     return result
 

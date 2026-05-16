@@ -57,6 +57,36 @@ async def _create_track(
     return {"id": track.id, "title": track.title}
 
 
+async def _create_soundcloud_track(
+    db_session: AsyncSession,
+    *,
+    title: str,
+    uploader_id: int,
+    checked_at: datetime | None = None,
+) -> Track:
+    slug = title.lower().replace(" ", "-")
+    track = Track(
+        title=title,
+        artist="Artist",
+        uploaded_by_id=uploader_id,
+        is_active=True,
+        is_public=True,
+        source="soundcloud",
+        catalog_type="external_reference",
+        access_mode="third_party_stream",
+        source_platform="soundcloud",
+        processing_status="active",
+        sc_url=f"https://soundcloud.com/test/{slug}",
+        source_url=f"https://soundcloud.com/test/{slug}",
+        canonical_source_url=f"https://soundcloud.com/test/{slug}",
+        playback_last_checked_at=checked_at,
+    )
+    db_session.add(track)
+    await db_session.commit()
+    await db_session.refresh(track)
+    return track
+
+
 async def test_admin_list_tracks(
     client: AsyncClient,
     db_session: AsyncSession,
@@ -456,6 +486,85 @@ async def test_admin_playback_repair_can_be_requeued_after_guard_window(
         ).all()
     ]
     assert len(rows) == 2
+
+
+async def test_admin_audit_soundcloud_playback_queues_unchecked_tracks(
+    client: AsyncClient,
+    db_session: AsyncSession,
+    db_engine: AsyncEngine,
+) -> None:
+    admin = await create_test_user(client, 130010)
+    headers = await admin_bearer_for_user(
+        client, db_session, user_id=admin["id"]
+    )
+    unchecked = await _create_soundcloud_track(
+        db_session,
+        title="Audit One",
+        uploader_id=admin["id"],
+    )
+    await _create_soundcloud_track(
+        db_session,
+        title="Audit Checked",
+        uploader_id=admin["id"],
+        checked_at=datetime.now(UTC),
+    )
+    await _create_track(
+        db_session,
+        title="Audit Internal",
+        uploader_id=admin["id"],
+    )
+    factory: async_sessionmaker[AsyncSession] = async_sessionmaker(
+        db_engine,
+        expire_on_commit=False,
+    )
+
+    async def _slot_open(_key: str, *, ttl_seconds: int) -> bool:
+        return True
+
+    with (
+        patch(
+            "app.services.background_jobs.AsyncSessionLocal",
+            factory,
+        ),
+        patch(
+            "app.services.background_jobs.acquire_idempotency_slot",
+            new=_slot_open,
+        ),
+        patch(
+            "app.services.playback_repair_progress.new_progress_id",
+            return_value="progress-sc-audit",
+        ),
+        patch(
+            "app.services.playback_repair_progress.safe_set_progress",
+            new=AsyncMock(),
+        ),
+        patch(
+            "app.services.playback_repair_worker"
+            ".repair_track_playback_task.kicker",
+            return_value=_PlaybackRepairKicker(),
+        ),
+    ):
+        r = await client.post(
+            "/api/v1/admin/tracks/playback-health/audit-soundcloud",
+            headers=headers,
+            json={"limit": 10},
+        )
+
+    assert r.status_code == 200
+    body = r.json()
+    assert body["requested"] == 1
+    assert body["queued"] == 1
+    assert body["skipped"] == 0
+
+    rows = (
+        await db_session.scalars(
+            select(BackgroundJob).where(
+                BackgroundJob.idempotency_key
+                == f"playback-repair:track:{unchecked.id}"
+            )
+        )
+    ).all()
+    assert len(rows) == 1
 
 
 async def test_admin_toggle_track_visibility(

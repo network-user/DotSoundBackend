@@ -23,6 +23,7 @@ from app.schemas.admin_playback import (
     AdminPlaybackRepairBulkResponse,
     AdminPlaybackRepairEnqueueResponse,
     AdminPlaybackVerifyResponse,
+    AdminSoundCloudPlaybackAuditRequest,
 )
 
 logger: structlog.stdlib.BoundLogger = structlog.get_logger(__name__)
@@ -375,6 +376,33 @@ class AdminService:
                 f"Playback repair queued={queued}, "
                 f"skipped={skipped}, missing={missing}"
             ),
+        )
+
+    async def enqueue_soundcloud_playback_audit(
+        self,
+        body: AdminSoundCloudPlaybackAuditRequest,
+        *,
+        actor_id: int,
+    ) -> AdminPlaybackRepairBulkResponse:
+        from app.repositories.track import TrackRepository
+
+        repo = TrackRepository(self._session)
+        track_ids = await repo.list_soundcloud_playback_audit_ids(
+            limit=body.limit,
+            search=body.search.strip() if body.search else None,
+            include_recently_checked=body.include_recently_checked,
+        )
+        if not track_ids:
+            return AdminPlaybackRepairBulkResponse(
+                requested=0,
+                queued=0,
+                skipped=0,
+                missing=0,
+                detail="No SoundCloud tracks matched playback audit filters",
+            )
+        return await self.enqueue_tracks_playback_repair(
+            track_ids,
+            actor_id=actor_id,
         )
 
     async def clear_track_playback_diagnostics(

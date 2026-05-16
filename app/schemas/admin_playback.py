@@ -29,3 +29,9 @@ class AdminPlaybackRepairBulkResponse(BaseModel):
     job_ids: list[str] = Field(default_factory=list)
     progress_ids: list[str] = Field(default_factory=list)
     detail: str = ""
+
+
+class AdminSoundCloudPlaybackAuditRequest(BaseModel):
+    search: str | None = Field(default=None, max_length=128)
+    limit: int = Field(default=500, ge=1, le=5000)
+    include_recently_checked: bool = False

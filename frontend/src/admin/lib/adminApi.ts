@@ -1048,6 +1048,27 @@ export const adminApi = {
       method: 'POST',
       body: { track_ids: trackIds },
     }),
+  auditSoundCloudPlayback: (params?: {
+    search?: string
+    limit?: number
+    include_recently_checked?: boolean
+  }) =>
+    adminFetch<{
+      requested: number
+      queued: number
+      skipped: number
+      missing: number
+      job_ids: string[]
+      progress_ids: string[]
+      detail: string
+    }>('/tracks/playback-health/audit-soundcloud', {
+      method: 'POST',
+      body: {
+        search: params?.search,
+        limit: params?.limit,
+        include_recently_checked: params?.include_recently_checked,
+      },
+    }),
   clearTrackPlaybackDiagnostics: (trackId: number) =>
     adminFetch<Record<string, unknown>>(
       `/tracks/${trackId}/playback-health/clear-diagnostics`,
