@@ -5,30 +5,20 @@ import { m } from '@/lib/motion'
 import { Icon } from '@/components/Icon/Icon'
 import { MotionPress } from '@/components/ui/MotionPress'
 import { showIsland } from '@/lib/island'
-import { hapticNotification, isTelegram } from '@/lib/telegram'
+import { hapticNotification } from '@/lib/telegram'
 import {
   hasDeferredPrompt,
   isIOS,
   isIOSSafari,
-  isStandalone,
   isMobile,
   subscribePromptChange,
   triggerPwaInstall,
 } from '@/lib/pwaInstall'
 import { InstallGuideModal } from './InstallGuideModal'
-
-const SEEN_KEY = 'pwa-onb-seen'
-const DISMISS_KEY = 'pwa-install-dismissed-at'
-
-export function shouldShowPwaOnboardingModal(): boolean {
-  if (isTelegram()) return false
-  if (isStandalone()) return false
-  try {
-    return !localStorage.getItem(SEEN_KEY)
-  } catch {
-    return false
-  }
-}
+import {
+  PWA_INSTALL_DISMISS_KEY,
+  PWA_ONBOARDING_SEEN_KEY,
+} from './pwaOnboardingVisibility'
 
 interface Props {
   onDismiss: () => void
@@ -46,8 +36,14 @@ export function PwaOnboardingModal({ onDismiss }: Props) {
 
   useEffect(() => {
     try {
-      localStorage.setItem(SEEN_KEY, String(Date.now()))
-      localStorage.setItem(DISMISS_KEY, String(Date.now()))
+      localStorage.setItem(
+        PWA_ONBOARDING_SEEN_KEY,
+        String(Date.now()),
+      )
+      localStorage.setItem(
+        PWA_INSTALL_DISMISS_KEY,
+        String(Date.now()),
+      )
     } catch {
       /* ignore */
     }

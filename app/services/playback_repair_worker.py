@@ -14,16 +14,17 @@ from app.core.tkq import broker
 from app.models.track import Track
 from app.repositories.track import TrackRepository
 from app.services import playback_repair_progress as progress
+from app.services.track_fallback_service import TrackFallbackService
 from app.services.track_playback_health_service import (
     TrackPlaybackHealthService,
 )
-from app.services.track_fallback_service import TrackFallbackService
 
 logger: structlog.stdlib.BoundLogger = structlog.get_logger(__name__)
 
 
 def _is_soundcloud_track(track: Track) -> bool:
-    return track.source_platform == "soundcloud" or bool(track.sc_url)
+    source_platform = (track.source_platform or "").strip().lower()
+    return source_platform == "soundcloud" or bool(track.sc_url)
 
 
 def _http_detail(exc: HTTPException) -> str:
@@ -157,7 +158,10 @@ class TrackPlaybackRepairService:
                     progress_id,
                     stage="unresolved",
                     track_id=track_id,
-                    log_line="refreshed source did not resolve; track suppressed",
+                    log_line=(
+                        "refreshed source did not resolve; "
+                        "track suppressed"
+                    ),
                     result=result,
                 )
                 return result
@@ -189,7 +193,6 @@ class TrackPlaybackRepairService:
             track_id=track_id,
             log_line="clearing playback health marks",
         )
-        await self._clear_health(track)
         await self._clear_health(
             track,
             repair_attempted=repair_attempted,
@@ -245,6 +248,7 @@ class TrackPlaybackRepairService:
         return protocol
 
     async def _try_refresh_soundcloud_source(self, track: Track) -> bool:
+        track_id = track.id
         fallback = TrackFallbackService(self._session, settings)
         try:
             return await fallback.try_refresh_sc_url(track)
@@ -252,7 +256,7 @@ class TrackPlaybackRepairService:
             await self._session.rollback()
             logger.exception(
                 "track_playback_repair_refresh_failed",
-                track_id=track.id,
+                track_id=track_id,
             )
             return False
 

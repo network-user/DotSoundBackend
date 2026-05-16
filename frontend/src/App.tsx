@@ -84,34 +84,13 @@ import {
 import { useOptionalPrefetch } from '@/store/PrefetchContext'
 import { isTelegramMiniApp } from '@/lib/platform'
 import { tg, getInitData } from '@/lib/telegram'
-import { AuthScreen } from '@/components/Auth/AuthScreen'
-import { OnboardingV2 } from '@/components/Onboarding/OnboardingV2'
-import { WelcomeTutorial } from '@/components/Tutorial/WelcomeTutorial'
-import { AuthorView } from '@/components/AuthorView/AuthorView'
 import { BottomNav } from '@/components/BottomNav/BottomNav'
-import { ComplaintModal } from '@/components/ComplaintModal/ComplaintModal'
-import { SettingsSheet } from '@/components/Settings/SettingsSheet'
-import { OauthConnectionsReturn } from '@/components/Settings/OauthConnectionsReturn'
-import { Equalizer } from '@/components/Equalizer/Equalizer'
-import { FullscreenLyrics } from '@/components/FullscreenLyrics/FullscreenLyrics'
 import { PlayerBar } from '@/components/PlayerBar/PlayerBar'
 import { OfflineBanner } from '@/components/ui/OfflineBanner'
-import { ConsentBanner } from '@/components/Legal/ConsentBanner'
 import { DynamicIslandHost } from '@/components/ui/DynamicIsland'
-import { TelegramBrowserHint } from '@/components/TelegramMiniApp/TelegramBrowserHint'
-import { InstallPrompt } from '@/components/PwaInstall/InstallPrompt'
-import {
-  PwaOnboardingModal,
-  shouldShowPwaOnboardingModal,
-} from '@/components/PwaInstall/PwaOnboardingModal'
-import { QueueSheet } from '@/components/QueueSheet/QueueSheet'
-import { BannedScreen } from '@/components/BannedScreen/BannedScreen'
+import { shouldShowPwaOnboardingModal } from '@/components/PwaInstall/pwaOnboardingVisibility'
 import { SystemEventListener } from '@/components/Notifications/SystemEventListener'
-import { ImportActivityBanner } from '@/components/Import/ImportActivityBanner'
-import { TrackCardSheet } from '@/components/TrackCardSheet/TrackCardSheet'
 import { useTrackDeepLink } from '@/hooks/useDeepLink'
-import { HomeView } from '@/views/HomeView'
-import { NotFoundView } from '@/views/NotFoundView'
 import {
   connectWS,
   disconnectWS,
@@ -137,6 +116,101 @@ function lazyWithRetry<T extends ComponentType<any>>(
   )
 }
 
+const AuthScreen = lazyWithRetry(() =>
+  import('@/components/Auth/AuthScreen').then((m) => ({
+    default: m.AuthScreen,
+  })),
+)
+const OnboardingV2 = lazyWithRetry(() =>
+  import('@/components/Onboarding/OnboardingV2').then((m) => ({
+    default: m.OnboardingV2,
+  })),
+)
+const WelcomeTutorial = lazyWithRetry(() =>
+  import('@/components/Tutorial/WelcomeTutorial').then((m) => ({
+    default: m.WelcomeTutorial,
+  })),
+)
+const AuthorView = lazyWithRetry(() =>
+  import('@/components/AuthorView/AuthorView').then((m) => ({
+    default: m.AuthorView,
+  })),
+)
+const ComplaintModal = lazyWithRetry(() =>
+  import('@/components/ComplaintModal/ComplaintModal').then((m) => ({
+    default: m.ComplaintModal,
+  })),
+)
+const SettingsSheet = lazyWithRetry(() =>
+  import('@/components/Settings/SettingsSheet').then((m) => ({
+    default: m.SettingsSheet,
+  })),
+)
+const OauthConnectionsReturn = lazyWithRetry(() =>
+  import('@/components/Settings/OauthConnectionsReturn').then((m) => ({
+    default: m.OauthConnectionsReturn,
+  })),
+)
+const Equalizer = lazyWithRetry(() =>
+  import('@/components/Equalizer/Equalizer').then((m) => ({
+    default: m.Equalizer,
+  })),
+)
+const FullscreenLyrics = lazyWithRetry(() =>
+  import('@/components/FullscreenLyrics/FullscreenLyrics').then((m) => ({
+    default: m.FullscreenLyrics,
+  })),
+)
+const ConsentBanner = lazyWithRetry(() =>
+  import('@/components/Legal/ConsentBanner').then((m) => ({
+    default: m.ConsentBanner,
+  })),
+)
+const TelegramBrowserHint = lazyWithRetry(() =>
+  import('@/components/TelegramMiniApp/TelegramBrowserHint').then((m) => ({
+    default: m.TelegramBrowserHint,
+  })),
+)
+const InstallPrompt = lazyWithRetry(() =>
+  import('@/components/PwaInstall/InstallPrompt').then((m) => ({
+    default: m.InstallPrompt,
+  })),
+)
+const PwaOnboardingModal = lazyWithRetry(() =>
+  import('@/components/PwaInstall/PwaOnboardingModal').then((m) => ({
+    default: m.PwaOnboardingModal,
+  })),
+)
+const QueueSheet = lazyWithRetry(() =>
+  import('@/components/QueueSheet/QueueSheet').then((m) => ({
+    default: m.QueueSheet,
+  })),
+)
+const BannedScreen = lazyWithRetry(() =>
+  import('@/components/BannedScreen/BannedScreen').then((m) => ({
+    default: m.BannedScreen,
+  })),
+)
+const ImportActivityBanner = lazyWithRetry(() =>
+  import('@/components/Import/ImportActivityBanner').then((m) => ({
+    default: m.ImportActivityBanner,
+  })),
+)
+const TrackCardSheet = lazyWithRetry(() =>
+  import('@/components/TrackCardSheet/TrackCardSheet').then((m) => ({
+    default: m.TrackCardSheet,
+  })),
+)
+const HomeView = lazyWithRetry(() =>
+  import('@/views/HomeView').then((m) => ({
+    default: m.HomeView,
+  })),
+)
+const NotFoundView = lazyWithRetry(() =>
+  import('@/views/NotFoundView').then((m) => ({
+    default: m.NotFoundView,
+  })),
+)
 const SearchView = lazyWithRetry(() => import('@/views/SearchView').then(m => ({ default: m.SearchView })))
 const UploadView = lazyWithRetry(() => import('@/views/UploadView').then(m => ({ default: m.UploadView })))
 const TrackEditView = lazyWithRetry(() => import('@/views/TrackEditView').then(m => ({ default: m.TrackEditView })))
@@ -677,16 +751,18 @@ export function App() {
 
   if (bannedReason) {
     return (
-      <BannedScreen
-        reason={bannedReason}
-        onContact={() => {
-          window.open(
-            'mailto:support@dotsound.app',
-            '_blank',
-          )
-        }}
-        onLogout={handleLogout}
-      />
+      <Suspense fallback={<div className="loader" />}>
+        <BannedScreen
+          reason={bannedReason}
+          onContact={() => {
+            window.open(
+              'mailto:support@dotsound.app',
+              '_blank',
+            )
+          }}
+          onLogout={handleLogout}
+        />
+      </Suspense>
     )
   }
 
@@ -714,82 +790,88 @@ export function App() {
 
   if (needsAuth) {
     return (
-      <AuthScreen
-        onAuth={() => {
-          setAuthError(null)
-          setNeedsAuth(false)
-          markAuthSuccess()
-          trackActivationEvent('auth_success', {
-            once: true,
-            meta: { via: 'auth_screen' },
-          })
-          reloadLikes()
-          void fetchAndApplyAdminPath().finally(() => {
-            try {
-              window.dispatchEvent(
-                new Event('app-auth-ready'),
-              )
-            } catch {
-              /* ignore */
-            }
-          })
-        }}
-        error={authError}
-        debugInfo={authDebug}
-      />
+      <Suspense fallback={<div className="loader" />}>
+        <AuthScreen
+          onAuth={() => {
+            setAuthError(null)
+            setNeedsAuth(false)
+            markAuthSuccess()
+            trackActivationEvent('auth_success', {
+              once: true,
+              meta: { via: 'auth_screen' },
+            })
+            reloadLikes()
+            void fetchAndApplyAdminPath().finally(() => {
+              try {
+                window.dispatchEvent(
+                  new Event('app-auth-ready'),
+                )
+              } catch {
+                /* ignore */
+              }
+            })
+          }}
+          error={authError}
+          debugInfo={authDebug}
+        />
+      </Suspense>
     )
   }
 
   if (needsOnboarding) {
     return (
-      <OnboardingV2
-        onComplete={() => {
-          setNeedsOnboarding(false)
-          reloadLikes()
-          if (shouldShowPwaOnboardingModal()) {
-            setShowPwaModal(true)
-          }
-          let pendingImport = false
-          try {
-            pendingImport =
-              window.localStorage.getItem(
-                'ds_pending_import_open',
-              ) === '1'
-          } catch {
-            /* ignore */
-          }
-          if (pendingImport) {
-            // Open the import flow immediately. The welcome
-            // tutorial is deferred until the user navigates
-            // away from the import screen so the import flow
-            // isn't blocked by an overlay.
+      <Suspense fallback={<div className="loader" />}>
+        <OnboardingV2
+          onComplete={() => {
+            setNeedsOnboarding(false)
+            reloadLikes()
+            if (shouldShowPwaOnboardingModal()) {
+              setShowPwaModal(true)
+            }
+            let pendingImport = false
             try {
-              window.localStorage.removeItem(
-                'ds_pending_import_open',
-              )
-              window.localStorage.setItem(
-                'ds_pending_tutorial',
-                '1',
-              )
+              pendingImport =
+                window.localStorage.getItem(
+                  'ds_pending_import_open',
+                ) === '1'
             } catch {
               /* ignore */
             }
-            navigate('/profile?import=1')
-          } else {
-            setNeedsTutorial(true)
-          }
-        }}
-      />
+            if (pendingImport) {
+              // Open the import flow immediately. The welcome
+              // tutorial is deferred until the user navigates
+              // away from the import screen so the import flow
+              // isn't blocked by an overlay.
+              try {
+                window.localStorage.removeItem(
+                  'ds_pending_import_open',
+                )
+                window.localStorage.setItem(
+                  'ds_pending_tutorial',
+                  '1',
+                )
+              } catch {
+                /* ignore */
+              }
+              navigate('/profile?import=1')
+            } else {
+              setNeedsTutorial(true)
+            }
+          }}
+        />
+      </Suspense>
     )
   }
 
   if (needsTutorial) {
     return (
-      <WelcomeTutorial
-        onComplete={() => {
-          setNeedsTutorial(false)
-        }}
-      />
+      <Suspense fallback={<div className="loader" />}>
+        <WelcomeTutorial
+          onComplete={() => {
+            setNeedsTutorial(false)
+          }}
+        />
+      </Suspense>
     )
   }
 
@@ -797,10 +879,12 @@ export function App() {
     <div id="app">
       <DynamicIslandHost />
       <OfflineBanner />
-      {!needsOnboarding && !needsAuth && !needsTutorial && (
-        <ConsentBanner />
-      )}
-      {!needsOnboarding && !needsAuth && <ImportActivityBanner />}
+      <Suspense fallback={null}>
+        {!needsOnboarding && !needsAuth && !needsTutorial && (
+          <ConsentBanner />
+        )}
+        {!needsOnboarding && !needsAuth && <ImportActivityBanner />}
+      </Suspense>
       <main id="main">
         <ErrorBoundary>
         <Suspense fallback={<RouteFallback />}>
@@ -928,38 +1012,40 @@ export function App() {
         </ErrorBoundary>
       </main>
       <PlayerBar />
-      <FullscreenLyrics />
-      <Equalizer />
-      <QueueSheet />
-      <InstallPrompt />
-      <TelegramBrowserHint />
-      {showPwaModal && (
-        <PwaOnboardingModal
-          onDismiss={() => setShowPwaModal(false)}
-        />
-      )}
       <SystemEventListener />
-      <ErrorBoundary fallback={null}>
-        <SettingsSheet
-          open={settingsOpen}
-          onClose={() => setSettingsOpen(false)}
-          onLogout={handleLogout}
+      <Suspense fallback={null}>
+        <FullscreenLyrics />
+        <Equalizer />
+        <QueueSheet />
+        <InstallPrompt />
+        <TelegramBrowserHint />
+        {showPwaModal && (
+          <PwaOnboardingModal
+            onDismiss={() => setShowPwaModal(false)}
+          />
+        )}
+        <ErrorBoundary fallback={null}>
+          <SettingsSheet
+            open={settingsOpen}
+            onClose={() => setSettingsOpen(false)}
+            onLogout={handleLogout}
+          />
+        </ErrorBoundary>
+        <ComplaintModal />
+        <TrackCardSheet
+          onOpenArtist={async (name) => {
+            const res =
+              await api.resolveArtistByName(name)
+            if (res) navigate(`/artist/${res.id}`)
+          }}
         />
-      </ErrorBoundary>
-      <ComplaintModal />
-      <TrackCardSheet
-        onOpenArtist={async (name) => {
-          const res =
-            await api.resolveArtistByName(name)
-          if (res) navigate(`/artist/${res.id}`)
-        }}
-      />
-      {authorId !== null && (
-        <AuthorView
-          authorId={authorId}
-          onClose={handleCloseAuthor}
-        />
-      )}
+        {authorId !== null && (
+          <AuthorView
+            authorId={authorId}
+            onClose={handleCloseAuthor}
+          />
+        )}
+      </Suspense>
       <BottomNav />
     </div>
   )

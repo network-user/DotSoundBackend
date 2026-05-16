@@ -33,6 +33,7 @@ from taskiq import (
 
 from app.core.db import AsyncSessionLocal
 from app.models.background_job import BackgroundJob
+from app.services.cancellation import is_cancelled
 
 logger: structlog.stdlib.BoundLogger = structlog.get_logger(__name__)
 
@@ -96,6 +97,14 @@ class BackgroundJobLifecycleMiddleware(TaskiqMiddleware):
                 row = await session.get(BackgroundJob, job_id)
                 if row is None:
                     return message
+                if row.status in ("cancelled", "cancelling") or (
+                    await is_cancelled(job_id)
+                ):
+                    row.status = "cancelled"
+                    row.finished_at = datetime.now(UTC)
+                    row.error = row.error or "cancelled_before_start"
+                    await session.commit()
+                    return message
                 row.status = "running"
                 row.started_at = datetime.now(UTC)
                 row.attempts = (row.attempts or 0) + 1
@@ -123,6 +132,12 @@ class BackgroundJobLifecycleMiddleware(TaskiqMiddleware):
                 if row is None:
                     return
                 now = datetime.now(UTC)
+                if row.status in ("cancelled", "cancelling"):
+                    row.status = "cancelled"
+                    row.finished_at = now
+                    row.error = row.error or "cancelled_by_admin"
+                    await session.commit()
+                    return
                 row.status = "done"
                 row.finished_at = now
                 if row.started_at is not None:
@@ -158,6 +173,12 @@ class BackgroundJobLifecycleMiddleware(TaskiqMiddleware):
             async with AsyncSessionLocal() as session:
                 row = await session.get(BackgroundJob, job_id)
                 if row is None:
+                    return
+                if row.status in ("cancelled", "cancelling"):
+                    row.status = "cancelled"
+                    row.finished_at = datetime.now(UTC)
+                    row.error = row.error or "cancelled_by_admin"
+                    await session.commit()
                     return
                 attempts = row.attempts or 0
                 effective_max = row.max_attempts or max_attempts

@@ -45,6 +45,8 @@ interface TrackRow {
   playback_last_attempted_protocols?: string[]
   playback_recovery_failed_at?: string | null
   playback_suppressed_until?: string | null
+  playback_last_checked_at?: string | null
+  playback_last_repair_attempt_at?: string | null
 }
 
 interface ContextState {
@@ -881,6 +883,20 @@ export function TracksRoute() {
             ).toLocaleDateString()}`,
           )
         }
+        if (r.playback_last_checked_at) {
+          parts.push(
+            `checked ${new Date(
+              r.playback_last_checked_at,
+            ).toLocaleString()}`,
+          )
+        }
+        if (r.playback_last_repair_attempt_at) {
+          parts.push(
+            `repair ${new Date(
+              r.playback_last_repair_attempt_at,
+            ).toLocaleString()}`,
+          )
+        }
         if (diagnostics.length > 0) {
           parts.push(diagnostics.join(' / '))
         }
@@ -920,7 +936,9 @@ export function TracksRoute() {
         const pbRow =
           listView !== 'all' ||
           !!i.row.original.playback_last_failure_at ||
-          !!i.row.original.playback_suppressed_until
+          !!i.row.original.playback_suppressed_until ||
+          !!i.row.original.playback_last_checked_at ||
+          !!i.row.original.playback_last_repair_attempt_at
         return (
           <div
             style={{

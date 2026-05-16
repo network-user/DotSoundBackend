@@ -35,6 +35,7 @@ import {
   coverProxyUrl,
   type CoverRenderWidth,
 } from '@/lib/coverProxy'
+import '@/styles/redesign-home.css'
 import type {
   FollowedArtistItem,
   GenreMixItem,

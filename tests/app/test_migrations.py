@@ -1,6 +1,7 @@
 import pytest
 from sqlalchemy import inspect
-from sqlalchemy.ext.asyncio import create_async_engine
+from sqlalchemy.engine import Connection
+from sqlalchemy.ext.asyncio import AsyncEngine, create_async_engine
 
 import app.models  # noqa: F401
 from app.models.base import Base
@@ -38,28 +39,28 @@ _EXPECTED_TABLES = {
 }
 
 
-async def _create_engine_with_tables():
+async def _create_engine_with_tables() -> AsyncEngine:
     engine = create_async_engine(_TEST_DB_URL)
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
     return engine
 
 
-async def _get_table_names(engine) -> list[str]:
+async def _get_table_names(engine: AsyncEngine) -> list[str]:
     async with engine.connect() as conn:
 
-        def _inspect(connection):
+        def _inspect(connection: Connection) -> list[str]:
             return inspect(connection).get_table_names()
 
         return await conn.run_sync(_inspect)
 
 
 async def _get_columns(
-    engine, table: str
+    engine: AsyncEngine, table: str
 ) -> list[str]:
     async with engine.connect() as conn:
 
-        def _inspect(connection):
+        def _inspect(connection: Connection) -> list[str]:
             return [
                 c["name"]
                 for c in inspect(connection).get_columns(
@@ -103,6 +104,8 @@ async def test_track_table_has_key_columns() -> None:
         "uploaded_by_id",
         "processing_status",
         "is_public",
+        "playback_last_checked_at",
+        "playback_last_repair_attempt_at",
     ):
         assert col in columns, f"Missing column: {col}"
     await engine.dispose()

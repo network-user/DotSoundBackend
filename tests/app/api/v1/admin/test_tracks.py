@@ -113,6 +113,8 @@ async def test_admin_playback_unavailable_includes_diagnostics(
             playback_last_failure_at=now,
             playback_last_http_status=502,
             playback_last_failure_source="server_recovery_exhausted",
+            playback_last_checked_at=now,
+            playback_last_repair_attempt_at=now,
         )
     )
     db_session.add(
@@ -147,6 +149,8 @@ async def test_admin_playback_unavailable_includes_diagnostics(
         "progressive",
         "hls",
     ]
+    assert row["playback_last_checked_at"] is not None
+    assert row["playback_last_repair_attempt_at"] is not None
 
 
 async def test_admin_playback_unavailable_filters_latest_diagnostic(

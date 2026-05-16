@@ -22,16 +22,8 @@ import './styles/components.css'
 import './styles/redesign-shared.css'
 import './styles/redesign-player.css'
 import './styles/redesign-nav.css'
-import './styles/redesign-home.css'
 import './styles/redesign-library.css'
 import './styles/redesign-tracks.css'
-import './styles/redesign-artist.css'
-import './styles/redesign-recap.css'
-import './styles/redesign-upload.css'
-import './styles/redesign-track-edit.css'
-import './styles/redesign-profile.css'
-import './styles/onboarding.css'
-import './styles/legal.css'
 
 installGlassPerformanceClass()
 installViewportListener()

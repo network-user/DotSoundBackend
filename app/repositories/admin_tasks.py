@@ -11,6 +11,8 @@ from app.models.lyrics_job import LyricsJob
 from app.models.scheduled_job import ScheduledJob
 from app.models.worker_audit import WorkerAuditLog
 
+_ACTIVE_BACKGROUND_JOB_STATUSES = ("queued", "running", "cancelling")
+
 
 class AdminTasksRepository:
     def __init__(self, session: AsyncSession) -> None:
@@ -160,7 +162,14 @@ class AdminTasksRepository:
         if queue:
             base = base.where(BackgroundJob.queue == queue)
             count_q = count_q.where(BackgroundJob.queue == queue)
-        if status:
+        if status == "active":
+            base = base.where(
+                BackgroundJob.status.in_(_ACTIVE_BACKGROUND_JOB_STATUSES)
+            )
+            count_q = count_q.where(
+                BackgroundJob.status.in_(_ACTIVE_BACKGROUND_JOB_STATUSES)
+            )
+        elif status:
             base = base.where(BackgroundJob.status == status)
             count_q = count_q.where(BackgroundJob.status == status)
         if scheduled_job_id:
@@ -181,6 +190,48 @@ class AdminTasksRepository:
 
     async def get_background_job(self, job_id: str) -> BackgroundJob | None:
         return await self._session.get(BackgroundJob, job_id)
+
+    async def list_active_background_jobs(
+        self,
+        *,
+        limit: int = 20,
+    ) -> list[BackgroundJob]:
+        result = await self._session.execute(
+            select(BackgroundJob)
+            .where(BackgroundJob.status.in_(_ACTIVE_BACKGROUND_JOB_STATUSES))
+            .order_by(desc(BackgroundJob.created_at))
+            .limit(limit)
+        )
+        return list(result.scalars().all())
+
+    async def list_cancellable_background_jobs(
+        self,
+        *,
+        name: str | None = None,
+        queue: str | None = None,
+        status: str | None = None,
+        scheduled_job_id: str | None = None,
+        limit: int = 5000,
+    ) -> list[BackgroundJob]:
+        if status and status not in _ACTIVE_BACKGROUND_JOB_STATUSES:
+            return []
+        query = select(BackgroundJob).where(
+            BackgroundJob.status.in_(
+                (status,) if status else _ACTIVE_BACKGROUND_JOB_STATUSES
+            )
+        )
+        if name:
+            query = query.where(BackgroundJob.name.ilike(f"%{name}%"))
+        if queue:
+            query = query.where(BackgroundJob.queue == queue)
+        if scheduled_job_id:
+            query = query.where(
+                BackgroundJob.scheduled_job_id == scheduled_job_id
+            )
+        result = await self._session.execute(
+            query.order_by(desc(BackgroundJob.created_at)).limit(limit)
+        )
+        return list(result.scalars().all())
 
     async def list_all_schedules(self) -> list[ScheduledJob]:
         rows = (
