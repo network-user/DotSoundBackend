@@ -333,6 +333,8 @@ class OnboardingService:
 
             result = await self._session.execute(q)
             for track in result.scalars().all():
+                if not self._is_swipe_playable_track(track):
+                    continue
                 candidates.append(track)
                 seen.add(track.id)
 
@@ -349,6 +351,8 @@ class OnboardingService:
             )
             for track in fallback.scalars().all():
                 if track.id in seen:
+                    continue
+                if not self._is_swipe_playable_track(track):
                     continue
                 candidates.append(track)
                 seen.add(track.id)

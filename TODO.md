@@ -52,6 +52,9 @@
     ASR/generic claim на время backend rate-limit; compute in-flight lease cap
     приведён к `WORKER_COMPUTE_CONCURRENCY_LIMIT`, чтобы worker не набирал
     пачку быстрых jobs в ожидании per-type semaphore.
+  - ComputeWorker hotfix: `soundcloud_rpc` при пустом proxy-config теперь
+    ходит напрямую с egress IP устройства через обычный HTTP-клиент; PrivateCore
+    `OutboundClient` используется только когда задан proxy для job type/default.
 
 - [x] **Playback buffering / fast seek overhaul (2026-05-16)**
   - Симптом: первое воспроизведение и переключение трека «висели» 20–30 c,

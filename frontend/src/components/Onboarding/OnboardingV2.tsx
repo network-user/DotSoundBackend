@@ -321,6 +321,7 @@ export function OnboardingV2({ onComplete }: Props) {
 
   const handleArtistsSubmit = async () => {
     if (saving) return
+    audio.prime()
     setSaving(true)
     try {
       await api.saveOnboardingPreferences({
@@ -801,6 +802,7 @@ export function OnboardingV2({ onComplete }: Props) {
         ref={audio.audioRef}
         preload="auto"
         playsInline
+        crossOrigin="anonymous"
         aria-hidden
         tabIndex={-1}
         className="onb-v2-hidden-audio"

@@ -1023,9 +1023,28 @@ export function PlayerProvider({
     setEqBypassed(false)
   }, [])
 
+  const resumeAudioOutput = useCallback(() => {
+    const ctx = audioCtxRef.current
+    if (ctx && ctx.state === 'suspended') {
+      void ctx.resume()
+    }
+  }, [])
+
+  const requestPlayback = useCallback(
+    (
+      audio: HTMLAudioElement,
+      opts?: Parameters<typeof safePlay>[1],
+    ) => {
+      resumeAudioOutput()
+      return safePlay(audio, opts)
+    },
+    [resumeAudioOutput],
+  )
+
   const _initAudioCtx = useCallback(() => {
     const audio = audioRef.current
     if (!audio || audioCtxRef.current) return
+    audio.crossOrigin = 'anonymous'
     const perfLite =
       typeof document !== 'undefined' &&
       document.body.classList.contains('ds-perf-lite')
@@ -1634,9 +1653,9 @@ export function PlayerProvider({
       srcAssignedAtRef.current = Date.now()
       audio.src = url
       audio.volume = volume
-      await safePlay(audio)
+      await requestPlayback(audio)
     },
-    [volume],
+    [requestPlayback, volume],
   )
 
   const recordPlaybackSourceTelemetry = useCallback(
@@ -1803,7 +1822,7 @@ export function PlayerProvider({
           cleanupReady()
           setHlsError(null)
           audio.volume = volume
-          if (autoplay) void safePlay(audio)
+          if (autoplay) void requestPlayback(audio)
           resolve()
         }
         const cleanupReady = () => {
@@ -1859,7 +1878,7 @@ export function PlayerProvider({
           }
           audio.src = fallbackUrl || ''
           audio.volume = volume
-          if (autoplay) void safePlay(audio)
+          if (autoplay) void requestPlayback(audio)
         }
         const failBeforeReady = (message: string) => {
           if (settled) return
@@ -1929,7 +1948,7 @@ export function PlayerProvider({
         })
       })
     },
-    [recordHlsFatalTelemetry, volume],
+    [recordHlsFatalTelemetry, requestPlayback, volume],
   )
 
   const rebindThirdPartyStream = useCallback(
@@ -1971,7 +1990,7 @@ export function PlayerProvider({
                 /* */
               }
             }
-            void safePlay(audio)
+            void requestPlayback(audio)
           }
           if (audio.readyState >= 2) {
             afterReady()
@@ -1994,7 +2013,7 @@ export function PlayerProvider({
             /* */
           }
         }
-        void safePlay(audio)
+        void requestPlayback(audio)
       }
       if (audio.readyState >= 2) {
         onReady()
@@ -2004,7 +2023,7 @@ export function PlayerProvider({
         })
       }
     },
-    [startHlsPlayback, volume],
+    [requestPlayback, startHlsPlayback, volume],
   )
 
   useEffect(() => {
@@ -2093,7 +2112,7 @@ export function PlayerProvider({
       const audio = audioRef.current
       if (repeatModeRef.current === 'one' && audio) {
         audio.currentTime = 0
-        void safePlay(audio)
+        void requestPlayback(audio)
         return
       }
       const doNext = () => {
@@ -2106,7 +2125,7 @@ export function PlayerProvider({
           ) {
             const cur = audioRef.current
             cur.currentTime = 0
-            void safePlay(cur)
+            void requestPlayback(cur)
           }
         })
       }
@@ -2178,7 +2197,7 @@ export function PlayerProvider({
                 const t = a.currentTime
                 a.src = stream.url
                 a.currentTime = t
-                void safePlay(a)
+                void requestPlayback(a)
                 streamExpiresAtRef.current =
                   stream.expires_in
                     ? Date.now() +
@@ -2306,6 +2325,7 @@ export function PlayerProvider({
     }
   }, [
     track,
+    requestPlayback,
     rebindThirdPartyStream,
     isSoundCloudUnavailableError,
     isSoundCloudUnavailableTrack,
@@ -2329,8 +2349,8 @@ export function PlayerProvider({
       ).catch(() => {})
       return
     }
-    void safePlay(a)
-  }, [isCardOpen, track, rebindThirdPartyStream])
+    void requestPlayback(a)
+  }, [isCardOpen, requestPlayback, track, rebindThirdPartyStream])
 
   const playTrack = async (
     newTrack: Track,
@@ -2684,7 +2704,7 @@ export function PlayerProvider({
                 }
               }
             }
-            void safePlay(audio)
+            void requestPlayback(audio)
             hlsRef.current = preloaded
             preloadHlsRef.current = null
             preloadHlsTrackIdRef.current = null
@@ -3359,7 +3379,7 @@ export function PlayerProvider({
         void playTrack(track, { preserveQueue: true })
         return
       }
-      void safePlay(a, {
+      void requestPlayback(a, {
         onNotAllowed: () =>
           showIsland({
             kind: 'error',
@@ -3811,7 +3831,11 @@ export function PlayerProvider({
           <PlayerTimeCtx.Provider value={timeValue}>
             <PlayerActionsCtx.Provider value={actionsValue}>
               <PlayerMetaCtx.Provider value={metaValue}>
-                <audio ref={audioRef} preload="none" />
+                <audio
+                  ref={audioRef}
+                  preload="none"
+                  crossOrigin="anonymous"
+                />
                 {children}
               </PlayerMetaCtx.Provider>
             </PlayerActionsCtx.Provider>
