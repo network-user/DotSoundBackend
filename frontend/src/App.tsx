@@ -103,6 +103,7 @@ import {
   setAdminRuntimeConfig,
 } from '@/lib/adminPath'
 import { useLikes } from '@/store/LikesContext'
+import { usePlayerMeta } from '@/store/PlayerContext'
 import { useUploadQueueAutoResume } from '@/lib/uploadQueueAutoResume'
 
 function lazyWithRetry<T extends ComponentType<any>>(
@@ -286,6 +287,103 @@ function AnimatedRoutes({
 
   return (
     <Routes location={displayed}>{children}</Routes>
+  )
+}
+
+function useDeferredRender(
+  active: boolean,
+  delayMs = 260,
+) {
+  const [render, setRender] = useState(active)
+
+  useEffect(() => {
+    if (active) {
+      setRender(true)
+      return
+    }
+    const timer = window.setTimeout(
+      () => setRender(false),
+      delayMs,
+    )
+    return () => window.clearTimeout(timer)
+  }, [active, delayMs])
+
+  return render
+}
+
+interface LazyOverlaysProps {
+  settingsOpen: boolean
+  onCloseSettings: () => void
+  onLogout: () => void
+  showPwaModal: boolean
+  onDismissPwa: () => void
+  authorId: number | null
+  onCloseAuthor: () => void
+  onOpenTrackArtist: (name: string) => Promise<void>
+}
+
+function LazyOverlays({
+  settingsOpen,
+  onCloseSettings,
+  onLogout,
+  showPwaModal,
+  onDismissPwa,
+  authorId,
+  onCloseAuthor,
+  onOpenTrackArtist,
+}: LazyOverlaysProps) {
+  const {
+    track,
+    isLyricsOpen,
+    isEqOpen,
+    isQueueOpen,
+    isComplaintOpen,
+    isCardOpen,
+  } = usePlayerMeta()
+
+  const renderLyrics = useDeferredRender(
+    Boolean(track && isLyricsOpen),
+  )
+  const renderEq = useDeferredRender(isEqOpen)
+  const renderQueue = useDeferredRender(isQueueOpen)
+  const renderComplaint = useDeferredRender(
+    Boolean(track && isComplaintOpen),
+  )
+  const renderTrackCard = useDeferredRender(
+    Boolean(track && isCardOpen),
+  )
+  const renderSettings = useDeferredRender(settingsOpen)
+
+  return (
+    <Suspense fallback={null}>
+      {renderLyrics && <FullscreenLyrics />}
+      {renderEq && <Equalizer />}
+      {renderQueue && <QueueSheet />}
+      <InstallPrompt />
+      <TelegramBrowserHint />
+      {showPwaModal && (
+        <PwaOnboardingModal onDismiss={onDismissPwa} />
+      )}
+      {renderSettings && (
+        <ErrorBoundary fallback={null}>
+          <SettingsSheet
+            open={settingsOpen}
+            onClose={onCloseSettings}
+            onLogout={onLogout}
+          />
+        </ErrorBoundary>
+      )}
+      {renderComplaint && <ComplaintModal />}
+      {renderTrackCard && (
+        <TrackCardSheet onOpenArtist={onOpenTrackArtist} />
+      )}
+      {authorId !== null && (
+        <AuthorView
+          authorId={authorId}
+          onClose={onCloseAuthor}
+        />
+      )}
+    </Suspense>
   )
 }
 
@@ -1013,39 +1111,19 @@ export function App() {
       </main>
       <PlayerBar />
       <SystemEventListener />
-      <Suspense fallback={null}>
-        <FullscreenLyrics />
-        <Equalizer />
-        <QueueSheet />
-        <InstallPrompt />
-        <TelegramBrowserHint />
-        {showPwaModal && (
-          <PwaOnboardingModal
-            onDismiss={() => setShowPwaModal(false)}
-          />
-        )}
-        <ErrorBoundary fallback={null}>
-          <SettingsSheet
-            open={settingsOpen}
-            onClose={() => setSettingsOpen(false)}
-            onLogout={handleLogout}
-          />
-        </ErrorBoundary>
-        <ComplaintModal />
-        <TrackCardSheet
-          onOpenArtist={async (name) => {
-            const res =
-              await api.resolveArtistByName(name)
-            if (res) navigate(`/artist/${res.id}`)
-          }}
-        />
-        {authorId !== null && (
-          <AuthorView
-            authorId={authorId}
-            onClose={handleCloseAuthor}
-          />
-        )}
-      </Suspense>
+      <LazyOverlays
+        settingsOpen={settingsOpen}
+        onCloseSettings={() => setSettingsOpen(false)}
+        onLogout={handleLogout}
+        showPwaModal={showPwaModal}
+        onDismissPwa={() => setShowPwaModal(false)}
+        authorId={authorId}
+        onCloseAuthor={handleCloseAuthor}
+        onOpenTrackArtist={async (name) => {
+          const res = await api.resolveArtistByName(name)
+          if (res) navigate(`/artist/${res.id}`)
+        }}
+      />
       <BottomNav />
     </div>
   )

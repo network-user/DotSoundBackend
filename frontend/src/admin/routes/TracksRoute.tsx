@@ -20,6 +20,7 @@ import { LineChart } from '../components/charts/LineChart'
 import { OverflowMenu } from '../components/widgets/OverflowMenu'
 import { FormModal } from '../components/widgets/FormModal'
 import { BulkPageSelector } from '../components/widgets/BulkPageSelector'
+import { PlaybackRepairSummaryPanel } from '../components/widgets/PlaybackRepairSummaryPanel'
 
 interface TrackRow {
   id: number
@@ -123,6 +124,13 @@ type PlaybackRepairBulkResult = Awaited<
   ReturnType<typeof adminApi.repairTracksPlayback>
 >
 
+interface PlaybackRepairRunState {
+  jobIds: string[]
+  requested: number
+  queued: number
+  startedAt: string
+}
+
 function modalsReducer(
   state: ModalsState,
   action: ModalsAction,
@@ -146,6 +154,8 @@ export function TracksRoute() {
   const [playingId, setPlayingId] = useState<number | null>(null)
   const [busyId, setBusyId] = useState<number | null>(null)
   const [bulkRepairBusy, setBulkRepairBusy] = useState(false)
+  const [playbackRepairRun, setPlaybackRepairRun] =
+    useState<PlaybackRepairRunState | null>(null)
   const [statsPeriod, setStatsPeriod] = useState<
     'today' | '7d' | '30d' | 'all'
   >('7d')
@@ -271,6 +281,21 @@ export function TracksRoute() {
     queryKey: ['admin', 'tracks', 'stats', statsPeriod],
     queryFn: () => adminApi.dashboardTrackStats(statsPeriod),
     refetchInterval: 30_000,
+    refetchIntervalInBackground: false,
+  })
+  const playbackRepairSummary = useQuery({
+    queryKey: [
+      'admin',
+      'tracks',
+      'playback-repair-summary',
+      playbackRepairRun?.startedAt,
+    ],
+    queryFn: () =>
+      playbackRepairRun
+        ? adminApi.playbackRepairSummary(playbackRepairRun.jobIds)
+        : Promise.resolve(null),
+    enabled: !!playbackRepairRun?.jobIds.length,
+    refetchInterval: playbackRepairRun ? 2500 : false,
     refetchIntervalInBackground: false,
   })
   const total = data?.total || 0
@@ -408,6 +433,14 @@ export function TracksRoute() {
         r.job_id ? `job_id=${r.job_id}` : '',
         r.progress_id ? `progress_id=${r.progress_id}` : '',
       ].filter(Boolean)
+      if (r.job_id) {
+        setPlaybackRepairRun({
+          jobIds: [r.job_id],
+          requested: 1,
+          queued: r.queued ? 1 : 0,
+          startedAt: new Date().toISOString(),
+        })
+      }
       await showAlert(lines.join('\n'))
       refresh()
     } catch (err) {
@@ -453,6 +486,14 @@ export function TracksRoute() {
   const showRepairBulkResult = async (
     result: PlaybackRepairBulkResult,
   ) => {
+    if (result.job_ids.length > 0) {
+      setPlaybackRepairRun({
+        jobIds: result.job_ids,
+        requested: result.requested,
+        queued: result.queued,
+        startedAt: new Date().toISOString(),
+      })
+    }
     await showAlert(
       t('admin.tracks.repairBulkQueued', {
         queued: result.queued,
@@ -1359,6 +1400,19 @@ export function TracksRoute() {
           ]}
         />
       </div>
+      {playbackRepairRun && playbackRepairSummary.data && (
+        <PlaybackRepairSummaryPanel
+          summary={playbackRepairSummary.data}
+          title={t('admin.tracks.repairRunTitle')}
+          onOpenTasks={() =>
+            navigate('../tasks?bgName=repair_track_playback_task')
+          }
+          onOpenTrack={(trackId) =>
+            window.open(`/mini_app/track/${trackId}`, '_blank')
+          }
+          onClose={() => setPlaybackRepairRun(null)}
+        />
+      )}
       <DataTable
         columns={columns}
         rows={rows}

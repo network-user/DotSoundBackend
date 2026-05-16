@@ -23,6 +23,9 @@ import {
 } from '@/lib/uploadDraft'
 import type { Track } from '@/types/api'
 
+import '@/styles/redesign-upload.css'
+import '@/styles/redesign-track-edit.css'
+
 type Tab = 'file' | 'soundcloud' | 'bandcamp'
 
 type UploadLocationState = { applyDraft?: boolean }

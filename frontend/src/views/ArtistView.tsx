@@ -22,6 +22,8 @@ import { MorphIcon } from '@/components/ui/MorphIcon'
 import { MotionPress } from '@/components/ui/MotionPress'
 import { showIsland } from '@/lib/island'
 
+import '@/styles/redesign-artist.css'
+
 import { api, getApiErrorMessage } from '@/lib/api'
 import { coverProxyUrl } from '@/lib/coverProxy'
 import { VARIANTS_FADE_UP, m } from '@/lib/motion'

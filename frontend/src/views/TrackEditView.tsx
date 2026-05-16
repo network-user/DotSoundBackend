@@ -12,6 +12,8 @@ import { MotionPress } from '@/components/ui/MotionPress'
 import { coverProxyUrl } from '@/lib/coverProxy'
 import { api } from '@/lib/api'
 
+import '@/styles/redesign-track-edit.css'
+
 type EditContext = Awaited<
   ReturnType<typeof api.getTrackEditContext>
 >

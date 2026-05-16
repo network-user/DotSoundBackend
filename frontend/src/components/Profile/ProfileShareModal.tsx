@@ -22,6 +22,8 @@ import type {
   ShareCardResponse,
 } from '@/types/api'
 
+import '@/styles/redesign-profile.css'
+
 interface Props {
   open: boolean
   onClose: () => void

@@ -136,3 +136,24 @@ async def get_progress(progress_id: str) -> dict[str, Any] | None:
     except json.JSONDecodeError:
         return None
     return data if isinstance(data, dict) else None
+
+
+async def get_many_progress(
+    progress_ids: list[str],
+) -> dict[str, dict[str, Any]]:
+    unique_ids = list(dict.fromkeys(pid for pid in progress_ids if pid))
+    if not unique_ids:
+        return {}
+    redis = get_redis_client()
+    values = await redis.mget([_key(pid) for pid in unique_ids])
+    out: dict[str, dict[str, Any]] = {}
+    for progress_id, raw in zip(unique_ids, values, strict=False):
+        if not raw:
+            continue
+        try:
+            data = json.loads(raw)
+        except json.JSONDecodeError:
+            continue
+        if isinstance(data, dict):
+            out[progress_id] = data
+    return out

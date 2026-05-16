@@ -5,6 +5,8 @@ import {
   LEGAL_CONTACT_EMAIL,
 } from '@/views/legalContent'
 
+import '@/styles/legal.css'
+
 const LEGAL_BASE = `${import.meta.env.BASE_URL}legal/`
 
 /**

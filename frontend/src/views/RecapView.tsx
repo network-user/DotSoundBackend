@@ -14,6 +14,8 @@ import { useBrandLabel } from '@/lib/brand'
 import { isYearRecapSeasonActive } from '@/lib/recapSeason'
 import { showIsland } from '@/lib/island'
 
+import '@/styles/redesign-recap.css'
+
 import { AchievementsView } from '@/views/AchievementsView'
 
 export function RecapView() {

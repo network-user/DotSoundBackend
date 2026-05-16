@@ -15,6 +15,8 @@ import { extractCoverPalette, type CoverPalette } from '@/lib/coverPalette'
 import { coverProxyUrl as buildCoverProxyUrl } from '@/lib/coverProxy'
 import { useFocusTrap } from '@/hooks/useFocusTrap'
 
+import '@/styles/redesign-profile.css'
+
 function hexToRgba(hex: string, alpha: number): string {
   const v = hex.replace('#', '')
   const r = parseInt(v.slice(0, 2), 16)

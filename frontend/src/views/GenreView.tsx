@@ -7,6 +7,8 @@ import { TrackList } from '@/components/TrackList/TrackList'
 import { MotionPress } from '@/components/ui/MotionPress'
 import { showIsland } from '@/lib/island'
 
+import '@/styles/redesign-artist.css'
+
 import { api, getApiErrorMessage } from '@/lib/api'
 import { VARIANTS_FADE_UP, m, SPRING_GENTLE } from '@/lib/motion'
 import { setBackButton } from '@/lib/telegram'

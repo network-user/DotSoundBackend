@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import type { TFunction } from 'i18next'
 import { useTranslation } from 'react-i18next'
 import {
@@ -16,6 +16,10 @@ import { useAdminPrompt } from '../components/layout/AdminPromptContext'
 import { DataTable } from '../components/widgets/DataTable'
 import { JsonViewer } from '../components/widgets/JsonViewer'
 import { LyricsJobDetail } from '../components/widgets/LyricsJobDetail'
+import {
+  PlaybackRepairSummaryPanel,
+  playbackRepairStageLabel,
+} from '../components/widgets/PlaybackRepairSummaryPanel'
 import {
   StatusPill,
   type StatusKind,
@@ -43,13 +47,20 @@ interface BackgroundJobRow {
   created_at: string
   started_at: string | null
   finished_at: string | null
+  live?: LiveProgress | null
 }
 
 const CATALOG_SYNC_BG_FILTER = 'sync_artist_catalog'
 const PLAYBACK_REPAIR_BG_FILTER = 'repair_track_playback_task'
+const ACTIVE_BG_STATUSES = [
+  'queued',
+  'running',
+  'cancelling',
+] as const
 
 const BG_STATUS_OPTIONS = [
   '',
+  'active',
   'queued',
   'running',
   'done',
@@ -95,6 +106,15 @@ function readBgPayloadTarget(payload: unknown): string {
   if (artistId !== undefined) return `artist:${artistId}`
   if (trackId !== undefined) return `track:${trackId}`
   return 'вЂ“'
+}
+
+function shortBgTaskName(name: string): string {
+  const raw = name.split(':').pop() || name
+  return raw.split('.').pop() || raw
+}
+
+function isActiveBgStatus(status: string): boolean {
+  return (ACTIVE_BG_STATUSES as readonly string[]).includes(status)
 }
 
 interface LiveProgress {
@@ -568,6 +588,12 @@ export function TasksRoute() {
     refetchInterval: bgDetailId ? false : 10_000,
     refetchIntervalInBackground: false,
   })
+  const activeBackgroundJobs = useQuery({
+    queryKey: ['admin', 'tasks', 'background-jobs', 'active'],
+    queryFn: () => adminApi.listActiveBackgroundJobs(),
+    refetchInterval: 2500,
+    refetchIntervalInBackground: false,
+  })
   const bgDetail = useQuery({
     queryKey: ['admin', 'tasks', 'bg-job', bgDetailId],
     queryFn: () =>
@@ -584,6 +610,9 @@ export function TasksRoute() {
       queryKey: ['admin', 'tasks', 'background-jobs'],
     })
     qc.invalidateQueries({
+      queryKey: ['admin', 'tasks', 'background-jobs', 'active'],
+    })
+    qc.invalidateQueries({
       queryKey: ['admin', 'tasks', 'overview'],
     })
   }
@@ -592,6 +621,31 @@ export function TasksRoute() {
     mutationFn: (id: string) =>
       adminApi.cancelBackgroundJob(id),
     onSuccess: () => invalidateBg(),
+  })
+  const bulkCancelBg = useMutation({
+    mutationFn: (body: {
+      name?: string
+      queue?: string
+      status?: string
+      scheduled_job_id?: string
+    }) => adminApi.cancelActiveBackgroundJobs(body),
+    onSuccess: (data) => {
+      invalidateBg()
+      showIsland({
+        kind: 'toast',
+        title: t('admin.tasks.bg.cancelActiveDone', {
+          count: data.matched,
+        }),
+        durationMs: 2400,
+      })
+    },
+    onError: () => {
+      showIsland({
+        kind: 'error',
+        title: t('admin.tasks.bg.cancelActiveFailed'),
+        durationMs: 4000,
+      })
+    },
   })
   const retryBg = useMutation({
     mutationFn: (id: string) =>
@@ -698,6 +752,34 @@ export function TasksRoute() {
     (backgroundJobs.data?.items as
       | BackgroundJobRow[]
       | undefined) || []
+  const activeBgRows =
+    (activeBackgroundJobs.data?.items as
+      | BackgroundJobRow[]
+      | undefined) || []
+  const playbackRepairJobIds = useMemo(
+    () =>
+      bgRows
+        .filter((row) =>
+          row.name.includes(PLAYBACK_REPAIR_BG_FILTER),
+        )
+        .map((row) => row.id),
+    [bgRows],
+  )
+  const playbackRepairSummary = useQuery({
+    queryKey: [
+      'admin',
+      'tasks',
+      'playback-repair-summary',
+      playbackRepairJobIds.join(','),
+    ],
+    queryFn: () =>
+      adminApi.playbackRepairSummary(playbackRepairJobIds),
+    enabled:
+      bgFilter.name.includes(PLAYBACK_REPAIR_BG_FILTER) &&
+      playbackRepairJobIds.length > 0,
+    refetchInterval: 2500,
+    refetchIntervalInBackground: false,
+  })
   const bgTotal = backgroundJobs.data?.total || 0
   const bgCounts =
     (overview.data?.background_jobs as
@@ -728,6 +810,28 @@ export function TasksRoute() {
     )
     if (!ok) return
     cancelBg.mutate(id)
+  }
+  const handleBgBulkCancel = async () => {
+    const activeCount =
+      (bgCounts.queued || 0) +
+      (bgCounts.running || 0) +
+      (bgCounts.cancelling || 0)
+    const ok = await showConfirm(
+      t('admin.tasks.bg.confirmCancelActive', {
+        count: activeCount,
+      }),
+      { danger: true },
+    )
+    if (!ok) return
+    bulkCancelBg.mutate({
+      name: bgFilter.name || undefined,
+      queue: bgFilter.queue || undefined,
+      status: isActiveBgStatus(bgFilter.status)
+        ? bgFilter.status
+        : undefined,
+      scheduled_job_id:
+        bgFilter.scheduled_job_id || undefined,
+    })
   }
   const handleBgRetry = async (id: string) => {
     const ok = await showConfirm(
@@ -1003,8 +1107,121 @@ export function TasksRoute() {
       <section className="admin-card">
         <div className="admin-toolbar">
           <h2 style={{ flex: 1 }}>
+            {t('admin.tasks.bg.active.title')}
+          </h2>
+          {activeBgRows.length > 0 && (
+            <MotionPress
+              variant="danger"
+              haptic="medium"
+              onClick={handleBgBulkCancel}
+              disabled={bulkCancelBg.isPending}
+            >
+              {bulkCancelBg.isPending
+                ? t('admin.tasks.bg.active.cancelling')
+                : t('admin.tasks.bg.active.cancelAll', {
+                    count: activeBgRows.length,
+                  })}
+            </MotionPress>
+          )}
+        </div>
+        <p className="admin-card__sub">
+          {t('admin.tasks.bg.active.hint')}
+        </p>
+        {activeBackgroundJobs.isError && (
+          <p className="admin-error" role="alert">
+            {t('admin.tasks.bg.active.loadFailed')}
+          </p>
+        )}
+        {activeBgRows.length === 0 && !activeBackgroundJobs.isLoading ? (
+          <p className="admin-card__sub">
+            {t('admin.tasks.bg.active.empty')}
+          </p>
+        ) : (
+          <div className="admin-active-jobs">
+            {activeBgRows.map((row) => {
+              const live = row.live || null
+              const logs = Array.isArray(live?.logs)
+                ? live.logs.slice(-1)
+                : []
+              const activeStage = live?.stage || row.status
+              const activeStageLabel = row.name.includes(
+                PLAYBACK_REPAIR_BG_FILTER,
+              )
+                ? playbackRepairStageLabel(t, activeStage)
+                : activeStage
+              return (
+                <div
+                  className="admin-active-job"
+                  key={row.id}
+                >
+                  <div className="admin-active-job__main">
+                    <div className="admin-active-job__title">
+                      <span className="admin-mono">
+                        {shortBgTaskName(row.name)}
+                      </span>
+                      <StatusPill kind={bgJobKind(row.status)}>
+                        {row.status}
+                      </StatusPill>
+                    </div>
+                    <div className="admin-active-job__meta">
+                      <span className="admin-mono">
+                        {readBgPayloadTarget(row.payload)}
+                      </span>
+                      <span>{formatAdminDate(row.created_at)}</span>
+                    </div>
+                    <div className="admin-active-job__stage">
+                      <span>
+                        {t('admin.tasks.bg.active.stage')}
+                      </span>
+                      <strong>
+                        {activeStageLabel}
+                      </strong>
+                    </div>
+                    {logs.length > 0 && (
+                      <div className="admin-active-job__log">
+                        {logs[0]}
+                      </div>
+                    )}
+                  </div>
+                  <div className="admin-active-job__actions">
+                    <MotionPress
+                      variant="ghost"
+                      haptic="selection"
+                      className="admin-link"
+                      onClick={() => setBgDetailId(row.id)}
+                    >
+                      {t('admin.tasks.bg.active.open')}
+                    </MotionPress>
+                    <MotionPress
+                      variant="ghost"
+                      haptic="selection"
+                      className="admin-link"
+                      onClick={() => handleBgCancel(row.id)}
+                      disabled={cancelBg.isPending}
+                    >
+                      {t('admin.tasks.bg.actions.cancel')}
+                    </MotionPress>
+                  </div>
+                </div>
+              )
+            })}
+          </div>
+        )}
+      </section>
+      <section className="admin-card">
+        <div className="admin-toolbar">
+          <h2 style={{ flex: 1 }}>
             {t('admin.tasks.bg.title')}
           </h2>
+          <MotionPress
+            variant="danger"
+            haptic="medium"
+            onClick={handleBgBulkCancel}
+            disabled={bulkCancelBg.isPending}
+            title={t('admin.tasks.bg.cancelActiveHint') as string}
+          >
+            {t('admin.tasks.bg.cancelActive')}
+          </MotionPress>
           <input
             type="text"
             placeholder={
@@ -1127,6 +1344,15 @@ export function TasksRoute() {
             {t('admin.tasks.bg.presets.failed')}
           </MotionPress>
         </div>
+        {bgFilter.name.includes(PLAYBACK_REPAIR_BG_FILTER) &&
+          playbackRepairSummary.data && (
+          <PlaybackRepairSummaryPanel
+            summary={playbackRepairSummary.data}
+            onOpenTrack={(trackId) =>
+              window.open(`/mini_app/track/${trackId}`, '_blank')
+            }
+          />
+        )}
         <p className="admin-card__sub">
           {t('admin.tasks.bg.hint', { total: bgTotal })}
         </p>
@@ -1234,6 +1460,10 @@ export function TasksRoute() {
                   const logs = Array.isArray(live.logs)
                     ? live.logs.slice(-8)
                     : []
+                  const liveTrackId =
+                    typeof live.track_id === 'number'
+                      ? live.track_id
+                      : null
                   return (
                     <div className="admin-bg-detail__block">
                       <span>{t('admin.tasks.bg.live.title')}</span>
@@ -1249,7 +1479,10 @@ export function TasksRoute() {
                                 : bgJobKind('running')
                             }
                           >
-                            {live.stage ?? live.state ?? 'running'}
+                            {playbackRepairStageLabel(
+                              t,
+                              live.stage ?? live.state ?? 'running',
+                            )}
                           </StatusPill>
                         </div>
                         <div>
@@ -1259,6 +1492,24 @@ export function TasksRoute() {
                           <strong className="admin-mono">
                             {live.track_id ?? 'РІР‚вЂњ'}
                           </strong>
+                          {liveTrackId != null && (
+                            <MotionPress
+                              variant="ghost"
+                              haptic="selection"
+                              className="admin-link"
+                              onClick={() =>
+                                window.open(
+                                  `/mini_app/track/${liveTrackId}`,
+                                  '_blank',
+                                )
+                              }
+                            >
+                              {t(
+                                'admin.tasks.bg.playbackRepair.openTrack',
+                                { id: liveTrackId },
+                              )}
+                            </MotionPress>
+                          )}
                         </div>
                         <div>
                           <span>

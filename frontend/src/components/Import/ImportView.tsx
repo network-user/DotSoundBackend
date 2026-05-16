@@ -16,6 +16,8 @@ import { VkMusicUrlModal } from './VkMusicUrlModal'
 import { YandexMusicUrlModal } from './YandexMusicUrlModal'
 import { PlatformImportMethodModal } from './PlatformImportMethodModal'
 
+import '@/styles/redesign-upload.css'
+
 type AudioInfo = ImportAudioInfo
 type ImportJobData = ImportJobResponse
 

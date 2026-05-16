@@ -2,6 +2,8 @@ import { useEffect, useState } from 'react'
 import { MotionPress } from '@/components/ui/MotionPress'
 import { Icon } from '@/components/Icon/Icon'
 
+import '@/styles/legal.css'
+
 const STORAGE_KEY = 'cookie_notice_dismissed'
 const STORAGE_VALUE = 'v1'
 

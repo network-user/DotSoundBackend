@@ -5,7 +5,8 @@ from __future__ import annotations
 from typing import Any
 
 import structlog
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Body, Depends, HTTPException, Query
+from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.redis import get_redis_client
@@ -52,6 +53,41 @@ ALLOWED_TASK_NAMES: frozenset[str] = frozenset(
 _PLAYBACK_REPAIR_TASK_NAME = (
     "app.services.playback_repair_worker:repair_track_playback_task"
 )
+_ACTIVE_BACKGROUND_JOB_STATUSES: frozenset[str] = frozenset(
+    {"queued", "running", "cancelling"}
+)
+_TERMINAL_BACKGROUND_JOB_STATUSES: frozenset[str] = frozenset(
+    {"done", "failed", "failed_terminal", "cancelled"}
+)
+_PLAYBACK_REPAIR_OUTCOMES: frozenset[str] = frozenset(
+    {
+        "repaired",
+        "unresolved",
+        "skipped",
+        "not_found",
+        "error",
+    }
+)
+_PLAYBACK_REPAIR_SUMMARY_LIMIT = 20000
+
+
+class BackgroundJobBulkCancelRequest(BaseModel):
+    name: str | None = Field(default=None, max_length=96)
+    queue: str | None = Field(default=None, max_length=32)
+    status: str | None = Field(default=None, max_length=24)
+    scheduled_job_id: str | None = Field(default=None, max_length=64)
+
+
+class BackgroundJobBulkCancelResponse(BaseModel):
+    matched: int
+    cancelled: int
+    cancelling: int
+    purged_messages: int
+    items: list[str]
+
+
+class PlaybackRepairSummaryRequest(BaseModel):
+    job_ids: list[str] = Field(default_factory=list)
 
 
 @router.post("/artist-stats-snapshot")
@@ -469,6 +505,122 @@ def _serialize_bgjob(row: BackgroundJob) -> dict[str, Any]:
     }
 
 
+async def _serialize_bgjob_live(row: BackgroundJob) -> dict[str, Any]:
+    data = _serialize_bgjob(row)
+    progress_id = data.get("progress_id")
+    if row.name == _PLAYBACK_REPAIR_TASK_NAME and isinstance(
+        progress_id,
+        str,
+    ):
+        from app.services.playback_repair_progress import get_progress
+
+        try:
+            data["live"] = await get_progress(progress_id)
+        except Exception:
+            logger.exception(
+                "admin_playback_repair_progress_read_failed",
+                job_id=row.id,
+                progress_id=progress_id,
+            )
+            data["live"] = None
+    return data
+
+
+def _bgjob_payload_value(row: BackgroundJob, key: str) -> object | None:
+    if not isinstance(row.payload, dict):
+        return None
+    return row.payload.get(key)
+
+
+def _bgjob_track_id(row: BackgroundJob) -> int | None:
+    raw = _bgjob_payload_value(row, "track_id")
+    return raw if isinstance(raw, int) else None
+
+
+def _bgjob_progress_id(row: BackgroundJob) -> str | None:
+    raw = _bgjob_payload_value(row, "progress_id")
+    return raw if isinstance(raw, str) and raw else None
+
+
+def _bgjob_result_status(row: BackgroundJob) -> str | None:
+    if not isinstance(row.result_summary, dict):
+        return None
+    raw = row.result_summary.get("status")
+    return raw if isinstance(raw, str) and raw else None
+
+
+def _live_stage(live: dict[str, Any] | None) -> str | None:
+    if not live:
+        return None
+    raw = live.get("stage")
+    return raw if isinstance(raw, str) and raw else None
+
+
+def _live_updated_at(live: dict[str, Any] | None) -> str | None:
+    if not live:
+        return None
+    raw = live.get("updated_at")
+    return raw if isinstance(raw, str) and raw else None
+
+
+def _playback_repair_outcome(row: BackgroundJob) -> str:
+    status = _bgjob_result_status(row)
+    if status in _PLAYBACK_REPAIR_OUTCOMES:
+        return status
+    if row.status in {"failed", "failed_terminal"}:
+        return "error"
+    if row.status == "cancelled":
+        return "cancelled"
+    return "unknown"
+
+
+def _inc(counter: dict[str, int], key: str) -> None:
+    counter[key] = counter.get(key, 0) + 1
+
+
+async def _purge_bgjob_messages(job_ids: set[str]) -> int:
+    if not job_ids:
+        return 0
+    from app.core.tkq import broker
+
+    redis = get_redis_client()
+    keys: list[str] = [broker.queue_name]
+    try:
+        discovered = await redis.keys(f"{broker.queue_name}:*")
+    except Exception:
+        discovered = []
+    for raw_key in discovered:
+        key = raw_key.decode() if isinstance(raw_key, bytes) else str(raw_key)
+        if key not in keys:
+            keys.append(key)
+
+    removed = 0
+    for key in keys:
+        try:
+            messages = await redis.lrange(key, 0, -1)
+        except Exception:
+            continue
+        for raw in messages:
+            try:
+                message = broker.formatter.loads(message=raw)
+                message.parse_labels()
+            except Exception:
+                continue
+            raw_bgjob_id = message.labels.get("bgjob_id")
+            bgjob_id = str(raw_bgjob_id) if raw_bgjob_id else None
+            if bgjob_id not in job_ids:
+                continue
+            try:
+                removed += int(await redis.lrem(key, 0, raw) or 0)
+            except Exception:
+                logger.debug(
+                    "admin_bgjob_queue_message_purge_failed",
+                    job_id=bgjob_id,
+                    queue=key,
+                )
+    return removed
+
+
 def _serialize_schedule(row: ScheduledJob) -> dict[str, Any]:
     return {
         "id": row.id,
@@ -528,6 +680,124 @@ async def tasks_overview(
     }
 
 
+@router.post("/playback-repair/summary")
+async def playback_repair_summary(
+    body: PlaybackRepairSummaryRequest,
+    _admin: User = Depends(require_capability("tasks.manage")),
+    session: AsyncSession = Depends(get_db),
+) -> dict[str, Any]:
+    job_ids = [
+        job_id
+        for job_id in dict.fromkeys(body.job_ids)
+        if isinstance(job_id, str) and job_id
+    ]
+    if len(job_ids) > _PLAYBACK_REPAIR_SUMMARY_LIMIT:
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                "too many job ids; "
+                f"max {_PLAYBACK_REPAIR_SUMMARY_LIMIT}"
+            ),
+        )
+    rows = [
+        row
+        for row in await AdminTasksRepository(
+            session,
+        ).list_background_jobs_by_ids(job_ids)
+        if row.name == _PLAYBACK_REPAIR_TASK_NAME
+    ]
+    progress_by_job: dict[str, str] = {}
+    for row in rows:
+        progress_id = _bgjob_progress_id(row)
+        if progress_id:
+            progress_by_job[row.id] = progress_id
+
+    live_by_progress: dict[str, dict[str, Any]] = {}
+    if progress_by_job:
+        from app.services.playback_repair_progress import get_many_progress
+
+        try:
+            live_by_progress = await get_many_progress(
+                list(progress_by_job.values()),
+            )
+        except Exception:
+            logger.exception("admin_playback_repair_summary_progress_failed")
+            live_by_progress = {}
+
+    statuses: dict[str, int] = {}
+    outcomes: dict[str, int] = {
+        "repaired": 0,
+        "unresolved": 0,
+        "skipped": 0,
+        "not_found": 0,
+        "error": 0,
+        "cancelled": 0,
+        "unknown": 0,
+    }
+    stages: dict[str, int] = {}
+    current: dict[str, Any] | None = None
+    items: list[dict[str, Any]] = []
+    processed = 0
+
+    for row in rows:
+        _inc(statuses, row.status)
+        progress_id = progress_by_job.get(row.id)
+        live = (
+            live_by_progress.get(progress_id)
+            if progress_id is not None
+            else None
+        )
+        stage = _live_stage(live)
+        result_status = _bgjob_result_status(row)
+        if not stage and result_status:
+            stage = result_status
+        if not stage and row.status in _ACTIVE_BACKGROUND_JOB_STATUSES:
+            stage = row.status
+        if stage:
+            _inc(stages, stage)
+
+        is_terminal = row.status in _TERMINAL_BACKGROUND_JOB_STATUSES
+        if result_status in _PLAYBACK_REPAIR_OUTCOMES:
+            is_terminal = True
+        if live and live.get("state") == "finished":
+            is_terminal = True
+        if is_terminal:
+            processed += 1
+            _inc(outcomes, _playback_repair_outcome(row))
+
+        item = {
+            "job_id": row.id,
+            "track_id": _bgjob_track_id(row),
+            "status": row.status,
+            "progress_id": progress_id,
+            "stage": stage,
+            "updated_at": _live_updated_at(live),
+        }
+        if row.status in _ACTIVE_BACKGROUND_JOB_STATUSES:
+            items.append(item)
+            if (
+                current is None
+                or (
+                    row.status == "running"
+                    and current.get("status") != "running"
+                )
+            ):
+                current = item
+
+    matched = len(rows)
+    return {
+        "requested": len(job_ids),
+        "matched": matched,
+        "processed": processed,
+        "remaining": max(0, matched - processed),
+        "statuses": statuses,
+        "outcomes": outcomes,
+        "stages": stages,
+        "current": current,
+        "items": items[:20],
+    }
+
+
 @router.get("/jobs")
 async def list_background_jobs(
     name: str | None = Query(None, max_length=96),
@@ -555,6 +825,93 @@ async def list_background_jobs(
     }
 
 
+@router.get("/jobs/active")
+async def list_active_background_jobs(
+    _admin: User = Depends(require_capability("tasks.manage")),
+    session: AsyncSession = Depends(get_db),
+) -> dict[str, Any]:
+    rows = await AdminTasksRepository(session).list_active_background_jobs(
+        limit=20,
+    )
+    return {
+        "total": len(rows),
+        "items": [await _serialize_bgjob_live(row) for row in rows],
+    }
+
+
+@router.post("/jobs/cancel-active")
+async def cancel_active_background_jobs(
+    body: BackgroundJobBulkCancelRequest | None = Body(default=None),
+    _admin: User = Depends(require_capability("tasks.manage")),
+    session: AsyncSession = Depends(get_db),
+) -> BackgroundJobBulkCancelResponse:
+    from datetime import UTC, datetime
+
+    spec = body or BackgroundJobBulkCancelRequest()
+    if spec.status and spec.status not in _ACTIVE_BACKGROUND_JOB_STATUSES:
+        return BackgroundJobBulkCancelResponse(
+            matched=0,
+            cancelled=0,
+            cancelling=0,
+            purged_messages=0,
+            items=[],
+        )
+    rows = await AdminTasksRepository(
+        session,
+    ).list_cancellable_background_jobs(
+        name=spec.name,
+        queue=spec.queue,
+        status=spec.status,
+        scheduled_job_id=spec.scheduled_job_id,
+    )
+    if not rows:
+        return BackgroundJobBulkCancelResponse(
+            matched=0,
+            cancelled=0,
+            cancelling=0,
+            purged_messages=0,
+            items=[],
+        )
+
+    now = datetime.now(UTC)
+    ids: list[str] = []
+    queued_ids: set[str] = set()
+    cancelled = 0
+    cancelling = 0
+    for row in rows:
+        ids.append(row.id)
+        if row.status == "queued":
+            queued_ids.add(row.id)
+            row.status = "cancelled"
+            row.finished_at = now
+            row.error = "cancelled_by_admin_bulk"
+            cancelled += 1
+        else:
+            row.status = "cancelling"
+            row.error = "cancel_requested_by_admin_bulk"
+            cancelling += 1
+
+    await session.commit()
+    purged_messages = await _purge_bgjob_messages(queued_ids)
+    for job_id in ids:
+        await signal_cancel(job_id)
+
+    logger.info(
+        "admin_background_jobs_bulk_cancel",
+        matched=len(ids),
+        cancelled=cancelled,
+        cancelling=cancelling,
+        purged_messages=purged_messages,
+    )
+    return BackgroundJobBulkCancelResponse(
+        matched=len(ids),
+        cancelled=cancelled,
+        cancelling=cancelling,
+        purged_messages=purged_messages,
+        items=ids,
+    )
+
+
 @router.get("/jobs/{job_id}")
 async def get_background_job(
     job_id: str,
@@ -564,24 +921,7 @@ async def get_background_job(
     row = await AdminTasksRepository(session).get_background_job(job_id)
     if row is None:
         raise HTTPException(status_code=404, detail="job not found")
-    data = _serialize_bgjob(row)
-    progress_id = data.get("progress_id")
-    if row.name == _PLAYBACK_REPAIR_TASK_NAME and isinstance(
-        progress_id,
-        str,
-    ):
-        from app.services.playback_repair_progress import get_progress
-
-        try:
-            data["live"] = await get_progress(progress_id)
-        except Exception:
-            logger.exception(
-                "admin_playback_repair_progress_read_failed",
-                job_id=job_id,
-                progress_id=progress_id,
-            )
-            data["live"] = None
-    return data
+    return await _serialize_bgjob_live(row)
 
 
 @router.post("/jobs/{job_id}/cancel")

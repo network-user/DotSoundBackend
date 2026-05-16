@@ -13,6 +13,8 @@ import { Icon } from '@/components/Icon/Icon'
 import { coverProxyUrl } from '@/lib/coverProxy'
 import { api } from '@/lib/api'
 
+import '@/styles/redesign-track-edit.css'
+
 type StatusResponse = Awaited<ReturnType<typeof api.getMyArtist>>
 type ArtistFields = NonNullable<StatusResponse['artist']>
 

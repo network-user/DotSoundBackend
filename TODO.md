@@ -1,5 +1,47 @@
 # DotSound - TODO Tracker
 
+- [x] **Mini App initial payload split for mobile (2026-05-16)**
+  - Moved heavy Mini App surfaces behind lazy chunks, including onboarding,
+    tutorial, auth, settings, track sheet, profile-adjacent overlays, and
+    route-level views that are not required for the first render.
+  - Added deferred mounting for player overlays so track card, settings,
+    lyrics, queue, equalizer, and complaint chunks are requested only when
+    opened while still preserving the existing close animation window.
+  - Split screen-specific CSS out of the startup stylesheet and attached it
+    to the lazy screens/components that use it: home, artist/album/playlist/
+    genre/external pages, upload/import, profile/share UI, edit screens,
+    recap/achievements, onboarding/tutorial, and settings legal blocks.
+  - Kept shared navigation, player, library, tracks, tokens, global, and
+    common component styles in the initial CSS so the shell still renders
+    correctly before lazy routes load.
+  - Verified `frontend` production build with `npm run build`; the initial
+    JS stays around 130 KB and the initial CSS dropped from about 482 KB to
+    about 354 KB, with screen CSS emitted as separate lazy assets.
+
+- [x] **Admin active background jobs control (2026-05-16)**
+  - Added an admin bulk-cancel endpoint for active `BackgroundJob` rows:
+    queued jobs are marked `cancelled`, running/cancelling jobs get a
+    cooperative cancel signal and stay visible as `cancelling`.
+  - The Taskiq lifecycle middleware now preserves cancelled state on late
+    worker completion/error instead of overwriting it with `done` or
+    `failed_terminal`.
+  - Admin Tasks now has an active background-jobs panel with live stage/log
+    data where available, quick detail open, per-job cancel, and a bulk
+    cancel action respecting the current task/queue/schedule filters.
+
+- [x] **Proactive SoundCloud playback audit hardening (2026-05-16)**
+  - Confirmed the scheduled SoundCloud playback repair sweep audits public
+    `third_party_stream` tracks, prioritizing failed/suppressed rows,
+    never-checked rows, and then the oldest checked rows.
+  - Added regression coverage for healthy proactive checks, failed repair
+    suppression, SoundCloud candidate scope, and candidate ordering.
+  - Admin Tracks playback-health cells now include last check and repair
+    attempt timestamps when available.
+  - Reviewed `LEGAL.md` and `docs/legal/` for playback-touching changes;
+    no external audio storage, caching, or legal copy model changed.
+  - Verified targeted Ruff, repair-worker/metadata tests, admin tracks API
+    tests, and `frontend` production build with `npm run build`.
+
 - [x] **SoundCloud fallback and playback repair live progress (2026-05-16)**
   - SoundCloud stream resolver now tries every available transcoding for
     the selected protocol before failing, so one dead HLS/progressive

@@ -21,6 +21,8 @@ import { MixPage } from './pages/MixPage'
 import { BrowserPage } from './pages/BrowserPage'
 import { ReadyPage } from './pages/ReadyPage'
 
+import '@/styles/onboarding.css'
+
 interface Props {
   onComplete: () => void
 }

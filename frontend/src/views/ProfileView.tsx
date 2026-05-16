@@ -42,6 +42,9 @@ import { MyComplaintsList } from '@/components/Profile/MyComplaintsList'
 import { ProfileStatsTab } from '@/components/Profile/ProfileStatsTab'
 import { DislikedView } from '@/views/DislikedView'
 
+import '@/styles/redesign-profile.css'
+import '@/styles/redesign-track-edit.css'
+
 type ProfileTab =
   | 'profile'
   | 'import'

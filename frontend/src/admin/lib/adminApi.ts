@@ -1,6 +1,7 @@
 import { useAdminAuth } from '../store/adminAuthStore'
 import { ensureCsrf, readCsrfCookie } from './csrf'
 import { getAdminApiBasePath } from '@/lib/adminPath'
+import type { PlaybackRepairSummary } from '../components/widgets/PlaybackRepairSummaryPanel'
 
 function normalizeHttpDetail(raw: unknown): string {
   if (typeof raw === 'string') {
@@ -1483,6 +1484,19 @@ export const adminApi = {
       page: number
       size: number
     }>('/tasks/jobs', { query: params }),
+  playbackRepairSummary: (jobIds: string[]) =>
+    adminFetch<PlaybackRepairSummary>(
+      '/tasks/playback-repair/summary',
+      {
+        method: 'POST',
+        body: { job_ids: jobIds },
+      },
+    ),
+  listActiveBackgroundJobs: () =>
+    adminFetch<{
+      items: Array<Record<string, unknown>>
+      total: number
+    }>('/tasks/jobs/active'),
   getBackgroundJob: (id: string) =>
     adminFetch<Record<string, unknown>>(`/tasks/jobs/${id}`),
   cancelBackgroundJob: (id: string) =>
@@ -1490,6 +1504,22 @@ export const adminApi = {
       `/tasks/jobs/${id}/cancel`,
       { method: 'POST', body: {} },
     ),
+  cancelActiveBackgroundJobs: (body: {
+    name?: string
+    queue?: string
+    status?: string
+    scheduled_job_id?: string
+  }) =>
+    adminFetch<{
+      matched: number
+      cancelled: number
+      cancelling: number
+      purged_messages: number
+      items: string[]
+    }>('/tasks/jobs/cancel-active', {
+      method: 'POST',
+      body,
+    }),
   retryBackgroundJob: (id: string) =>
     adminFetch<{ new_job_id: string; parent_job_id: string }>(
       `/tasks/jobs/${id}/retry`,

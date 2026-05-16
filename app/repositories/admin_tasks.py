@@ -191,6 +191,19 @@ class AdminTasksRepository:
     async def get_background_job(self, job_id: str) -> BackgroundJob | None:
         return await self._session.get(BackgroundJob, job_id)
 
+    async def list_background_jobs_by_ids(
+        self,
+        job_ids: list[str],
+    ) -> list[BackgroundJob]:
+        if not job_ids:
+            return []
+        result = await self._session.execute(
+            select(BackgroundJob)
+            .where(BackgroundJob.id.in_(job_ids))
+            .order_by(desc(BackgroundJob.created_at))
+        )
+        return list(result.scalars().all())
+
     async def list_active_background_jobs(
         self,
         *,

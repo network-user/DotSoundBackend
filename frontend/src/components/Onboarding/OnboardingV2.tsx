@@ -41,6 +41,8 @@ import type {
   Track,
 } from '@/types/api'
 
+import '@/styles/onboarding.css'
+
 interface Props {
   onComplete: () => void
 }
