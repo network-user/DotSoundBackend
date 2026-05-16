@@ -378,11 +378,15 @@ class SoundCloudService:
 
         seen_ids: set[int] = set()
         candidates: list[dict[str, Any]] = []
+        search_failures: list[HTTPException | SoundCloudRateLimitError] = []
+        search_successes = 0
         for q in queries:
             try:
                 results = await self.search(q, limit=10)
-            except (HTTPException, SoundCloudRateLimitError):
+            except (HTTPException, SoundCloudRateLimitError) as exc:
+                search_failures.append(exc)
                 continue
+            search_successes += 1
             for r in results:
                 rid: int | None = r.get("id")
                 if rid is not None and rid not in seen_ids:
@@ -390,6 +394,24 @@ class SoundCloudService:
                     candidates.append(r)
 
         if not candidates:
+            if search_successes == 0 and search_failures:
+                last_error = search_failures[-1]
+                if isinstance(last_error, HTTPException):
+                    raise last_error
+                raise HTTPException(
+                    status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                    detail=_sc_error_detail(
+                        code="soundcloud_search_unavailable",
+                        message="SoundCloud search is unavailable",
+                        reason="provider_rate_limited",
+                        stage="search",
+                        retryable=True,
+                        upstream_status=last_error.status_code,
+                        extra={
+                            "retry_after": last_error.retry_after,
+                        },
+                    ),
+                ) from last_error
             return None
 
         best = max(candidates, key=_score)

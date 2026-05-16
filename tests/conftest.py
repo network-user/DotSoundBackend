@@ -1,6 +1,7 @@
 import importlib
 import sys
 import types
+from collections.abc import AsyncIterator, Iterator
 from io import BytesIO
 from typing import Any
 from unittest.mock import AsyncMock, MagicMock, patch
@@ -9,6 +10,7 @@ import pytest
 from httpx import ASGITransport, AsyncClient
 from sqlalchemy import BigInteger, Boolean, event
 from sqlalchemy.ext.asyncio import (
+    AsyncEngine,
     AsyncSession,
     async_sessionmaker,
     create_async_engine,
@@ -24,7 +26,11 @@ _TEST_DB_URL = "sqlite+aiosqlite:///:memory:"
 
 
 def _from_buffer_for_tests(data: bytes, mime: bool = True) -> str:
-    if data.startswith(b"ID3") or data[0:2] in (b"\xff\xfb", b"\xff\xf3", b"\xff\xf2"):
+    if data.startswith(b"ID3") or data[0:2] in (
+        b"\xff\xfb",
+        b"\xff\xf3",
+        b"\xff\xf2",
+    ):
         return "audio/mpeg"
     if data.startswith(b"\xff\xd8\xff"):
         return "image/jpeg"
@@ -55,8 +61,8 @@ _ensure_magic_test_stub()
 @compiles(BigInteger, "sqlite")
 def _compile_bigint_sqlite(
     _type: BigInteger,
-    _compiler: Any,
-    **_kwargs: Any,
+    _compiler: object,
+    **_kwargs: object,
 ) -> str:
     return "INTEGER"
 
@@ -65,9 +71,9 @@ def _compile_bigint_sqlite(
     Base, "init", propagate=True
 )
 def _set_boolean_defaults(
-    target: Any,
-    _args: Any,
-    kwargs: dict[str, Any],
+    target: object,
+    _args: object,
+    kwargs: dict[str, object],
 ) -> None:
     for attr in type(
         target
@@ -88,7 +94,7 @@ def _set_boolean_defaults(
 
 
 @pytest.fixture(autouse=True)
-def _disable_rate_limit():
+def _disable_rate_limit() -> Iterator[None]:
     with patch(
         "app.core.rate_limit.limiter.enabled",
         False,
@@ -102,7 +108,7 @@ def anyio_backend() -> str:
 
 
 @pytest.fixture
-async def db_engine():
+async def db_engine() -> AsyncIterator[AsyncEngine]:
     engine = create_async_engine(_TEST_DB_URL)
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
@@ -111,7 +117,9 @@ async def db_engine():
 
 
 @pytest.fixture
-async def db_session(db_engine):
+async def db_session(
+    db_engine: AsyncEngine,
+) -> AsyncIterator[AsyncSession]:
     factory: async_sessionmaker[AsyncSession] = (
         async_sessionmaker(
             db_engine, expire_on_commit=False
@@ -122,7 +130,9 @@ async def db_session(db_engine):
 
 
 @pytest.fixture
-async def client(db_engine) -> AsyncClient:
+async def client(
+    db_engine: AsyncEngine,
+) -> AsyncIterator[AsyncClient]:
     factory: async_sessionmaker[AsyncSession] = (
         async_sessionmaker(
             db_engine, expire_on_commit=False
@@ -168,7 +178,7 @@ async def _fake_put_cas(
 
 
 @pytest.fixture
-def mock_s3():
+def mock_s3() -> Iterator[AsyncMock]:
     with (
         patch(
             "app.core.s3.put_cas_audio",
@@ -185,7 +195,7 @@ def mock_s3():
 
 
 @pytest.fixture
-def mock_taskiq():
+def mock_taskiq() -> Iterator[None]:
     _lyrics_kiq = MagicMock()
     _lyrics_kiq.task_id = "test-lyrics-task"
     with patch(
@@ -209,7 +219,7 @@ def mock_taskiq():
 async def create_test_user(
     client: AsyncClient,
     telegram_id: int,
-    **kwargs: Any,
+    **kwargs: object,
 ) -> dict[str, Any]:
     payload = {
         "telegram_id": telegram_id,

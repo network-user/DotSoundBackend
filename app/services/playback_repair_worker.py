@@ -43,6 +43,7 @@ class TrackPlaybackRepairService:
         track_id: int,
         progress_id: str | None = None,
         background_job_id: str | None = None,
+        bypass_refresh_cache: bool = False,
     ) -> dict[str, Any]:
         cancelled = await self._cancel_if_requested(
             track_id,
@@ -154,7 +155,22 @@ class TrackPlaybackRepairService:
                 track_id=track_id,
                 log_line="trying source refresh",
             )
-            refreshed = await self._try_refresh_soundcloud_source(track)
+            try:
+                refreshed = await self._try_refresh_soundcloud_source(
+                    track,
+                    bypass_refresh_cache=bypass_refresh_cache,
+                )
+            except Exception as refresh_exc:  # noqa: BLE001
+                await self._session.rollback()
+                result = self._error_result(track_id, refresh_exc)
+                await progress.safe_set_progress(
+                    progress_id,
+                    stage="error",
+                    track_id=track_id,
+                    log_line="source refresh failed",
+                    result=result,
+                )
+                return result
             cancelled = await self._cancel_if_requested(
                 track_id,
                 progress_id,
@@ -313,18 +329,26 @@ class TrackPlaybackRepairService:
         )
         return protocol
 
-    async def _try_refresh_soundcloud_source(self, track: Track) -> bool:
+    async def _try_refresh_soundcloud_source(
+        self,
+        track: Track,
+        *,
+        bypass_refresh_cache: bool,
+    ) -> bool:
         track_id = track.id
         fallback = TrackFallbackService(self._session, settings)
         try:
-            return await fallback.try_refresh_sc_url(track)
+            return await fallback.try_refresh_sc_url(
+                track,
+                use_no_match_cache=not bypass_refresh_cache,
+            )
         except Exception:  # noqa: BLE001
             await self._session.rollback()
             logger.exception(
                 "track_playback_repair_refresh_failed",
                 track_id=track_id,
             )
-            return False
+            raise
 
     async def _clear_health(
         self,
@@ -420,6 +444,14 @@ class TrackPlaybackRepairService:
 
     @staticmethod
     def _error_result(track_id: int, exc: BaseException) -> dict[str, Any]:
+        if isinstance(exc, HTTPException):
+            return {
+                "track_id": track_id,
+                "ok": False,
+                "status": "error",
+                "detail": _http_detail(exc),
+                "http_status": exc.status_code,
+            }
         return {
             "track_id": track_id,
             "ok": False,
@@ -433,12 +465,14 @@ async def repair_track_playback_task(
     track_id: int,
     progress_id: str = "",
     background_job_id: str = "",
+    bypass_refresh_cache: bool = False,
 ) -> dict[str, Any]:
     async with AsyncSessionLocal() as session:
         return await TrackPlaybackRepairService(session).repair_track(
             track_id,
             progress_id=progress_id or None,
             background_job_id=background_job_id or None,
+            bypass_refresh_cache=bypass_refresh_cache,
         )
 
 

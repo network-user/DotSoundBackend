@@ -10,6 +10,13 @@
   - Bulk active-job cancellation now writes an admin audit-log row with
     actor, filters, matched/cancelled/cancelling counts, purge count, and
     a bounded sample of affected job ids.
+  - SoundCloud repair no longer masks total search/refresh transport
+    failures as `unresolved`: if every SC search attempt fails, repair
+    reports `error` with the upstream reason instead of pretending that
+    no replacement exists.
+  - Admin-triggered playback repair bypasses the 24h SoundCloud
+    no-match Redis cache so a retry after fixing SC search/client-id/proxy
+    configuration actually rechecks affected tracks.
 
 - [x] **Mini App PWA precache diet (2026-05-16)**
   - Replaced the broad Workbox precache glob for all Mini App JS/CSS with a
@@ -82,6 +89,9 @@
     no external audio storage, caching, or legal copy model changed.
   - Verified targeted Ruff, repair-worker/metadata tests, admin tracks API
     tests, and `frontend` production build with `npm run build`.
+  - Optimized `tests/app/api/v1/admin/test_tracks.py` after re-enabling it:
+    admin mutating audit logs now use the test DB, and admin track scenarios
+    no longer pay the full upload pipeline; suite passes in ~22s locally.
 
 - [x] **SoundCloud fallback and playback repair live progress (2026-05-16)**
   - SoundCloud stream resolver now tries every available transcoding for

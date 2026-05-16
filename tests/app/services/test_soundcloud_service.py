@@ -107,6 +107,60 @@ async def test_search_success(
     assert tracks[0]["title"] == "Song"
 
 
+async def test_search_best_match_raises_when_every_search_fails(
+    session: AsyncSession,
+) -> None:
+    svc = SoundCloudService("test_id", session)
+    with (
+        patch.object(
+            SoundCloudService,
+            "search",
+            new=AsyncMock(
+                side_effect=HTTPException(
+                    status_code=503,
+                    detail={"code": "soundcloud_client_auth_failed"},
+                )
+            ),
+        ),
+        pytest.raises(HTTPException) as exc,
+    ):
+        await svc.search_best_match(
+            title="Broken",
+            artist="Artist",
+        )
+
+    assert exc.value.status_code == 503
+    assert exc.value.detail["code"] == "soundcloud_client_auth_failed"
+
+
+async def test_search_best_match_converts_rate_limit_when_all_fail(
+    session: AsyncSession,
+) -> None:
+    svc = SoundCloudService("test_id", session)
+    with (
+        patch.object(
+            SoundCloudService,
+            "search",
+            new=AsyncMock(
+                side_effect=SoundCloudRateLimitError(
+                    429,
+                    retry_after=3.0,
+                )
+            ),
+        ),
+        pytest.raises(HTTPException) as exc,
+    ):
+        await svc.search_best_match(
+            title="Broken",
+            artist="Artist",
+        )
+
+    assert exc.value.status_code == 503
+    assert exc.value.detail["code"] == "soundcloud_search_unavailable"
+    assert exc.value.detail["upstream_status"] == 429
+    assert exc.value.detail["retry_after"] == 3.0
+
+
 async def test_resolve_url_no_client_id(
     session: AsyncSession,
 ) -> None:

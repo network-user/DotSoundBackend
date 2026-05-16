@@ -301,6 +301,7 @@ class AdminService:
                 payload={
                     "track_id": track_id,
                     "progress_id": progress_id,
+                    "bypass_refresh_cache": True,
                 },
                 queue="default",
                 max_attempts=2,

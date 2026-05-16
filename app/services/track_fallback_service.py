@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import re
+
 import structlog
 from dotsound_private_core.services.playback_variant_policy import (
     EXTERNAL_SOURCE_PLATFORM_ORDER,
@@ -108,7 +109,12 @@ class TrackFallbackService:
                 dedup.append(item)
         return dedup
 
-    async def try_refresh_sc_url(self, track: Track) -> bool:
+    async def try_refresh_sc_url(
+        self,
+        track: Track,
+        *,
+        use_no_match_cache: bool = True,
+    ) -> bool:
         if not track.title:
             return False
 
@@ -119,7 +125,7 @@ class TrackFallbackService:
 
         redis = get_redis_client()
         no_match_key = f"{_SC_REFRESH_PREFIX}{track.id}"
-        if await redis.get(no_match_key):
+        if use_no_match_cache and await redis.get(no_match_key):
             return False
 
         sc_svc = SoundCloudService(
@@ -180,23 +186,26 @@ class TrackFallbackService:
                 conflict_track_id=url_owner,
             )
             return False
-        if new_ext_id is not None and track.imported_from:
-            if await repo.other_track_has_imported_external(
+        if (
+            new_ext_id is not None
+            and track.imported_from
+            and await repo.other_track_has_imported_external(
                 imported_from=track.imported_from,
                 external_id=new_ext_id,
                 exclude_track_id=track.id,
-            ):
-                await redis.set(
-                    no_match_key,
-                    "1",
-                    ex=_SC_REFRESH_NO_MATCH_TTL,
-                )
-                logger.info(
-                    "sc_url_refresh_external_id_taken",
-                    track_id=track.id,
-                    external_id=new_ext_id,
-                )
-                return False
+            )
+        ):
+            await redis.set(
+                no_match_key,
+                "1",
+                ex=_SC_REFRESH_NO_MATCH_TTL,
+            )
+            logger.info(
+                "sc_url_refresh_external_id_taken",
+                track_id=track.id,
+                external_id=new_ext_id,
+            )
+            return False
         try:
             await repo.update_sc_url(track.id, new_url, new_ext_id)
         except IntegrityError:

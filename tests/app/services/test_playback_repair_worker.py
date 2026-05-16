@@ -63,7 +63,11 @@ async def test_repair_track_refreshes_soundcloud_url_and_clears_health(
     user = await _make_user(db_session)
     track = await _make_failed_soundcloud_track(db_session, user)
 
-    async def fake_refresh(_self: object, tr: Track) -> bool:
+    async def fake_refresh(
+        _self: object,
+        tr: Track,
+        **_kwargs: object,
+    ) -> bool:
         tr.sc_url = "https://soundcloud.com/a/new"
         tr.source_url = tr.sc_url
         tr.canonical_source_url = tr.sc_url
@@ -228,6 +232,45 @@ async def test_repair_track_cancel_signal_stops_before_refresh(
     refreshed = await db_session.get(Track, track_id)
     assert refreshed is not None
     assert refreshed.playback_last_failure_at is not None
+
+
+async def test_repair_track_reports_refresh_failure_as_error(
+    db_session: AsyncSession,
+) -> None:
+    user = await _make_user(db_session)
+    track = await _make_failed_soundcloud_track(db_session, user)
+    resolve = AsyncMock(
+        side_effect=HTTPException(
+            status_code=502,
+            detail="SoundCloud stream unavailable",
+        )
+    )
+    refresh_error = HTTPException(
+        status_code=503,
+        detail={
+            "code": "soundcloud_search_unavailable",
+            "message": "SoundCloud search is unavailable",
+        },
+    )
+
+    with (
+        patch(f"{_MOD}._resolve_third_party_stream", new=resolve),
+        patch(
+            "app.services.track_fallback_service."
+            "TrackFallbackService.try_refresh_sc_url",
+            new=AsyncMock(side_effect=refresh_error),
+        ),
+        patch(f"{_MOD}.progress.safe_set_progress", new=AsyncMock()) as sp,
+    ):
+        result = await TrackPlaybackRepairService(db_session).repair_track(
+            track.id,
+            progress_id="progress-refresh-error",
+        )
+
+    assert result["status"] == "error"
+    assert result["http_status"] == 503
+    assert "soundcloud_search_unavailable" in result["detail"]
+    assert sp.await_args.kwargs["stage"] == "error"
 
 
 async def test_repair_track_db_cancelling_state_stops_before_work(

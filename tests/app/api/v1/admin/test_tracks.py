@@ -19,7 +19,6 @@ from app.models.track_playback_failure_event import (
 from tests.conftest import (
     admin_bearer_for_user,
     auth_headers,
-    create_test_track,
     create_test_user,
 )
 
@@ -32,6 +31,30 @@ class _PlaybackRepairKicker:
 
     async def kiq(self, **_payload: object) -> None:
         return None
+
+
+async def _create_track(
+    db_session: AsyncSession,
+    *,
+    title: str,
+    uploader_id: int,
+) -> dict[str, int | str]:
+    track = Track(
+        title=title,
+        artist="Artist",
+        uploaded_by_id=uploader_id,
+        is_active=True,
+        is_public=True,
+        source="internal",
+        catalog_type="ugc",
+        access_mode="internal_stream",
+        processing_status="active",
+        file_key=f"tests/{title}.mp3",
+    )
+    db_session.add(track)
+    await db_session.commit()
+    assert track.id is not None
+    return {"id": track.id, "title": track.title}
 
 
 async def test_admin_list_tracks(
@@ -62,14 +85,14 @@ async def test_admin_list_track_ids_search_filter(
     headers = await admin_bearer_for_user(
         client, db_session, user_id=admin["id"]
     )
-    matched = await create_test_track(
-        client,
-        "Needle Bulk Track",
+    matched = await _create_track(
+        db_session,
+        title="Needle Bulk Track",
         uploader_id=admin["id"],
     )
-    await create_test_track(
-        client,
-        "Other Bulk Track",
+    await _create_track(
+        db_session,
+        title="Other Bulk Track",
         uploader_id=admin["id"],
     )
 
@@ -93,9 +116,9 @@ async def test_admin_playback_unavailable_includes_diagnostics(
     headers = await admin_bearer_for_user(
         client, db_session, user_id=admin["id"]
     )
-    track = await create_test_track(
-        client,
-        "Broken SoundCloud",
+    track = await _create_track(
+        db_session,
+        title="Broken SoundCloud",
         uploader_id=admin["id"],
     )
     detail = {
@@ -305,9 +328,9 @@ async def test_admin_playback_repair_returns_progress_id(
     headers = await admin_bearer_for_user(
         client, db_session, user_id=admin["id"]
     )
-    track = await create_test_track(
-        client,
-        "Repair Progress Track",
+    track = await _create_track(
+        db_session,
+        title="Repair Progress Track",
         uploader_id=admin["id"],
     )
 
@@ -341,7 +364,12 @@ async def test_admin_playback_repair_returns_progress_id(
     assert payload == {
         "track_id": track["id"],
         "progress_id": "progress-1",
+        "bypass_refresh_cache": True,
     }
+    assert (
+        enqueue.await_args.kwargs["job_id_payload_key"]
+        == "background_job_id"
+    )
     set_progress.assert_awaited_once_with(
         "progress-1",
         stage="queued",
@@ -359,9 +387,9 @@ async def test_admin_playback_repair_can_be_requeued_after_guard_window(
     headers = await admin_bearer_for_user(
         client, db_session, user_id=admin["id"]
     )
-    track = await create_test_track(
-        client,
-        "Repair Requeue Track",
+    track = await _create_track(
+        db_session,
+        title="Repair Requeue Track",
         uploader_id=admin["id"],
     )
     factory: async_sessionmaker[AsyncSession] = async_sessionmaker(
@@ -438,8 +466,9 @@ async def test_admin_toggle_track_visibility(
     admin_h = await admin_bearer_for_user(
         client, db_session, user_id=admin["id"]
     )
-    track = await create_test_track(
-        client, "Visible Track",
+    track = await _create_track(
+        db_session,
+        title="Visible Track",
         uploader_id=admin["id"],
     )
 
