@@ -64,7 +64,9 @@ interface SwipeDecisionOptions {
 }
 
 const MIN_GENRES = 3
-const SWIPE_BATCH = 5
+const SWIPE_FETCH_BATCH = 8
+const tasteTrackAudioSrc = (trackId: number) =>
+  `/api/v1/tracks/${trackId}/audio?force_progressive=true`
 const SWIPE_THRESHOLD = 110
 const SWIPE_VELOCITY_THRESHOLD = 720
 const SWIPE_VELOCITY_MIN_OFFSET = 36
@@ -130,7 +132,7 @@ export function OnboardingV2({ onComplete }: Props) {
   const [tasteExhausted, setTasteExhausted] = useState(false)
 
   const audio = useOnboardingAudio()
-  const lastFetchCountRef = useRef(0)
+  const fetchMoreInFlightRef = useRef(false)
   const autoPlayedTrackRef = useRef<number | null>(null)
 
   useEffect(() => {
@@ -187,7 +189,7 @@ export function OnboardingV2({ onComplete }: Props) {
     let cancelled = false
     setTasteLoading(true)
     api
-      .getTasteSwipeTracks(SWIPE_BATCH)
+      .getTasteSwipeTracks(SWIPE_FETCH_BATCH)
       .then((tracks) => {
         if (cancelled) return
         setTasteTracks(tracks)
@@ -227,7 +229,7 @@ export function OnboardingV2({ onComplete }: Props) {
       setTasteIndex(0)
       setTasteDecisions([])
       setTasteExhausted(false)
-      lastFetchCountRef.current = 0
+      fetchMoreInFlightRef.current = false
       autoPlayedTrackRef.current = null
     }
     setStep(STEP_ORDER[i - 1])
@@ -365,18 +367,32 @@ export function OnboardingV2({ onComplete }: Props) {
       if (options?.haptic !== false) {
         hapticSelection()
       }
+      const nextIdx = tasteIndex + 1
       setTasteDecisions((prev) => [
         ...prev,
         { track_id: tr.id, decision },
       ])
-      setTasteIndex((i) => i + 1)
+      setTasteIndex(nextIdx)
+      const nextTr = tasteTracks[nextIdx]
+      if (nextTr) {
+        autoPlayedTrackRef.current = nextTr.id
+        audio.prime()
+        audio.playTrack(
+          nextTr.id,
+          tasteTrackAudioSrc(nextTr.id),
+          { step: 'swipe' },
+        )
+      } else {
+        audio.stop()
+      }
     },
-    [tasteTracks, tasteIndex],
+    [audio, tasteTracks, tasteIndex],
   )
 
   const togglePreview = useCallback(() => {
     const tr = tasteTracks[tasteIndex]
     if (!tr) return
+    audio.prime()
     if (
       audio.state === 'playing' ||
       (audio.state === 'paused' &&
@@ -385,10 +401,9 @@ export function OnboardingV2({ onComplete }: Props) {
       audio.toggle({ step: 'swipe' })
       return
     }
-    audio.prime()
     audio.playTrack(
       tr.id,
-      `/api/v1/tracks/${tr.id}/audio?force_progressive=true`,
+      tasteTrackAudioSrc(tr.id),
       { step: 'swipe' },
     )
   }, [audio, tasteTracks, tasteIndex])
@@ -433,19 +448,17 @@ export function OnboardingV2({ onComplete }: Props) {
     if (tasteTracks.length === 0) return
     if (tasteIndex < tasteTracks.length) return
     if (tasteExhausted) return
-    if (lastFetchCountRef.current === tasteTracks.length)
-      return
-    lastFetchCountRef.current = tasteTracks.length
+    if (fetchMoreInFlightRef.current) return
 
+    const excludeIds = tasteTracks.map((t) => t.id)
+    fetchMoreInFlightRef.current = true
     let cancelled = false
     setTasteLoading(true)
     api
-      .getTasteSwipeTracks(SWIPE_BATCH)
+      .getTasteSwipeTracks(SWIPE_FETCH_BATCH, excludeIds)
       .then((tracks) => {
         if (cancelled) return
-        const seenIds = new Set(
-          tasteTracks.map((t) => t.id),
-        )
+        const seenIds = new Set(excludeIds)
         const fresh = tracks.filter(
           (t) => !seenIds.has(t.id),
         )
@@ -460,10 +473,12 @@ export function OnboardingV2({ onComplete }: Props) {
         if (!cancelled) setTasteExhausted(true)
       })
       .finally(() => {
+        fetchMoreInFlightRef.current = false
         if (!cancelled) setTasteLoading(false)
       })
     return () => {
       cancelled = true
+      fetchMoreInFlightRef.current = false
     }
   }, [step, tasteIndex, tasteTracks, tasteExhausted])
 
@@ -479,15 +494,15 @@ export function OnboardingV2({ onComplete }: Props) {
     if (!tr) return
     if (autoPlayedTrackRef.current === tr.id) return
     autoPlayedTrackRef.current = tr.id
+    audio.prime()
     audio.playTrack(
       tr.id,
-      `/api/v1/tracks/${tr.id}/audio?force_progressive=true`,
+      tasteTrackAudioSrc(tr.id),
       { step: 'swipe' },
     )
   }, [step, tasteIndex, tasteTracks, audio])
 
-  const canFinish =
-    tasteDecisions.length >= SWIPE_BATCH || tasteExhausted
+  const canFinish = !tasteLoading
 
   const handleManualFinish = useCallback(() => {
     hapticSelection()
@@ -802,7 +817,6 @@ export function OnboardingV2({ onComplete }: Props) {
         ref={audio.audioRef}
         preload="auto"
         playsInline
-        crossOrigin="anonymous"
         aria-hidden
         tabIndex={-1}
         className="onb-v2-hidden-audio"
@@ -1153,7 +1167,7 @@ function SwipeStep({
       try {
         const a = new Audio()
         a.preload = 'auto'
-        a.src = `/api/v1/tracks/${t.id}/audio?force_progressive=true`
+        a.src = tasteTrackAudioSrc(t.id)
         a.load()
         els.push(a)
       } catch {
@@ -1498,10 +1512,15 @@ function SwipeCard({
     if (committedRef.current) return
     if (!onTogglePreview) return
     if (audioLoading) return
+    if (audioBlocked || !isPlaying) {
+      onTogglePreview()
+      return
+    }
     if (isPlaying && !transportVisible) {
       onTogglePreview()
     }
   }, [
+    audioBlocked,
     audioLoading,
     isPlaying,
     onTogglePreview,
@@ -1579,21 +1598,30 @@ function SwipeCard({
           {t('redesign.onboardingV2.swipe.badgeNope')}
         </span>
       </m.span>
-      {audioBlocked && !audioLoading && <MuteHint />}
+      {audioBlocked && !audioLoading && (
+        <MuteHint onUnmute={onTogglePreview} />
+      )}
     </m.div>
   )
 }
 
-function MuteHint() {
+function MuteHint({ onUnmute }: { onUnmute: () => void }) {
   const { t } = useTranslation()
   return (
-    <span
+    <button
+      type="button"
       className="onb-v2-swipe-card__mute-hint"
-      role="status"
+      onPointerDown={(e) => {
+        e.stopPropagation()
+      }}
+      onClick={(e) => {
+        e.stopPropagation()
+        onUnmute()
+      }}
     >
       <Icon name="volume-off" size={16} />
       {t('redesign.onboardingV2.swipe.tapToUnmute')}
-    </span>
+    </button>
   )
 }
 

@@ -2,21 +2,22 @@
 
 from __future__ import annotations
 
-import json
 import inspect
+import json
 import time
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
 import structlog
-from sqlalchemy import func, select
+from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.redis import get_redis_client
-from app.models.complaint import Complaint
 from app.models.admin_action_log import AdminActionLog
-from app.models.lyrics_job import LyricsJob
+from app.models.complaint import Complaint
+from app.models.compute_job import ComputeJob
 from app.models.listen_event import ListenEvent
+from app.models.lyrics_job import LyricsJob
 from app.models.track import Track
 from app.models.user import User
 from app.models.user_preference import UserPreference
@@ -198,6 +199,143 @@ def _period_start(now: datetime, period: str) -> datetime | None:
     raise ValueError("unsupported period")
 
 
+def _as_aware(value: datetime) -> datetime:
+    if value.tzinfo is None:
+        return value.replace(tzinfo=UTC)
+    return value.astimezone(UTC)
+
+
+def _bucket_timestamp(
+    value: datetime,
+    *,
+    start_ts: int,
+    bucket_seconds: int,
+) -> int:
+    ts = int(_as_aware(value).timestamp())
+    if ts <= start_ts:
+        return start_ts
+    offset = ((ts - start_ts) // bucket_seconds) * bucket_seconds
+    return start_ts + offset
+
+
+async def collect_compute_job_stats(
+    session: AsyncSession,
+    *,
+    period_hours: int,
+    bucket_minutes: int,
+) -> dict[str, Any]:
+    now = datetime.now(UTC)
+    hours = max(1, min(720, int(period_hours)))
+    minutes = max(5, min(1440, int(bucket_minutes)))
+    start = now - timedelta(hours=hours)
+    start_ts = int(start.timestamp())
+    end_ts = int(now.timestamp())
+    bucket_seconds = minutes * 60
+
+    status_rows = await session.execute(
+        select(
+            ComputeJob.status,
+            func.count(ComputeJob.id),
+        ).group_by(ComputeJob.status)
+    )
+    by_status = {
+        str(status): int(count or 0)
+        for status, count in status_rows.all()
+    }
+    total = sum(by_status.values())
+    succeeded_total = by_status.get("succeeded", 0)
+    failed_total = by_status.get("failed", 0)
+    pending = by_status.get("pending", 0)
+    claimed = by_status.get("claimed", 0)
+
+    succeeded_period = await _safe_count(
+        session,
+        select(func.count(ComputeJob.id)).where(
+            ComputeJob.status == "succeeded",
+            ComputeJob.finished_at >= start,
+        ),
+    )
+    failed_period = await _safe_count(
+        session,
+        select(func.count(ComputeJob.id)).where(
+            ComputeJob.status == "failed",
+            ComputeJob.finished_at >= start,
+        ),
+    )
+
+    bucket_count = max(1, ((end_ts - start_ts) // bucket_seconds) + 1)
+    buckets: dict[int, dict[str, int]] = {
+        start_ts + (idx * bucket_seconds): {
+            "created": 0,
+            "succeeded": 0,
+            "failed": 0,
+            "resolved": 0,
+        }
+        for idx in range(bucket_count)
+    }
+    rows = await session.execute(
+        select(
+            ComputeJob.status,
+            ComputeJob.created_at,
+            ComputeJob.finished_at,
+        )
+        .where(
+            or_(
+                ComputeJob.created_at >= start,
+                ComputeJob.finished_at >= start,
+            )
+        )
+        .limit(100_000)
+    )
+    for status, created_at, finished_at in rows.all():
+        if isinstance(created_at, datetime):
+            bucket = _bucket_timestamp(
+                created_at,
+                start_ts=start_ts,
+                bucket_seconds=bucket_seconds,
+            )
+            if bucket in buckets:
+                buckets[bucket]["created"] += 1
+        if not isinstance(finished_at, datetime):
+            continue
+        bucket = _bucket_timestamp(
+            finished_at,
+            start_ts=start_ts,
+            bucket_seconds=bucket_seconds,
+        )
+        if bucket not in buckets:
+            continue
+        if status == "succeeded":
+            buckets[bucket]["succeeded"] += 1
+            buckets[bucket]["resolved"] += 1
+        elif status == "failed":
+            buckets[bucket]["failed"] += 1
+            buckets[bucket]["resolved"] += 1
+
+    return {
+        "generated_at": int(now.timestamp()),
+        "period_hours": hours,
+        "bucket_minutes": minutes,
+        "total": total,
+        "by_status": by_status,
+        "pending": pending,
+        "claimed": claimed,
+        "succeeded_total": succeeded_total,
+        "failed_total": failed_total,
+        "resolved_total": succeeded_total + failed_total,
+        "succeeded_period": succeeded_period,
+        "failed_period": failed_period,
+        "resolved_period": succeeded_period + failed_period,
+        "buckets": [
+            {
+                "ts": ts,
+                **values,
+            }
+            for ts, values in sorted(buckets.items())
+        ],
+    }
+
+
 async def collect_stats(
     session: AsyncSession,
     *,
@@ -262,7 +400,9 @@ async def collect_stats(
     top_tracks: list[dict[str, Any]] = []
     if raw_top:
         track_ids = [int(row.track_id) for row in raw_top]
-        names_stmt = select(Track.id, Track.title).where(Track.id.in_(track_ids))
+        names_stmt = select(Track.id, Track.title).where(
+            Track.id.in_(track_ids)
+        )
         names_rows = await session.execute(names_stmt)
         names = {int(row.id): str(row.title) for row in names_rows}
         for row in raw_top:
@@ -331,7 +471,9 @@ async def collect_track_stats(
     ).group_by(ListenEvent.track_id)
     if start is not None:
         base_listen = base_listen.where(ListenEvent.created_at >= start)
-    top_stmt = base_listen.order_by(func.count(ListenEvent.id).desc()).limit(15)
+    top_stmt = base_listen.order_by(
+        func.count(ListenEvent.id).desc()
+    ).limit(15)
     top_rows = await session.execute(top_stmt)
     top_raw = list(top_rows.all())
 
@@ -357,8 +499,12 @@ async def collect_track_stats(
         func.count(Track.id).label("value"),
     ).group_by(func.date(Track.created_at))
     if start is not None:
-        uploads_series_stmt = uploads_series_stmt.where(Track.created_at >= start)
-    uploads_series_stmt = uploads_series_stmt.order_by(func.date(Track.created_at))
+        uploads_series_stmt = uploads_series_stmt.where(
+            Track.created_at >= start
+        )
+    uploads_series_stmt = uploads_series_stmt.order_by(
+        func.date(Track.created_at)
+    )
     uploads_rows = await session.execute(uploads_series_stmt)
     uploads_series: list[dict[str, int]] = []
     for row in uploads_rows:
@@ -389,7 +535,9 @@ async def collect_admin_stats(
         base = base.where(AdminActionLog.created_at >= start)
     total_actions = await _safe_count(session, base)
 
-    unique_admins_stmt = select(func.count(func.distinct(AdminActionLog.user_id)))
+    unique_admins_stmt = select(
+        func.count(func.distinct(AdminActionLog.user_id))
+    )
     if start is not None:
         unique_admins_stmt = unique_admins_stmt.where(
             AdminActionLog.created_at >= start
@@ -416,7 +564,9 @@ async def collect_admin_stats(
     names: dict[int, str] = {}
     if admin_ids:
         user_rows = await session.execute(
-            select(User.id, User.username, User.email).where(User.id.in_(admin_ids))
+            select(User.id, User.username, User.email).where(
+                User.id.in_(admin_ids)
+            )
         )
         names = {
             int(row.id): str(row.username or row.email or f"#{row.id}")

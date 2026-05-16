@@ -33,6 +33,7 @@ from app.services import compute_queue_service as q
 from app.services import compute_results_router as crr
 from app.services import compute_worker_service as cws
 from app.services import worker_rate_limit as rl
+from app.services.compute_job_offload_config import worker_claim_enabled
 from app.services.soundcloud_service import SoundCloudService
 from app.services.worker_job_control import (
     merge_heartbeat_control_payload,
@@ -74,11 +75,7 @@ def _claimable_job_types(job_types: list[str]) -> list[str]:
         if jt in seen or jt not in q.OFFLOADABLE_JOB_TYPES:
             continue
         seen.add(jt)
-        if jt == q.JOB_SOUNDCLOUD_RPC:
-            if settings.sc_offload_enabled:
-                out.append(jt)
-            continue
-        if settings.compute_offload_enabled:
+        if worker_claim_enabled(jt):
             out.append(jt)
     return out
 

@@ -5,16 +5,11 @@ from dataclasses import dataclass
 from typing import Any
 
 import structlog
-from dotsound_private_core.services.compute_job_policy import (
-    RoutingMode,
-    get_job_rule,
-    requires_worker,
-)
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.config import settings
 from app.models.compute_job import ComputeJob
 from app.services import compute_queue_service as q
+from app.services.compute_job_offload_config import should_enqueue_remote
 
 logger: structlog.stdlib.BoundLogger = structlog.get_logger(__name__)
 
@@ -51,12 +46,6 @@ class ComputeDispatchResult:
     result: dict[str, Any] | None = None
 
 
-def _offload_enabled(job_type: str) -> bool:
-    if job_type == q.JOB_SOUNDCLOUD_RPC:
-        return bool(settings.sc_offload_enabled)
-    return bool(settings.compute_offload_enabled)
-
-
 async def dispatch_compute_job(
     session: AsyncSession,
     *,
@@ -70,7 +59,6 @@ async def dispatch_compute_job(
     force_offload: bool = False,
 ) -> ComputeDispatchResult:
     canonical_type = q.canonical_job_type(job_type)
-    rule = get_job_rule(canonical_type)
     target_id_str = None if target_id is None else str(target_id)
     local_job = LocalComputeJob(
         job_type=canonical_type,
@@ -79,15 +67,10 @@ async def dispatch_compute_job(
         payload=payload or {},
         feature_version=feature_version,
     )
-    should_enqueue = (
-        force_offload
-        or (
-            not force_local
-            and rule.routing
-            in (RoutingMode.PREFER_WORKER, RoutingMode.WORKER_ONLY)
-            and _offload_enabled(canonical_type)
-        )
-        or (requires_worker(canonical_type) and not force_local)
+    should_enqueue = should_enqueue_remote(
+        canonical_type,
+        force_local=force_local,
+        force_offload=force_offload,
     )
     if should_enqueue:
         job = await q.enqueue(

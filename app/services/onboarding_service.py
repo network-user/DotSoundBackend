@@ -261,6 +261,7 @@ class OnboardingService:
         self,
         user_id: int,
         count: int = TASTE_SWIPE_TRACK_COUNT,
+        exclude_track_ids: frozenset[int] | None = None,
     ) -> list[Track]:
         """Pick a small list of tracks for the swipe step.
 
@@ -269,6 +270,7 @@ class OnboardingService:
         When the user picked artists in onboarding, their catalogue
         tracks are mixed into the candidate pool first.
         """
+        excluded = exclude_track_ids or frozenset()
         pref = await self._pref_repo.get_by_user_id(user_id)
         user = await self._user_repo.get_by_id(user_id)
         locale = user.locale if user else None
@@ -283,11 +285,11 @@ class OnboardingService:
 
         candidate_count = max(
             count * _TASTE_CANDIDATE_MULTIPLIER,
-            count + 5,
+            count + 5 + len(excluded),
         )
 
         candidates: list[Track] = []
-        seen: set[int] = set()
+        seen: set[int] = set(excluded)
 
         if artist_ids:
             per_artist = max(

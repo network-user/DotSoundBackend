@@ -1,4 +1,5 @@
 import { useEffect } from 'react'
+import { createPortal } from 'react-dom'
 import { Icon } from '@/components/Icon/Icon'
 import { MotionPress } from '@/components/ui/MotionPress'
 
@@ -38,11 +39,11 @@ export function SettingsPickerModal({
     return () => window.removeEventListener('keydown', handler)
   }, [open, onClose])
 
-  if (!open) return null
+  if (!open || typeof document === 'undefined') return null
 
-  return (
+  return createPortal(
     <div
-      className="spmodal-backdrop"
+      className="spmodal-backdrop spmodal-backdrop--portal"
       onClick={(e) => {
         if (e.target === e.currentTarget) onClose()
       }}
@@ -120,6 +121,7 @@ export function SettingsPickerModal({
           ))}
         </div>
       </div>
-    </div>
+    </div>,
+    document.body,
   )
 }

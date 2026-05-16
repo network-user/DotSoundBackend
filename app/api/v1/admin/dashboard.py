@@ -16,6 +16,7 @@ from app.models.user import User
 from app.services.admin_dashboard_service import (
     collect_activation_funnel,
     collect_admin_stats,
+    collect_compute_job_stats,
     collect_overview,
     collect_stats,
     collect_track_stats,
@@ -80,6 +81,20 @@ async def activation_funnel(
     session: AsyncSession = Depends(get_db),
 ) -> dict[str, Any]:
     return await collect_activation_funnel(session, period=period)
+
+
+@router.get("/compute-jobs")
+async def compute_job_stats(
+    period_hours: int = Query(24, ge=1, le=720),
+    bucket_minutes: int = Query(60, ge=5, le=1440),
+    _admin: User = Depends(require_admin_session),
+    session: AsyncSession = Depends(get_db),
+) -> dict[str, Any]:
+    return await collect_compute_job_stats(
+        session,
+        period_hours=period_hours,
+        bucket_minutes=bucket_minutes,
+    )
 
 
 @router.get("/containers")

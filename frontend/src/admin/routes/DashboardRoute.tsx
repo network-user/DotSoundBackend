@@ -95,6 +95,7 @@ export function DashboardRoute() {
   const [statsPeriod, setStatsPeriod] = useState<
     'today' | '7d' | '30d' | 'all'
   >('today')
+  const [computePeriodHours, setComputePeriodHours] = useState(24)
   const [statsMetric, setStatsMetric] = useState<
     | 'all'
     | 'users_registered'
@@ -153,6 +154,12 @@ export function DashboardRoute() {
       : statsPeriod === '7d'
         ? 7
         : 30
+  const computeBucketMinutes =
+    computePeriodHours <= 6
+      ? 15
+      : computePeriodHours <= 24
+        ? 60
+        : 240
 
   const { data, error, isLoading } = useQuery({
     queryKey: ['admin', 'dashboard', 'overview'],
@@ -258,6 +265,22 @@ export function DashboardRoute() {
     refetchInterval: live ? 30_000 : false,
     refetchIntervalInBackground: false,
   })
+  const computeJobs = useQuery({
+    queryKey: [
+      'admin',
+      'dashboard',
+      'compute-jobs',
+      computePeriodHours,
+      computeBucketMinutes,
+    ],
+    queryFn: () =>
+      adminApi.dashboardComputeJobs(
+        computePeriodHours,
+        computeBucketMinutes,
+      ),
+    refetchInterval: live ? 10_000 : false,
+    refetchIntervalInBackground: false,
+  })
   useEffect(() => {
     if (!data?.generated_at) return
     setOnlineFallback((prev) => {
@@ -318,6 +341,19 @@ export function DashboardRoute() {
   const radioSkipReasonTotal = radioSkipReasonItems.reduce(
     (sum, item) => sum + item.count,
     0,
+  )
+  const computeJobBuckets = computeJobs.data?.buckets ?? []
+  const computeCreatedPoints: ChartPoint[] = computeJobBuckets.map(
+    (item) => ({
+      ts: item.ts,
+      value: item.created,
+    }),
+  )
+  const computeResolvedPoints: ChartPoint[] = computeJobBuckets.map(
+    (item) => ({
+      ts: item.ts,
+      value: item.resolved,
+    }),
   )
   const baseOnlinePoints =
     onlinePoints.length > 0
@@ -887,6 +923,119 @@ export function DashboardRoute() {
           />
         </m.div>
       </m.section>
+
+      <section className="admin-card">
+        <div className="admin-dashboard__chart-head">
+          <div>
+            <h2>
+              {t('admin.dashboard.computeJobs.title', 'Задачи')}
+            </h2>
+            <p className="admin-card__sub">
+              {t(
+                'admin.dashboard.computeJobs.subtitle',
+                'Live-срез persistent compute_jobs и результатов воркера',
+              )}
+            </p>
+          </div>
+          <AdminRangeSwitch<number>
+            groupId="dash-compute-jobs-period"
+            value={computePeriodHours}
+            onChange={setComputePeriodHours}
+            options={[
+              { value: 1, label: '1h' },
+              { value: 6, label: '6h' },
+              { value: 24, label: '24h' },
+              { value: 168, label: '7d' },
+            ]}
+          />
+        </div>
+        {computeJobs.isLoading || !computeJobs.data ? (
+          <div className="admin-skeleton admin-skeleton--card" />
+        ) : (
+          <>
+            <section className="kpi-grid">
+              <KpiCard
+                label={t(
+                  'admin.dashboard.computeJobs.total',
+                  'Всего задач',
+                )}
+                value={computeJobs.data.total}
+                hint={`pending ${computeJobs.data.pending} / claimed ${computeJobs.data.claimed}`}
+              />
+              <KpiCard
+                label={t(
+                  'admin.dashboard.computeJobs.resolvedTotal',
+                  'Решено всего',
+                )}
+                value={computeJobs.data.resolved_total}
+                hint={`ok ${computeJobs.data.succeeded_total} / failed ${computeJobs.data.failed_total}`}
+                accent={
+                  computeJobs.data.failed_total > 0
+                    ? 'warn'
+                    : 'default'
+                }
+              />
+              <KpiCard
+                label={t(
+                  'admin.dashboard.computeJobs.resolvedPeriod',
+                  'Решено за период',
+                )}
+                value={computeJobs.data.resolved_period}
+                hint={`ok ${computeJobs.data.succeeded_period} / failed ${computeJobs.data.failed_period}`}
+                accent={
+                  computeJobs.data.failed_period > 0
+                    ? 'warn'
+                    : 'default'
+                }
+              />
+              <KpiCard
+                label={t(
+                  'admin.dashboard.computeJobs.inFlight',
+                  'В работе',
+                )}
+                value={
+                  computeJobs.data.pending + computeJobs.data.claimed
+                }
+                hint={`${computeJobs.data.bucket_minutes}m buckets`}
+              />
+            </section>
+            <section className="kpi-grid kpi-grid--charts">
+              <article>
+                <h3>
+                  {t(
+                    'admin.dashboard.computeJobs.createdChart',
+                    'Создано',
+                  )}
+                </h3>
+                <LineChart
+                  data={computeCreatedPoints}
+                  height={180}
+                  ariaLabel={t(
+                    'admin.dashboard.computeJobs.createdChart',
+                    'Создано',
+                  )}
+                />
+              </article>
+              <article>
+                <h3>
+                  {t(
+                    'admin.dashboard.computeJobs.resolvedChart',
+                    'Решено',
+                  )}
+                </h3>
+                <LineChart
+                  data={computeResolvedPoints}
+                  height={180}
+                  ariaLabel={t(
+                    'admin.dashboard.computeJobs.resolvedChart',
+                    'Решено',
+                  )}
+                />
+              </article>
+            </section>
+          </>
+        )}
+      </section>
 
       <section className="admin-card">
         <div className="admin-dashboard__chart-head">

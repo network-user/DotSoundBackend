@@ -158,6 +158,12 @@ class AppSettings(BaseSettings):
     # backend changes never requires a remote worker to be already
     # online; Taskiq workers keep executing local handlers.
     compute_offload_enabled: bool = False
+    # Comma/newline separated allowlist of PREFER_WORKER job types
+    # that may be enqueued and claimed while the global generic
+    # offload switch stays off. Useful for staged rollout: keep
+    # heavy/stubbed handlers local, but let known-safe remote handlers
+    # drain a real pool.
+    compute_offload_job_types: str = "catalog_normalize"
     # Soft server-side pacing for generic compute worker claims.
     # Prevents one fast worker from draining thousands of tiny jobs
     # and then tripping result/fail rate limits with retry storms.

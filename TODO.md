@@ -1,5 +1,19 @@
 # DotSound - TODO Tracker
 
+- [x] **Settings reset modal + onboarding swipe calibration (2026-05-17)**
+  - Frontend: `SettingsConfirmModal` с `z-index: 10200`, solid panel и
+    safe-area padding для подтверждения «Сбросить рекомендации» на мобилке;
+    `SettingsPickerModal` порталится в `body` (`spmodal-backdrop--portal`).
+    Глобально: mobile `.modal .modal-content` — нижний отступ под nav.
+  - Frontend: свайп-калибровка — воспроизведение после жеста (like/dislike),
+    tap/unmute при autoplay block, без `crossOrigin` на onboarding audio;
+    «Готово» доступно сразу после загрузки; батчи по 8 треков.
+  - Hotfix подгрузки: убран `lastFetchCountRef` (блокировал refetch после
+    5-й карточки); `exclude_ids` в API, чтобы второй батч не дублировал первый.
+  - Backend: `/onboarding/taste-swipe` cap через
+    `TASTE_SWIPE_MAX_COUNT` из PrivateCore; query `exclude_ids`.
+  - Verify: `npm run build`.
+
 - [x] **Mobile media notification artwork and switch hold (2026-05-16)**
   - Frontend: `MediaMetadata.artwork` теперь всегда получает реальную
     обложку трека через cover proxy, а при отсутствии обложки — нейтральный
@@ -55,6 +69,12 @@
   - ComputeWorker hotfix: `soundcloud_rpc` при пустом proxy-config теперь
     ходит напрямую с egress IP устройства через обычный HTTP-клиент; PrivateCore
     `OutboundClient` используется только когда задан proxy для job type/default.
+  - Hotfix: `WORKER_ONLY` compute jobs are claimable regardless of
+    `COMPUTE_OFFLOAD_ENABLED`; staged generic offload now has
+    `COMPUTE_OFFLOAD_JOB_TYPES` (default `catalog_normalize`) so one
+    worker can drain a wider safe pool without opening every stubbed
+    handler. Admin dashboard now has live compute job totals, resolved
+    counters for a selected window, and created/resolved charts.
 
 - [x] **Playback buffering / fast seek overhaul (2026-05-16)**
   - Симптом: первое воспроизведение и переключение трека «висели» 20–30 c,

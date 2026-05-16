@@ -1,5 +1,5 @@
 import structlog
-from fastapi import APIRouter, Body, Depends, Request
+from fastapi import APIRouter, Body, Depends, Query, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.rate_limit import limiter
@@ -26,6 +26,10 @@ from app.schemas.onboarding import (
 )
 from app.schemas.track import TrackResponse
 from app.services.genre_samples_service import GenreSamplesService
+from dotsound_private_core.services.onboarding_policy import (
+    TASTE_SWIPE_MAX_COUNT,
+)
+
 from app.services.onboarding_service import (
     OnboardingService,
 )
@@ -251,6 +255,7 @@ async def get_calibration(
 )
 async def get_taste_swipe_tracks(
     count: int = 5,
+    exclude_ids: list[int] = Query(default=[]),
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> list[TrackResponse]:
@@ -260,9 +265,13 @@ async def get_taste_swipe_tracks(
     (``order_taste_swipe_tracks``) so the first card is the
     safest bet, and follow-ups rotate genre / language.
     """
-    cap = max(3, min(count, 8))
+    cap = max(3, min(count, TASTE_SWIPE_MAX_COUNT))
     svc = OnboardingService(db)
-    tracks = await svc.get_calibration_tracks(user.id, count=cap)
+    tracks = await svc.get_calibration_tracks(
+        user.id,
+        count=cap,
+        exclude_track_ids=frozenset(exclude_ids),
+    )
     return await build_track_responses(db, tracks)
 
 

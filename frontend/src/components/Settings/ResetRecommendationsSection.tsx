@@ -1,10 +1,10 @@
-import { useState, type MouseEvent } from 'react'
-import { createPortal } from 'react-dom'
+import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { api } from '@/lib/api'
 import { Icon } from '@/components/Icon/Icon'
 import { MotionPress } from '@/components/ui/MotionPress'
 import { showIsland } from '@/lib/island'
+import { SettingsConfirmModal } from './SettingsConfirmModal'
 
 interface Props {
   onClose: () => void
@@ -46,10 +46,6 @@ export function ResetRecommendationsSection({ onClose }: Props) {
     }
   }
 
-  const handleBackdrop = (e: MouseEvent<HTMLDivElement>) => {
-    if (e.target === e.currentTarget && !busy) setConfirmOpen(false)
-  }
-
   return (
     <>
       <div className="settings-section-header">
@@ -78,73 +74,27 @@ export function ResetRecommendationsSection({ onClose }: Props) {
           className="settings-chevron"
         />
       </MotionPress>
-      {confirmOpen &&
-        typeof document !== 'undefined' &&
-        createPortal(
-          <div
-            className="modal settings-reset-modal"
-            onClick={handleBackdrop}
-          >
-            <div
-              className="modal-content settings-reset-modal__panel"
-              onClick={(e) => e.stopPropagation()}
-            >
-              <div className="modal-header">
-                <h3>
-                  {t(
-                    'settings.resetRecs.title',
-                    'Сбросить рекомендации?',
-                  )}
-                </h3>
-                <MotionPress
-                  type="button"
-                  variant="icon"
-                  haptic="light"
-                  className="icon-btn"
-                  ariaLabel={t('common.cancel', 'Отмена')}
-                  onClick={() => setConfirmOpen(false)}
-                  disabled={busy}
-                >
-                  <Icon name="x" size={18} />
-                </MotionPress>
-              </div>
-              <p className="modal-hint settings-reset-modal__hint">
-                {t(
-                  'settings.resetRecs.hint',
-                  'Очистим жанровые предпочтения, дизлайки и калибровку вкуса. Библиотека и лайки останутся без изменений.',
-                )}
-              </p>
-              <div className="settings-danger-zone__actions settings-reset-modal__actions">
-                <MotionPress
-                  type="button"
-                  variant="primary"
-                  haptic="medium"
-                  className="btn-primary"
-                  disabled={busy}
-                  onClick={() => void submit()}
-                >
-                  {busy
-                    ? '…'
-                    : t(
-                        'settings.resetRecs.confirm',
-                        'Сбросить',
-                      )}
-                </MotionPress>
-                <MotionPress
-                  type="button"
-                  variant="ghost"
-                  haptic="light"
-                  className="btn-secondary"
-                  disabled={busy}
-                  onClick={() => setConfirmOpen(false)}
-                >
-                  {t('common.cancel', 'Отмена')}
-                </MotionPress>
-              </div>
-            </div>
-          </div>,
-          document.body,
+      <SettingsConfirmModal
+        open={confirmOpen}
+        onClose={() => {
+          if (!busy) setConfirmOpen(false)
+        }}
+        title={t(
+          'settings.resetRecs.title',
+          'Сбросить рекомендации?',
         )}
+        hint={t(
+          'settings.resetRecs.hint',
+          'Очистим жанровые предпочтения, дизлайки и калибровку вкуса. Библиотека и лайки останутся без изменений.',
+        )}
+        confirmLabel={t(
+          'settings.resetRecs.confirm',
+          'Сбросить',
+        )}
+        cancelLabel={t('common.cancel', 'Отмена')}
+        busy={busy}
+        onConfirm={() => void submit()}
+      />
     </>
   )
 }

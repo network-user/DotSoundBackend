@@ -2207,9 +2207,18 @@ export const api = {
     })
   },
 
-  getTasteSwipeTracks(count = 5): Promise<Track[]> {
+  getTasteSwipeTracks(
+    count = 8,
+    excludeIds: number[] = [],
+  ): Promise<Track[]> {
+    const params = new URLSearchParams({
+      count: String(count),
+    })
+    for (const id of excludeIds) {
+      params.append('exclude_ids', String(id))
+    }
     return request(
-      `/api/v1/onboarding/taste-swipe?count=${count}`,
+      `/api/v1/onboarding/taste-swipe?${params.toString()}`,
     )
   },
 
