@@ -15,6 +15,11 @@ from taskiq import TaskiqEvents, TaskiqState
 from app.core.db import AsyncSessionLocal
 from app.core.tkq import broker
 from app.repositories.track_info import TrackInfoRepository
+from app.services import compute_queue_service as q
+from app.services.compute_job_dispatcher import (
+    LocalComputeJob,
+    dispatch_compute_job,
+)
 
 logger: structlog.stdlib.BoundLogger = structlog.get_logger(__name__)
 
@@ -40,10 +45,10 @@ async def _preload_track_info_provider(
         logger.exception("track_info_provider_warmup_failed")
 
 
-@broker.task
-async def fetch_track_info_task(track_id: int) -> dict:
+async def fetch_track_info_local(job: LocalComputeJob) -> dict:
     import time
 
+    track_id = int(job.target_id or job.payload.get("track_id") or 0)
     structlog.contextvars.bind_contextvars(track_id=track_id)
     logger.info("fetch_track_info_task_picked_up", track_id=track_id)
     t_start = time.monotonic()
@@ -61,7 +66,9 @@ async def fetch_track_info_task(track_id: int) -> dict:
         track = result.scalar_one_or_none()
         if track is None:
             logger.warning("track_info_track_not_found", track_id=track_id)
-            await repo.upsert(track_id, status="failed", content=None, fetched_at=None)
+            await repo.upsert(
+                track_id, status="failed", content=None, fetched_at=None
+            )
             await session.commit()
             return {"status": "not_found"}
 
@@ -70,7 +77,10 @@ async def fetch_track_info_task(track_id: int) -> dict:
             result2 = await session.execute(
                 select(Artist.name)
                 .join(TrackArtist, TrackArtist.artist_id == Artist.id)
-                .where(TrackArtist.track_id == track_id, TrackArtist.role == "primary")
+                .where(
+                    TrackArtist.track_id == track_id,
+                    TrackArtist.role == "primary",
+                )
                 .limit(1)
             )
             row = result2.first()
@@ -117,7 +127,10 @@ async def fetch_track_info_task(track_id: int) -> dict:
 
         if info is None or info.status == "not_found":
             await repo.upsert(
-                track_id, status="not_found", content=None, fetched_at=datetime.now(UTC)
+                track_id,
+                status="not_found",
+                content=None,
+                fetched_at=datetime.now(UTC),
             )
             await session.commit()
             logger.info("track_info_not_found", track_id=track_id)
@@ -138,3 +151,18 @@ async def fetch_track_info_task(track_id: int) -> dict:
             content_len=len(content),
         )
         return {"status": "done"}
+
+
+@broker.task
+async def fetch_track_info_task(track_id: int) -> dict:
+    async with AsyncSessionLocal() as session:
+        dispatched = await dispatch_compute_job(
+            session,
+            job_type=q.JOB_TRACK_INFO_FETCH,
+            target_kind=q.TARGET_KIND_TRACK,
+            target_id=track_id,
+            payload={"track_id": track_id},
+            local_handler=fetch_track_info_local,
+        )
+        await session.commit()
+    return dispatched.result or {"status": dispatched.status}

@@ -21,6 +21,11 @@ from app.repositories.track import TrackRepository
 from app.repositories.user_track_library import (
     UserTrackLibraryRepository,
 )
+from app.services import compute_queue_service as q
+from app.services.compute_job_dispatcher import (
+    LocalComputeJob,
+    dispatch_compute_job,
+)
 from app.services.import_service import (
     clear_cancel_flag,
     is_cancel_flag_set,
@@ -326,8 +331,29 @@ def _pick_best_sc_match(
     return best
 
 
+async def process_external_import_job_local(
+    job: LocalComputeJob,
+) -> dict:
+    job_id = int(job.target_id or job.payload.get("job_id") or 0)
+    await _process_external_import_job_local(job_id)
+    return {"status": "done"}
+
+
 @broker.task
 async def process_external_import_job(job_id: int) -> None:
+    async with AsyncSessionLocal() as session:
+        await dispatch_compute_job(
+            session,
+            job_type=q.JOB_EXTERNAL_IMPORT_SCAN,
+            target_kind=q.TARGET_KIND_IMPORT_JOB,
+            target_id=job_id,
+            payload={"job_id": job_id},
+            local_handler=process_external_import_job_local,
+        )
+        await session.commit()
+
+
+async def _process_external_import_job_local(job_id: int) -> None:
     async with AsyncSessionLocal() as session:
         job = await session.get(ImportJob, job_id)
         if not job or job.status != "importing":

@@ -17,9 +17,14 @@ from taskiq import TaskiqEvents, TaskiqState
 from app.core.db import AsyncSessionLocal
 from app.core.tkq import broker
 from app.models.artist import Artist
+from app.services import compute_queue_service as q
 from app.services.artist_enrichment_service import (
     ArtistEnrichmentService,
     ArtistNotFound,
+)
+from app.services.compute_job_dispatcher import (
+    LocalComputeJob,
+    dispatch_compute_job,
 )
 
 logger: structlog.stdlib.BoundLogger = structlog.get_logger(__name__)
@@ -48,15 +53,13 @@ async def _preload_artist_info_provider(
         logger.exception("artist_info_provider_warmup_failed")
 
 
-@broker.task
-async def enrich_artist_task(
-    artist_id: int,
-    progress_id: str = "",
-    bypass_cache: bool = False,
-    skip_catalog_sync: bool = False,
-) -> dict:
+async def enrich_artist_local(job: LocalComputeJob) -> dict:
     import time
 
+    artist_id = int(job.target_id or job.payload.get("artist_id") or 0)
+    progress_id = str(job.payload.get("progress_id") or "")
+    bypass_cache = bool(job.payload.get("bypass_cache"))
+    skip_catalog_sync = bool(job.payload.get("skip_catalog_sync"))
     structlog.contextvars.bind_contextvars(
         artist_id=artist_id, progress_id=progress_id
     )
@@ -97,6 +100,31 @@ async def enrich_artist_task(
                 elapsed_s=round(time.monotonic() - t_start, 2),
             )
             return {"status": "error"}
+
+
+@broker.task
+async def enrich_artist_task(
+    artist_id: int,
+    progress_id: str = "",
+    bypass_cache: bool = False,
+    skip_catalog_sync: bool = False,
+) -> dict:
+    async with AsyncSessionLocal() as session:
+        dispatched = await dispatch_compute_job(
+            session,
+            job_type=q.JOB_ARTIST_ENRICHMENT,
+            target_kind=q.TARGET_KIND_ARTIST,
+            target_id=artist_id,
+            payload={
+                "artist_id": artist_id,
+                "progress_id": progress_id,
+                "bypass_cache": bypass_cache,
+                "skip_catalog_sync": skip_catalog_sync,
+            },
+            local_handler=enrich_artist_local,
+        )
+        await session.commit()
+    return dispatched.result or {"status": dispatched.status}
 
 
 @broker.task

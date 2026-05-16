@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from datetime import UTC, datetime
 from typing import Any, cast
 
 from sqlalchemy import delete, select
@@ -8,11 +9,14 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.models.artist_features import ArtistFeatures
 from app.models.artist_similarity import ArtistSimilarity
 from app.models.compute_job import ComputeJob
+from app.models.import_job import ImportJob
 from app.models.track import Track
 from app.models.track_audio_features import TrackAudioFeatures
 from app.models.track_preview_clip import TrackPreviewClip
 from app.models.track_similarity import TrackSimilarity
+from app.models.track_snippet import TrackSnippet
 from app.repositories.embedding import EmbeddingRepository
+from app.repositories.track_info import TrackInfoRepository
 from app.services import compute_queue_service as q
 
 SIMILARITY_INDEX_MAX_EDGES = 500
@@ -39,56 +43,304 @@ async def persist_result(
     result: dict[str, Any] | None,
 ) -> None:
     r: dict[str, Any] = result or {}
-    if job.job_type == q.JOB_TRACK_AUDIO_FEATURES:
+    job_type = q.canonical_job_type(job.job_type)
+    if job_type == q.JOB_TRACK_AUDIO_FEATURES:
         await _persist_track_audio(
             session,
             job=job,
             r=r,
         )
         return
-    if job.job_type == q.JOB_ARTIST_FEATURES_UPDATE:
+    if job_type == q.JOB_ARTIST_FEATURES_UPDATE:
         await _persist_artist_features(
             session,
             job=job,
             r=r,
         )
         return
-    if job.job_type == q.JOB_ARTIST_SIMILARITY_INDEX:
+    if job_type == q.JOB_ARTIST_SIMILARITY:
         await _persist_artist_similarity_index(
             session,
             job=job,
             r=r,
         )
         return
-    if job.job_type == q.JOB_TRACK_SIMILARITY_INDEX:
+    if job_type == q.JOB_TRACK_SIMILARITY:
         await _persist_track_similarity_index(
             session,
             job=job,
             r=r,
         )
         return
-    if job.job_type == q.JOB_CATALOG_INGEST_NORMALIZE:
+    if job_type == q.JOB_CATALOG_NORMALIZE:
         await _persist_catalog_normalize(
             session,
             job=job,
             r=r,
         )
         return
-    if job.job_type == q.JOB_AUDIO_EMBEDDING:
+    if job_type == q.JOB_AUDIO_EMBEDDING:
         await _persist_audio_embedding(
             session,
             job=job,
             r=r,
         )
         return
-    if job.job_type == q.JOB_SOUNDCLOUD_RPC:
+    if job_type == q.JOB_SOUNDCLOUD_RPC:
         await _persist_soundcloud_rpc(
             session,
             job=job,
             r=r,
         )
         return
+    if job_type in (
+        q.JOB_SC_ARTIST_CATALOG_SYNC,
+        q.JOB_SC_ARTIST_SIMILAR_STATION_SYNC,
+        q.JOB_SC_ARTIST_RELEASE_SYNC,
+    ):
+        await _persist_catalog_sync_result(session, job=job, r=r)
+        return
+    if job_type == q.JOB_ARTIST_ENRICHMENT:
+        await _persist_artist_enrichment(session, job=job, r=r)
+        return
+    if job_type == q.JOB_TRACK_INFO_FETCH:
+        await _persist_track_info(session, job=job, r=r)
+        return
+    if job_type == q.JOB_EXTERNAL_IMPORT_SCAN:
+        await _persist_external_import_scan(session, job=job, r=r)
+        return
+    if job_type == q.JOB_TRACK_TRANSCODING:
+        await _persist_track_transcoding(session, job=job, r=r)
+        return
+    if job_type == q.JOB_TRACK_WAVEFORM:
+        await _persist_track_waveform(session, job=job, r=r)
+        return
+    if job_type == q.JOB_TRACK_SNIPPET:
+        await _persist_track_snippet(session, job=job, r=r)
+        return
+    if job_type == q.JOB_TRACK_COVER_PROCESSING:
+        await _persist_track_cover(session, job=job, r=r)
+        return
     raise ValueError(f"unknown_job_type:{job.job_type}")
+
+
+async def _persist_catalog_sync_result(
+    session: AsyncSession,
+    *,
+    job: ComputeJob,
+    r: dict[str, Any],
+) -> None:
+    from app.services import artist_catalog_sync_progress as acsp
+
+    artist_id = _i(job.target_id)
+    if artist_id <= 0:
+        raise ValueError("catalog_sync_invalid_target")
+    mode = "full"
+    soundcloud_album_id: int | None = None
+    job_type = q.canonical_job_type(job.job_type)
+    if job_type == q.JOB_SC_ARTIST_SIMILAR_STATION_SYNC:
+        mode = "station"
+    elif job_type == q.JOB_SC_ARTIST_RELEASE_SYNC:
+        mode = "release"
+        raw_album_id = r.get("soundcloud_album_id") or (job.payload or {}).get(
+            "soundcloud_album_id"
+        )
+        soundcloud_album_id = _i(raw_album_id)
+    status = str(r.get("status") or "ok")
+    if status in {"ok", "done", "partial_skipped_dead_track"}:
+        await acsp.set_success(
+            artist_id,
+            mode=mode,
+            soundcloud_album_id=soundcloud_album_id,
+            detail=r,
+        )
+    elif status == "queued_compute":
+        await acsp.set_running(
+            artist_id,
+            mode=mode,
+            soundcloud_album_id=soundcloud_album_id,
+            detail=r,
+        )
+    else:
+        await acsp.set_error(
+            artist_id,
+            mode=mode,
+            soundcloud_album_id=soundcloud_album_id,
+            message=str(r.get("error") or r.get("reason") or status),
+        )
+
+
+async def _persist_artist_enrichment(
+    session: AsyncSession,
+    *,
+    job: ComputeJob,
+    r: dict[str, Any],
+) -> None:
+    artist_id = (
+        _i(job.target_id) if job.target_kind == q.TARGET_KIND_ARTIST else 0
+    )
+    if artist_id <= 0:
+        raise ValueError("artist_enrichment_invalid_target")
+    status = str(r.get("status") or "")
+    if status not in {"", "ok", "done", "not_found", "error"}:
+        raise ValueError("artist_enrichment_invalid_status")
+
+
+async def _persist_track_info(
+    session: AsyncSession,
+    *,
+    job: ComputeJob,
+    r: dict[str, Any],
+) -> None:
+    track_id = (
+        _i(job.target_id) if job.target_kind == q.TARGET_KIND_TRACK else 0
+    )
+    if track_id <= 0:
+        raise ValueError("track_info_invalid_target")
+    status = str(r.get("status") or "done")
+    content_obj = r.get("content")
+    content = content_obj[:12_000] if isinstance(content_obj, str) else None
+    fetched_at = (
+        datetime.now(UTC)
+        if status in {"done", "not_found", "failed"}
+        else None
+    )
+    await TrackInfoRepository(session).upsert(
+        track_id,
+        status=status,
+        content=content,
+        fetched_at=fetched_at,
+    )
+
+
+async def _persist_external_import_scan(
+    session: AsyncSession,
+    *,
+    job: ComputeJob,
+    r: dict[str, Any],
+) -> None:
+    import_job_id = _i(job.target_id)
+    if import_job_id <= 0:
+        raise ValueError("external_import_scan_invalid_target")
+    row = await session.get(ImportJob, import_job_id)
+    if row is None:
+        raise ValueError("external_import_scan_missing_job")
+    status = str(r.get("status") or row.status)
+    if status:
+        row.status = status
+    total = r.get("total_tracks")
+    if isinstance(total, int):
+        row.total_tracks = total
+    completed = r.get("completed_tracks")
+    if isinstance(completed, int):
+        row.completed_tracks = completed
+    failed = r.get("failed_tracks")
+    if isinstance(failed, int):
+        row.failed_tracks = failed
+    data = r.get("tracks_data")
+    if isinstance(data, dict):
+        row.tracks_data = data
+
+
+async def _persist_track_transcoding(
+    session: AsyncSession,
+    *,
+    job: ComputeJob,
+    r: dict[str, Any],
+) -> None:
+    track_id = (
+        _i(job.target_id) if job.target_kind == q.TARGET_KIND_TRACK else 0
+    )
+    if track_id <= 0:
+        raise ValueError("track_transcoding_invalid_target")
+    track = await session.get(Track, track_id)
+    if track is None:
+        raise ValueError("track_transcoding_missing_track")
+    _set_track_audio_fields(track, r)
+
+
+async def _persist_track_waveform(
+    session: AsyncSession,
+    *,
+    job: ComputeJob,
+    r: dict[str, Any],
+) -> None:
+    track_id = (
+        _i(job.target_id) if job.target_kind == q.TARGET_KIND_TRACK else 0
+    )
+    if track_id <= 0:
+        raise ValueError("track_waveform_invalid_target")
+    track = await session.get(Track, track_id)
+    if track is None:
+        raise ValueError("track_waveform_missing_track")
+    waveform = r.get("waveform_data") or r.get("waveform")
+    if isinstance(waveform, list):
+        track.waveform_data = [
+            float(v) for v in waveform if isinstance(v, int | float)
+        ]
+
+
+async def _persist_track_snippet(
+    session: AsyncSession,
+    *,
+    job: ComputeJob,
+    r: dict[str, Any],
+) -> None:
+    snippet_id = _i(job.target_id)
+    if snippet_id <= 0:
+        raise ValueError("track_snippet_invalid_target")
+    row = await session.get(TrackSnippet, snippet_id)
+    if row is None:
+        raise ValueError("track_snippet_missing")
+    file_key = r.get("file_key")
+    if isinstance(file_key, str) and file_key:
+        row.file_key = file_key
+    status = r.get("status")
+    if isinstance(status, str) and status:
+        row.status = status[:20]
+    error = r.get("error") or r.get("error_message")
+    if isinstance(error, str):
+        row.error_message = error[:2000]
+
+
+async def _persist_track_cover(
+    session: AsyncSession,
+    *,
+    job: ComputeJob,
+    r: dict[str, Any],
+) -> None:
+    track_id = (
+        _i(job.target_id) if job.target_kind == q.TARGET_KIND_TRACK else 0
+    )
+    if track_id <= 0:
+        raise ValueError("track_cover_invalid_target")
+    track = await session.get(Track, track_id)
+    if track is None:
+        raise ValueError("track_cover_missing_track")
+    cover_key = r.get("cover_key")
+    if isinstance(cover_key, str) and cover_key:
+        track.cover_key = cover_key
+
+
+def _set_track_audio_fields(track: Track, r: dict[str, Any]) -> None:
+    file_key = r.get("file_key")
+    if isinstance(file_key, str) and file_key:
+        track.file_key = file_key
+    status = r.get("processing_status") or r.get("status")
+    if isinstance(status, str) and status:
+        track.processing_status = status[:20]
+    file_size = r.get("file_size_bytes")
+    if isinstance(file_size, int):
+        track.file_size_bytes = file_size
+    hls_manifest_key = r.get("hls_manifest_key")
+    if isinstance(hls_manifest_key, str) and hls_manifest_key:
+        track.hls_manifest_key = hls_manifest_key
+    hls_segment_seconds = r.get("hls_segment_seconds")
+    if isinstance(hls_segment_seconds, int):
+        track.hls_segment_seconds = hls_segment_seconds
+    hls_bundle_version = r.get("hls_bundle_version")
+    if isinstance(hls_bundle_version, int):
+        track.hls_bundle_version = hls_bundle_version
 
 
 async def _persist_soundcloud_rpc(

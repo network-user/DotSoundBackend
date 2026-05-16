@@ -28,6 +28,8 @@ from dotsound_private_core.services.compute_job_policy import (
     lease_seconds,
     max_attempts,
     offloadable_job_types,
+)
+from dotsound_private_core.services.compute_job_policy import (
     priority as policy_priority,
 )
 from sqlalchemy import func, or_, select, update
@@ -235,7 +237,11 @@ async def claim_next(
     the session for the lease to become visible to other workers.
     """
     canonical_types = sorted({canonical_job_type(t) for t in job_types})
-    if not canonical_types:
+    job_type_candidates = set(canonical_types)
+    for alias, canonical in LEGACY_JOB_TYPE_ALIASES.items():
+        if canonical in job_type_candidates:
+            job_type_candidates.add(alias)
+    if not job_type_candidates:
         return None
     now = _now()
     cw = (
@@ -254,7 +260,7 @@ async def claim_next(
         select(ComputeJob.id)
         .where(
             ComputeJob.status == STATUS_PENDING,
-            ComputeJob.job_type.in_(canonical_types),
+            ComputeJob.job_type.in_(sorted(job_type_candidates)),
             ComputeJob.next_attempt_at <= now,
             or_(
                 ComputeJob.pinned_worker_id.is_(None),
@@ -686,6 +692,7 @@ __all__ = [
     "STATUS_PENDING",
     "STATUS_SUCCEEDED",
     "TERMINAL_STATUSES",
+    "JOB_AUDIO_EMBEDDING",
     "JOB_ARTIST_FEATURES_UPDATE",
     "JOB_ARTIST_ENRICHMENT",
     "JOB_ARTIST_SIMILARITY",
@@ -717,6 +724,9 @@ __all__ = [
     "canonical_job_type",
     "claim_next",
     "dead_letter_jobs",
+    "default_lease_minutes",
+    "default_max_attempts",
+    "default_priority",
     "enqueue",
     "enqueue_artist_features",
     "enqueue_artist_similarity_index",
@@ -732,6 +742,3 @@ __all__ = [
     "queue_health_snapshot",
     "requeue_stale_claims",
 ]
-    "default_lease_minutes",
-    "default_max_attempts",
-    "default_priority",

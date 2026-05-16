@@ -41,6 +41,8 @@ is a pure-Python decision layer; no I/O or framework code.
 | `services.signal_policy` | `app/services/signal_service.py`, `app/services/recommendation_service.py` |
 | `services.similarity_signal_policy` | `app/repositories/artist_catalog.py`, `app/services/recommendation_service.py`, `app/services/artist_service.py` |
 | `services.playcount_policy` | `app/services/recommendation_service.py`, `app/services/public_playcount_service.py`, `app/api/v1/recommendations.py` |
+| `services.playback_streaming_policy` | `app/services/transcoding.py`, `app/services/hls_migration_worker.py`, `app/api/v1/admin/hls_migration.py`, `app/api/v1/tracks/hls.py` (master playlist builder) |
+| `services.prefetch_policy` | `app/api/v1/users.py` (snapshot endpoint), frontend `frontend/src/lib/prefetch/*` (via snapshot) |
 
 Symbols renamed or removed from PrivateCore must update this
 table in the same change.

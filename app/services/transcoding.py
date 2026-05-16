@@ -20,7 +20,12 @@ from app.core import s3
 from app.core.db import AsyncSessionLocal
 from app.core.tkq import broker  # Добавлено
 from app.models.track import Track
+from app.services import compute_queue_service as q
 from app.services.audio_blob_service import AudioBlobService
+from app.services.compute_job_dispatcher import (
+    LocalComputeJob,
+    dispatch_compute_job,
+)
 
 logger = structlog.stdlib.get_logger(__name__)
 
@@ -36,13 +41,9 @@ _MASTER_PLAYLIST = build_master_playlist()
 _BUNDLE_VERSION = LATEST_BUNDLE_VERSION
 
 
-@broker.task  # Превращаем в фоновую задачу воркера
-async def transcode_and_upload(
-    track_id: int,
-    raw_key: str,  # Теперь принимаем ключ в S3 вместо байтов
-    original_filename: str,
-    source_sha256: str | None = None,
-) -> None:
+async def transcode_and_upload_local(
+    job: LocalComputeJob,
+) -> dict | None:
     """Background task: transcode to MP3 192k + HLS 128k/64k, upload all.
 
     When ``source_sha256`` is provided the resulting AudioBlob is tagged
@@ -51,8 +52,19 @@ async def transcode_and_upload(
     Any other Track rows that claimed the same source while this transcode
     was running are reconciled at the end.
     """
+    track_id = int(job.target_id or job.payload.get("track_id") or 0)
+    raw_key = str(job.payload.get("raw_key") or "")
+    original_filename = str(
+        job.payload.get("original_filename") or "input.audio"
+    )
+    source_raw = job.payload.get("source_sha256")
+    source_sha256 = source_raw if isinstance(source_raw, str) else None
     structlog.contextvars.bind_contextvars(track_id=track_id)
     logger.info("transcoding_started", source_sha256=source_sha256)
+
+    if not raw_key:
+        await _update_track_status(track_id, "error", None, None)
+        return {"status": "error", "error": "missing_raw_key"}
 
     tmp_dir = tempfile.mkdtemp()
     ext = os.path.splitext(original_filename)[1] or ".tmp"
@@ -225,6 +237,30 @@ async def transcode_and_upload(
             await s3.delete_object(raw_key)
         except Exception:
             logger.warning("failed_to_delete_raw_temp_file", raw_key=raw_key)
+
+
+@broker.task  # Превращаем в фоновую задачу воркера
+async def transcode_and_upload(
+    track_id: int,
+    raw_key: str,  # Теперь принимаем ключ в S3 вместо байтов
+    original_filename: str,
+    source_sha256: str | None = None,
+) -> None:
+    async with AsyncSessionLocal() as session:
+        await dispatch_compute_job(
+            session,
+            job_type=q.JOB_TRACK_TRANSCODING,
+            target_kind=q.TARGET_KIND_TRACK,
+            target_id=track_id,
+            payload={
+                "track_id": track_id,
+                "raw_key": raw_key,
+                "original_filename": original_filename,
+                "source_sha256": source_sha256,
+            },
+            local_handler=transcode_and_upload_local,
+        )
+        await session.commit()
 
 
 async def transcode_hls_only(

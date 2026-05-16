@@ -16,30 +16,31 @@ from app.core.db import AsyncSessionLocal
 from app.core.tkq import broker
 from app.models.track import Track
 from app.models.track_snippet import TrackSnippet
-
-logger: structlog.stdlib.BoundLogger = structlog.get_logger(
-    __name__
+from app.services import compute_queue_service as q
+from app.services.compute_job_dispatcher import (
+    LocalComputeJob,
+    dispatch_compute_job,
 )
 
+logger: structlog.stdlib.BoundLogger = structlog.get_logger(__name__)
 
-@broker.task
-async def transcode_snippet_task(
-    snippet_id: int,
-) -> None:
-    structlog.contextvars.bind_contextvars(
-        snippet_id=snippet_id
-    )
+
+async def transcode_snippet_local(
+    job: LocalComputeJob,
+) -> dict:
+    snippet_id = int(job.target_id or job.payload.get("snippet_id") or 0)
+    structlog.contextvars.bind_contextvars(snippet_id=snippet_id)
     ext_ok = _cfg.settings.snippet_external_catalog_allowed
     async with AsyncSessionLocal() as session:
         sn = await session.get(TrackSnippet, snippet_id)
         if not sn:
-            return
+            return {"status": "not_found"}
         tr = await session.get(Track, sn.track_id)
         if not tr or not tr.file_key:
             sn.status = "failed"
             sn.error_message = "no_ugc_file"
             await session.commit()
-            return
+            return {"status": "failed", "error": "no_ugc_file"}
         if not allow_snippet_for_catalog(
             tr.catalog_type,
             allow_external=ext_ok,
@@ -47,7 +48,7 @@ async def transcode_snippet_task(
             sn.status = "failed"
             sn.error_message = "catalog_gated"
             await session.commit()
-            return
+            return {"status": "failed", "error": "catalog_gated"}
         data = await s3.download_object(tr.file_key)
     tmpd = tempfile.mkdtemp()
     in_path = os.path.join(tmpd, "in")
@@ -83,23 +84,21 @@ async def transcode_snippet_task(
         if proc.returncode != 0:
             async with AsyncSessionLocal() as s2:
                 s2_sn = await s2.get(TrackSnippet, snippet_id)
-                if s2_sn:
-                    s2_sn.status = "failed"
-                    s2_sn.error_message = (
-                        err.decode(errors="replace")[-200:]
-                    )
-                    await s2.commit()
-            return
+            if s2_sn:
+                s2_sn.status = "failed"
+                s2_sn.error_message = err.decode(errors="replace")[-200:]
+                await s2.commit()
+            return {"status": "failed", "error": "ffmpeg_failed"}
         with open(out_path, "rb") as f:
             out_b = f.read()
         if not out_b:
             async with AsyncSessionLocal() as s2:
                 s2_sn = await s2.get(TrackSnippet, snippet_id)
-                if s2_sn:
-                    s2_sn.status = "failed"
-                    s2_sn.error_message = "empty"
-                    await s2.commit()
-            return
+            if s2_sn:
+                s2_sn.status = "failed"
+                s2_sn.error_message = "empty"
+                await s2.commit()
+            return {"status": "failed", "error": "empty"}
         k = await s3.upload_audio(
             out_b,
             "mp3",
@@ -112,5 +111,22 @@ async def transcode_snippet_task(
                 srow.file_key = k
                 srow.status = "ready"
                 await s3_.commit()
+        return {"status": "ready", "file_key": k}
     finally:
         shutil.rmtree(tmpd, ignore_errors=True)
+
+
+@broker.task
+async def transcode_snippet_task(
+    snippet_id: int,
+) -> None:
+    async with AsyncSessionLocal() as session:
+        await dispatch_compute_job(
+            session,
+            job_type=q.JOB_TRACK_SNIPPET,
+            target_kind=q.TARGET_KIND_SNIPPET,
+            target_id=snippet_id,
+            payload={"snippet_id": snippet_id},
+            local_handler=transcode_snippet_local,
+        )
+        await session.commit()

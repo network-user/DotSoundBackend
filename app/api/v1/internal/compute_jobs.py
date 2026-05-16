@@ -26,6 +26,7 @@ from app.models.track import Track
 from app.repositories.audio_compute import (
     AudioComputeRepository,
 )
+from app.services import compute_job_reaper
 from app.services import compute_queue_service as q
 from app.services import compute_results_router as crr
 from app.services import compute_worker_service as cws
@@ -127,6 +128,21 @@ async def claim(
     if not job_types:
         await session.rollback()
         raise HTTPException(status_code=400) from None
+    job_types = [
+        jt
+        for jt in dict.fromkeys(q.canonical_job_type(t) for t in job_types)
+        if jt in q.OFFLOADABLE_JOB_TYPES
+    ]
+    if not job_types:
+        await cws._log_audit(
+            session,
+            worker_id=worker.id,
+            ip=client_ip(request),
+            action="compute_claim_empty",
+            status_code=204,
+        )
+        await session.commit()
+        return Response(status_code=204)
     job = await q.claim_next(
         session,
         worker_id=worker.id,
@@ -144,7 +160,7 @@ async def claim(
         return Response(status_code=204)
     out: dict[str, Any] = {
         "job_id": job.id,
-        "job_type": job.job_type,
+        "job_type": q.canonical_job_type(job.job_type),
         "target_kind": job.target_kind,
         "target_id": job.target_id,
         "payload": job.payload,
@@ -158,6 +174,8 @@ async def claim(
     if job.job_type in (
         q.JOB_TRACK_AUDIO_FEATURES,
         q.JOB_AUDIO_EMBEDDING,
+        q.JOB_TRACK_TRANSCODING,
+        q.JOB_TRACK_WAVEFORM,
     ):
         token = cws.generate_single_use_token(job.id, worker.id)
         out["audio_url"] = (
@@ -435,6 +453,31 @@ async def job_result(
         raise HTTPException(status_code=400) from exc
     if not isinstance(payload, dict):
         raise HTTPException(status_code=422)
+    error_kind_raw = payload.get("error_kind")
+    error_kind = error_kind_raw if isinstance(error_kind_raw, str) else ""
+    is_error_result = (
+        payload.get("success") is False or payload.get("status") == "error"
+    )
+    if j.job_type != q.JOB_SOUNDCLOUD_RPC and error_kind and is_error_result:
+        outcome = await compute_job_reaper.handle_worker_failure(
+            session,
+            job=j,
+            error_kind=error_kind,
+            reason=str(
+                payload.get("error") or payload.get("reason") or error_kind
+            ),
+        )
+        await cws._log_audit(
+            session,
+            worker_id=worker.id,
+            ip=client_ip(request),
+            action="compute_result_failed",
+            job_id=job_id,
+            status_code=200,
+            meta={"error_kind": error_kind, "outcome": outcome},
+        )
+        await session.commit()
+        return {"status": "ok", "outcome": outcome}
     try:
         await crr.persist_result(
             session,
@@ -509,9 +552,12 @@ async def job_fail(
         and r
         else "job_failed"
     )
-    await q.mark_failed(
+    raw_error_kind = event.get("error_kind")
+    error_kind = raw_error_kind if isinstance(raw_error_kind, str) else reason
+    outcome = await compute_job_reaper.handle_worker_failure(
         session,
         job=j,
+        error_kind=error_kind,
         reason=reason,
     )
     await cws._log_audit(
@@ -521,10 +567,10 @@ async def job_fail(
         action="compute_fail",
         job_id=job_id,
         status_code=200,
-        meta={"reason": reason},
+        meta={"reason": reason, "error_kind": error_kind, "outcome": outcome},
     )
     await session.commit()
-    return {"status": "ok"}
+    return {"status": "ok", "outcome": outcome}
 
 
 @router.get("/status")

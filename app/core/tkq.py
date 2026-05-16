@@ -1,3 +1,5 @@
+import asyncio
+
 import structlog
 import taskiq_redis
 from taskiq import TaskiqEvents, TaskiqState
@@ -37,11 +39,12 @@ broker.add_middlewares(BackgroundJobLifecycleMiddleware())
 apply_third_party_log_levels(settings.log_third_party_level)
 
 _worker_tor_pool_started = False
+_compute_queue_reaper_task: asyncio.Task[None] | None = None
 
 
 @broker.on_event(TaskiqEvents.WORKER_STARTUP)
 async def _worker_third_party_log_level(_st: TaskiqState) -> None:
-    global _worker_tor_pool_started
+    global _compute_queue_reaper_task, _worker_tor_pool_started
     apply_third_party_log_levels(settings.log_third_party_level)
 
     try:
@@ -62,10 +65,15 @@ async def _worker_third_party_log_level(_st: TaskiqState) -> None:
         logger.exception("tor_pool_worker_startup_failed")
         _worker_tor_pool_started = False
 
+    if _compute_queue_reaper_task is None:
+        from app.tasks.compute_queue_reaper import run_forever
+
+        _compute_queue_reaper_task = asyncio.create_task(run_forever())
+
 
 @broker.on_event(TaskiqEvents.WORKER_SHUTDOWN)
 async def _taskiq_worker_shutdown(_st: TaskiqState) -> None:
-    global _worker_tor_pool_started
+    global _compute_queue_reaper_task, _worker_tor_pool_started
     from app.core.db import dispose_engine
     from app.search.es_client import close_es
     from app.services import (
@@ -81,6 +89,14 @@ async def _taskiq_worker_shutdown(_st: TaskiqState) -> None:
         await lyrics_global_orchestrator.stop_orchestrator_task()
     except Exception:  # noqa: BLE001
         logger.exception("lyrics_orchestrator_shutdown_failed")
+    if _compute_queue_reaper_task is not None:
+        _compute_queue_reaper_task.cancel()
+        try:
+            await _compute_queue_reaper_task
+        except asyncio.CancelledError:
+            pass
+        finally:
+            _compute_queue_reaper_task = None
     try:
         await dispose_engine()
     except Exception:  # noqa: BLE001

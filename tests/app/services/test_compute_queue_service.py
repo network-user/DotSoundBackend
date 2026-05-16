@@ -152,14 +152,14 @@ async def test_claim_respects_pinned_worker(db_session):
 
 
 async def test_claim_respects_priority(db_session):
-    low = await q.enqueue(
+    high = await q.enqueue(
         db_session,
         job_type="t",
         target_kind="track",
         target_id=1,
         priority=0,
     )
-    high = await q.enqueue(
+    low = await q.enqueue(
         db_session,
         job_type="t",
         target_kind="track",
@@ -288,9 +288,7 @@ async def test_mark_failed_terminal_after_max_attempts(
         job_types=["t"],
     )
     assert claimed is not None
-    await q.mark_failed(
-        db_session, job=claimed, reason="boom"
-    )
+    await q.mark_failed(db_session, job=claimed, reason="boom")
     await db_session.commit()
 
     # bypass backoff so the next claim is eligible
@@ -306,9 +304,7 @@ async def test_mark_failed_terminal_after_max_attempts(
     )
     assert claimed2 is not None
     assert claimed2.attempts == 2
-    await q.mark_failed(
-        db_session, job=claimed2, reason="boom_again"
-    )
+    await q.mark_failed(db_session, job=claimed2, reason="boom_again")
     await db_session.commit()
 
     refreshed = await db_session.get(ComputeJob, job.id)
@@ -334,9 +330,7 @@ async def test_requeue_stale_claims_recovers_expired_leases(
     )
     assert claimed is not None
     # simulate expired lease
-    claimed.claim_deadline_at = datetime.now(
-        UTC
-    ) - timedelta(minutes=5)
+    claimed.claim_deadline_at = datetime.now(UTC) - timedelta(minutes=5)
     await db_session.commit()
 
     recovered = await q.requeue_stale_claims(db_session)
@@ -406,9 +400,7 @@ async def test_dead_letter_jobs_lists_failed(db_session):
         job_types=["t"],
     )
     assert claimed is not None
-    await q.mark_failed(
-        db_session, job=claimed, reason="boom"
-    )
+    await q.mark_failed(db_session, job=claimed, reason="boom")
     await db_session.commit()
 
     failed = await q.dead_letter_jobs(db_session)

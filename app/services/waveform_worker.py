@@ -12,6 +12,11 @@ from app.core.db import AsyncSessionLocal
 from app.core.tkq import broker
 from app.models.track import Track
 from app.repositories.app_settings import AppSettingsRepository
+from app.services import compute_queue_service as q
+from app.services.compute_job_dispatcher import (
+    LocalComputeJob,
+    dispatch_compute_job,
+)
 
 logger: structlog.stdlib.BoundLogger = structlog.get_logger(__name__)
 
@@ -68,11 +73,18 @@ async def _generate_for_track_id(track_id: int) -> bool:
 
     try:
         process = await asyncio.create_subprocess_exec(
-            "ffmpeg", "-y", "-i", tmp_path,
-            "-ac", "1",
-            "-ar", "8000",
-            "-f", "s16le",
-            "-acodec", "pcm_s16le",
+            "ffmpeg",
+            "-y",
+            "-i",
+            tmp_path,
+            "-ac",
+            "1",
+            "-ar",
+            "8000",
+            "-f",
+            "s16le",
+            "-acodec",
+            "pcm_s16le",
             "pipe:1",
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.DEVNULL,
@@ -102,10 +114,25 @@ async def _generate_for_track_id(track_id: int) -> bool:
     return True
 
 
+async def generate_waveform_local(job: LocalComputeJob) -> dict:
+    track_id = int(job.target_id or job.payload.get("track_id") or 0)
+    structlog.contextvars.bind_contextvars(track_id=track_id)
+    ok = await _generate_for_track_id(track_id)
+    return {"status": "ok" if ok else "failed"}
+
+
 @broker.task
 async def generate_waveform_task(track_id: int) -> None:
-    structlog.contextvars.bind_contextvars(track_id=track_id)
-    await _generate_for_track_id(track_id)
+    async with AsyncSessionLocal() as session:
+        await dispatch_compute_job(
+            session,
+            job_type=q.JOB_TRACK_WAVEFORM,
+            target_kind=q.TARGET_KIND_TRACK,
+            target_id=track_id,
+            payload={"track_id": track_id},
+            local_handler=generate_waveform_local,
+        )
+        await session.commit()
 
 
 @broker.task

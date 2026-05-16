@@ -4,7 +4,9 @@ from datetime import UTC, datetime, timedelta
 
 import structlog
 from dotsound_private_core.services.compute_job_policy import (
+    RoutingMode,
     backoff_for_error_kind,
+    get_job_rule,
     should_fallback_to_local,
 )
 from sqlalchemy import select
@@ -105,9 +107,8 @@ async def handle_worker_failure(
     if should_fallback_to_local(
         canonical_type,
         failed_attempts=max(1, int(job.attempts)),
-    ):
-        if await _try_local_fallback(session, job):
-            return "local_fallback"
+    ) and await _try_local_fallback(session, job):
+        return "local_fallback"
 
     if int(job.attempts) >= int(job.max_attempts):
         await _mark_terminal_failed(
@@ -134,6 +135,7 @@ async def reap_once(
     stats: dict[str, int] = {
         "requeued": 0,
         "local_fallback": 0,
+        "pending_local_fallback": 0,
         "failed_terminal": 0,
     }
     async with AsyncSessionLocal() as session:
@@ -157,6 +159,31 @@ async def reap_once(
                 reason="lease_expired",
             )
             stats[outcome] = stats.get(outcome, 0) + 1
+        pending_jobs = (
+            await session.execute(
+                select(ComputeJob)
+                .where(
+                    ComputeJob.status == q.STATUS_PENDING,
+                    ComputeJob.job_type.in_(sorted(q.OFFLOADABLE_JOB_TYPES)),
+                    ComputeJob.next_attempt_at < now - timedelta(minutes=1),
+                )
+                .order_by(ComputeJob.next_attempt_at.asc())
+                .limit(int(limit))
+            )
+        ).scalars()
+        for job in list(pending_jobs):
+            rule = get_job_rule(q.canonical_job_type(job.job_type))
+            if rule.routing is not RoutingMode.PREFER_WORKER:
+                continue
+            age = now - job.next_attempt_at
+            threshold = timedelta(
+                seconds=rule.lease_seconds
+                * max(1, rule.fallback_to_local_after_attempts)
+            )
+            if age < threshold:
+                continue
+            if await _try_local_fallback(session, job):
+                stats["pending_local_fallback"] += 1
         await session.commit()
     if any(stats.values()):
         logger.warning("compute_job_reaper_handled", **stats)

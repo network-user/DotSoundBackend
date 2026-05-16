@@ -80,9 +80,50 @@ async def test_compute_claim_204(
         profile="cpu_light",
     )
     await db_session.commit()
-    body = json.dumps(
-        {"job_types": [q.JOB_TRACK_AUDIO_FEATURES]}
-    ).encode("utf-8")
+    body = json.dumps({"job_types": [q.JOB_TRACK_AUDIO_FEATURES]}).encode(
+        "utf-8"
+    )
+    h = _w_headers(
+        w,
+        "POST",
+        "/api/v1/internal/compute/jobs/claim",
+        body,
+    )
+    h["content-type"] = "application/json"
+    r = await client.post(
+        "/api/v1/internal/compute/jobs/claim",
+        content=body,
+        headers=h,
+    )
+    assert r.status_code == 204
+
+
+@patch(
+    f"{_APIM}.rl.check_and_consume",
+    new_callable=AsyncMock,
+)
+@patch(
+    f"{_ALL}.is_ip_in_cidrs",
+    return_value=True,
+)
+@patch(
+    f"{_WCS}.get_redis_client",
+    new_callable=_mock_redis,
+)
+async def test_compute_claim_filters_unknown_job_types(
+    _r: object,
+    _a: object,
+    _l: object,
+    client: AsyncClient,
+    db_session: AsyncSession,
+) -> None:
+    w, _s = await cws.register_worker(
+        db_session,
+        name="w-filter",
+        profile="cpu_light",
+    )
+    await db_session.commit()
+    body = json.dumps({"job_types": ["definitely_unknown"]}).encode("utf-8")
     h = _w_headers(
         w,
         "POST",
@@ -135,9 +176,9 @@ async def test_compute_claim_returns_job_with_audio_url(
         target_id=t.id,
     )
     await db_session.commit()
-    body = json.dumps(
-        {"job_types": [q.JOB_TRACK_AUDIO_FEATURES]}
-    ).encode("utf-8")
+    body = json.dumps({"job_types": [q.JOB_TRACK_AUDIO_FEATURES]}).encode(
+        "utf-8"
+    )
     h = _w_headers(
         w,
         "POST",
@@ -201,9 +242,9 @@ async def test_compute_result_ok(
     assert cl is not None
     j_id = cl.id
     await db_session.commit()
-    pl = json.dumps(
-        {"feature_vector": [0.1], "mood_tags": ["a"]}
-    ).encode("utf-8")
+    pl = json.dumps({"feature_vector": [0.1], "mood_tags": ["a"]}).encode(
+        "utf-8"
+    )
     h = _w_headers(
         w,
         "POST",

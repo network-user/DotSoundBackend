@@ -18,9 +18,7 @@ import structlog
 from app.core.tkq import broker
 from app.services import compute_job_reaper
 
-logger: structlog.stdlib.BoundLogger = structlog.get_logger(
-    __name__
-)
+logger: structlog.stdlib.BoundLogger = structlog.get_logger(__name__)
 
 REAP_BATCH_LIMIT = compute_job_reaper.REAP_BATCH_LIMIT
 REAP_INTERVAL_SECONDS = 60

@@ -1,5 +1,89 @@
 # DotSound - TODO Tracker
 
+- [~] **Compute offload Phase 2: dispatcher/reaper vertical slice (2026-05-16)**
+  - Backend: добавлен `compute_job_dispatcher` с маршрутизацией через
+    PrivateCore `compute_job_policy`; catalog sync, enrichment,
+    track-info, external import, cover, transcoding, waveform и snippet
+    workers переведены в dispatcher-mode при выключенном по умолчанию
+    `COMPUTE_OFFLOAD_ENABLED=false`.
+  - Backend: добавлен `compute_job_reaper` для expired lease,
+    worker-fail retry/backoff, `dead_track` terminal no-retry и
+    local fallback. Для `PREFER_WORKER` pending jobs без claim reaper
+    запускает fallback после policy-based окна, чтобы backend не зависал
+    при выключенном/недоступном ComputeWorker.
+  - Internal compute API: claim фильтрует offloadable job types,
+    result/fail принимает `error_kind`; `compute_results_router`
+    расширен persist-адаптерами для catalog/enrichment/import/ffmpeg/image
+    job types.
+  - ComputeWorker: registry переведён на canonical job type из
+    PrivateCore; добавлены безопасные stubs для catalog/enrichment/
+    ffmpeg/image offload types, которые возвращают `worker_unreachable`
+    и тем самым включают backend retry/fallback. `backend_client`
+    получил `upload_artwork` и `upload_audio_variant`; `http` extra
+    документирует Pillow/python-magic.
+  - Verify: быстрый `py_compile` по изменённым Python-файлам и Ruff по
+    изменённому backend/worker коду. Pytest намеренно не запускался.
+
+- [x] **Playback buffering / fast seek overhaul (2026-05-16)**
+  - Симптом: первое воспроизведение и переключение трека «висели» 20–30 c,
+    а seek в середину уже играющего трека замораживал плеер до конца текущего
+    fragment-fetch. Корни — RAM-буферизация ответов на `/audio` и `/hls/*`
+    в Backend, 10-секундные HLS-сегменты, отсутствие `Cache-Control`/`ETag`
+    на S3-ответах и неполный прогрев Cache API на фронте.
+  - Backend: `app/core/s3.py:open_object_range` — true streaming pass-through
+    из MinIO в `StreamingResponse` (64 KiB-чанки, без RAM-копий).
+    `app/api/v1/tracks/playback.py` и `app/api/v1/tracks/hls.py` переведены
+    на этот хелпер; добавлены immutable-`Cache-Control` для CAS-блобов
+    (`blobs/` и `hls-blobs/`), `ETag`+`Last-Modified` и обработка
+    `If-None-Match` (304). HLS-манифест получает `StaleWhileRevalidate`-friendly
+    короткий TTL, сегменты — `public, max-age=…, immutable`.
+  - HLS-пайплайн: новые треки транскодируются с `-hls_time 4
+    -hls_flags independent_segments`. Master playlist строится через
+    `dotsound_private_core.services.playback_streaming_policy.build_master_playlist`
+    с точными `BANDWIDTH/AVERAGE-BANDWIDTH/CODECS` per rung.
+    CAS-ключ HLS теперь версионированный (`hls-blobs/<xx>/<sha>/v2/...`),
+    миграция: фоновый Taskiq-воркер `app/services/hls_migration_worker.py`
+    + admin endpoint `/api/v1/admin/hls-migration/{status,trigger}` (capability
+    `tracks.manage`). Alembic 0108 добавляет `tracks.hls_segment_seconds`
+    и `tracks.hls_bundle_version` (с индексом).
+  - Third-party warm: `audio_cache_prefetch.prefetch_track_urls` теперь
+    параллелит резолв через `asyncio.gather`+`Semaphore(8)`, что критично
+    для прогрева очереди радио из 5+ треков.
+  - PrivateCore: `prefetch_policy.WARM_SEGMENTS_PER_TRACK_DEFAULT=3`
+    (≈12 c при 4-сек сегментах), `INITIAL_BYTES_PER_TRACK_DEFAULT=384 KiB`
+    (закрывает iOS `canplay` для прогрессива). `PREFETCH_POLICY_VERSION`
+    обновлена. Новый `playback_streaming_policy.py` экспортирует
+    `DEFAULT_HLS_SEGMENT_SECONDS=4`, `LATEST_BUNDLE_VERSION=2`,
+    `MIGRATE_BATCH_SIZE`, `MIGRATE_INTER_TASK_SECONDS`.
+  - Frontend: `PrefetchManager` для контекстов `playback`/`queue`/`radio`
+    запускает `prefetchProgressiveBodyForCache` (полная закачка тела
+    в `progressive-audio-cache`) — следующий трек теперь стартует
+    из Cache API, а не идёт по сети. Workbox: `hls-segments-cache`
+    поднят до 1500 entries (4-сек сегменты), `progressive-audio-cache` — до 48.
+  - hls.js startup: `testBandwidth: false`, `startFragPrefetch: true`,
+    более короткие `fragLoadingTimeOut`/`manifestLoadingTimeOut`, агрессивные
+    EWMA для ABR, `maxBufferLength=30`/`maxMaxBufferLength=60`. Это убирает
+    лишний bandwidth-probe round-trip и тянет следующий fragment ещё
+    до окончания текущего.
+  - Fast seek: новая обёртка `_applySeek` в `PlayerContext` —
+    `hls.stopLoad() → hls.startLoad(target)` сбрасывает зависший
+    fragment-fetch, после чего вызывается `audio.fastSeek` (с фолбэком
+    на `currentTime`). `seek/seekToSeconds/skipForward/skipBackward`
+    переведены на эту обёртку. Хендлер `stalled` теперь сам пинает
+    hls.js или переустанавливает `currentTime` для прогрессива, чтобы
+    браузер пересоздал Range-запрос.
+  - Тесты: `tests/dotsound_private_core/services/test_playback_streaming_policy.py`,
+    обновлённый `test_audio_stream_force_progressive_skips_hls_redirect`
+    (мок `s3.open_object_range` + проверка `ETag`/`Cache-Control`/`Accept-Ranges`),
+    зелёные `test_playback.py` (37/37) и `PrefetchManager.test.ts` (11/11).
+    PrivateCore prefetch policy ожидания (`warm_segments=3`,
+    `initial_bytes=384 KiB`) синхронизированы.
+  - Verify: `poetry run ruff check`, `poetry run black --check`,
+    `poetry run mypy app/api/v1/tracks app/core/s3.py app/services/transcoding.py
+    app/services/hls_migration_worker.py app/services/audio_cache_prefetch.py`,
+    `poetry run pytest tests/app/api/v1/tracks tests/dotsound_private_core/services`,
+    `npx tsc --noEmit && npx vitest run src/lib/prefetch`.
+
 - [x] **Mobile PWA scroll gesture unblocking (2026-05-16)**
   - `OnboardingV2`: swipe-calibration card now allows vertical page
     scroll from the cover (`touch-action: pan-y`) while preserving

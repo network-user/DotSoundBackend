@@ -293,10 +293,22 @@ async def test_audio_stream_force_progressive_skips_hls_redirect(
     )
 
     mp3 = b"\xff\xfb" + b"\x00" * 32
+    meta = SimpleNamespace(
+        content_length=len(mp3),
+        content_range=None,
+        content_type="audio/mpeg",
+        etag="abc123",
+        last_modified=None,
+        accept_ranges="bytes",
+    )
+
+    async def _body() -> AsyncIterator[bytes]:
+        yield mp3
+
     with patch(
-        "app.core.s3.download_object_range",
+        "app.core.s3.open_object_range",
         new_callable=AsyncMock,
-        return_value=(mp3, len(mp3), None, "audio/mpeg"),
+        return_value=(meta, _body()),
     ):
         r = await client.get(
             f"/api/v1/tracks/{track_id}/audio" f"?force_progressive=true"
@@ -304,6 +316,9 @@ async def test_audio_stream_force_progressive_skips_hls_redirect(
     assert r.status_code == 200
     assert r.content == mp3
     assert r.headers["content-type"] == "audio/mpeg"
+    assert r.headers["etag"] == '"abc123"'
+    assert r.headers["accept-ranges"] == "bytes"
+    assert "cache-control" in r.headers
 
 
 async def test_soundcloud_progressive_stream_returns_same_origin_audio(

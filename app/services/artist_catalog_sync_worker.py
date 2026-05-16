@@ -12,10 +12,11 @@ from dotsound_private_core.services.sc_anti_block_policy import (
 from app.core.db import AsyncSessionLocal
 from app.core.tkq import broker
 from app.repositories.artist_catalog import ArtistCatalogRepository
-from app.services import compute_queue_service as q
 from app.services import artist_catalog_sync_progress as acsp
+from app.services import compute_queue_service as q
 from app.services.artist_catalog_sync_service import ArtistCatalogSyncService
 from app.services.compute_job_dispatcher import (
+    LocalComputeHandler,
     LocalComputeJob,
     dispatch_compute_job,
 )
@@ -194,8 +195,9 @@ async def _dispatch_catalog_job(
     job_type: str,
     mode: str,
     payload: dict[str, Any],
-    local_handler: Any,
+    local_handler: LocalComputeHandler,
     soundcloud_album_id: int | None = None,
+    force_local: bool = False,
 ) -> dict[str, Any]:
     async with AsyncSessionLocal() as session:
         dispatched = await dispatch_compute_job(
@@ -205,6 +207,7 @@ async def _dispatch_catalog_job(
             target_id=artist_id,
             payload=payload,
             local_handler=local_handler,
+            force_local=force_local,
         )
         await session.commit()
     if dispatched.status == "queued":
@@ -286,6 +289,7 @@ async def force_sync_artist_similar_station_task(
             "skip_background_lyrics": skip_background_lyrics,
         },
         local_handler=run_sync_artist_similar_station_local,
+        force_local=True,
     )
 
 

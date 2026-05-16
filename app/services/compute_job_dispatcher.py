@@ -33,7 +33,7 @@ class LocalComputeJob:
     feature_version: str
 
     @classmethod
-    def from_model(cls, job: ComputeJob) -> "LocalComputeJob":
+    def from_model(cls, job: ComputeJob) -> LocalComputeJob:
         payload = job.payload if isinstance(job.payload, dict) else {}
         return cls(
             job_type=q.canonical_job_type(job.job_type),
