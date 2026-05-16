@@ -41,6 +41,10 @@ _SC_MANIFEST_BROWSER_HEADERS: dict[str, str] = {
 logger: structlog.stdlib.BoundLogger = structlog.get_logger(__name__)
 
 _SC_API_BASE = "https://api-v2.soundcloud.com"
+_SC_HLS_PROTOCOLS: frozenset[str] = frozenset(
+    {"hls", "cbc-encrypted-hls", "ctr-encrypted-hls"}
+)
+_SC_PROGRESSIVE_PROTOCOLS: frozenset[str] = frozenset({"progressive"})
 
 # Per-(proxy_url, timeout) httpx client cache. SoundCloud calls
 # previously created a fresh ``httpx.AsyncClient`` (and a fresh
@@ -136,13 +140,28 @@ def _streamable_protocols(
     protocols: list[str] = []
     for protocol in protocols_order:
         found = any(
-            t.get("format", {}).get("protocol") == protocol
+            _sc_protocol_matches(t.get("format", {}).get("protocol"), protocol)
             and not t.get("snipped")
             for t in transcodings
         )
         if found:
             protocols.append(protocol)
     return protocols
+
+
+def _sc_protocol_family(protocol: object) -> str | None:
+    if not isinstance(protocol, str):
+        return None
+    normalized = protocol.lower()
+    if normalized in _SC_HLS_PROTOCOLS:
+        return "hls"
+    if normalized in _SC_PROGRESSIVE_PROTOCOLS:
+        return "progressive"
+    return None
+
+
+def _sc_protocol_matches(actual: object, wanted_family: str) -> bool:
+    return _sc_protocol_family(actual) == wanted_family
 
 
 async def _maybe_enqueue_audio_cache(track_id: int) -> None:
@@ -655,7 +674,10 @@ class SoundCloudService:
                 variants = [
                     t
                     for t in transcodings
-                    if t.get("format", {}).get("protocol") == protocol
+                    if _sc_protocol_matches(
+                        t.get("format", {}).get("protocol"),
+                        protocol,
+                    )
                     and not t.get("snipped")
                     and isinstance(t.get("url"), str)
                 ]
@@ -723,8 +745,11 @@ class SoundCloudService:
                             ),
                         )
                     stream_url: str = r.json()["url"]
-                    protocol_out: str = selected.get("format", {}).get(
+                    raw_protocol = selected.get("format", {}).get(
                         "protocol", protocol
+                    )
+                    protocol_out = (
+                        _sc_protocol_family(raw_protocol) or protocol
                     )
                     cache_ttl = (
                         settings.stream_url_cache_ttl_soundcloud_hls

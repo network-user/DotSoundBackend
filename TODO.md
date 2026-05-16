@@ -66,6 +66,14 @@
     through `adminApi.diagnoseSoundCloudTrack(...)` and renders the
     full JSON response, including egress IP/proxy and manifest probe
     statuses.
+  - Follow-up after production SC diagnose on `5opka-music/vpn`:
+    track is `policy=MONETIZE`, `monetization_model=AD_SUPPORTED`,
+    `streamable=true`; regular `hls`/`progressive` manifests are
+    404, but `cbc-encrypted-hls` / `ctr-encrypted-hls` manifests
+    return 200. Backend now treats those SoundCloud encrypted-HLS
+    protocols as the HLS protocol family and normalizes the resolved
+    stream protocol to `hls`. PrivateCore importability policy also
+    counts them as playable.
   - Backend stream-error UX: `_third_party_error_detail` now
     enriches SC 502/4xx responses with `user_message` (RU)
     derived from the structured `reason`, so the frontend can

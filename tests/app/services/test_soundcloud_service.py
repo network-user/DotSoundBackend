@@ -425,6 +425,48 @@ async def test_get_stream_info_progressive_404_falls_back_to_hls(
 
 
 @patch(f"{_MOD}.httpx.AsyncClient")
+async def test_get_stream_info_accepts_soundcloud_encrypted_hls(
+    mock_client_cls: AsyncMock,
+    session: AsyncSession,
+) -> None:
+    resolve_resp = MagicMock()
+    resolve_resp.status_code = 200
+    resolve_resp.raise_for_status = MagicMock()
+    resolve_resp.json.return_value = {
+        "media": {
+            "transcodings": [
+                {
+                    "url": "https://api/encrypted-hls",
+                    "format": {"protocol": "cbc-encrypted-hls"},
+                    "snipped": False,
+                },
+            ]
+        },
+        "track_authorization": "auth",
+    }
+
+    hls_ok = MagicMock()
+    hls_ok.status_code = 200
+    hls_ok.is_success = True
+    hls_ok.json.return_value = {"url": "https://cdn/encrypted.m3u8"}
+
+    mock_client = AsyncMock()
+    mock_client.get = AsyncMock(side_effect=[resolve_resp, hls_ok])
+    mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+    mock_client.__aexit__ = AsyncMock(return_value=False)
+    mock_client_cls.return_value = mock_client
+
+    svc = SoundCloudService("test_id", session)
+    url, protocol = await svc.get_stream_info("https://sc.com/encrypted-hls")
+
+    assert url == "https://cdn/encrypted.m3u8"
+    assert protocol == "hls"
+    assert mock_client.get.await_args_list[1].args[0] == (
+        "https://api/encrypted-hls"
+    )
+
+
+@patch(f"{_MOD}.httpx.AsyncClient")
 async def test_get_stream_url(
     mock_client_cls: AsyncMock,
     session: AsyncSession,
