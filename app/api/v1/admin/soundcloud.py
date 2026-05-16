@@ -13,8 +13,9 @@ errors into HTTP responses.
 
 from __future__ import annotations
 
+import re
 from typing import Any
-from urllib.parse import urlsplit, urlunsplit
+from urllib.parse import urljoin, urlsplit, urlunsplit
 
 import httpx
 import structlog
@@ -43,9 +44,11 @@ router = APIRouter(
 logger: structlog.stdlib.BoundLogger = structlog.get_logger(__name__)
 
 _MAX_TRANSCODING_PROBES = 6
+_MAX_PLAYLIST_PREVIEW_LINES = 20
 _PROBE_TIMEOUT_SECONDS = 8.0
 _EGRESS_IP_TIMEOUT_SECONDS = 4.0
 _EGRESS_IP_URL = "https://api.ipify.org?format=json"
+_URI_ATTR_RE = re.compile(r'URI="([^"]+)"')
 
 
 def _redact_proxy_url(proxy_url: str | None) -> str | None:
@@ -161,6 +164,168 @@ def _summarize_transcoding(
     }
 
 
+def _redact_url_for_diagnostic(raw: str) -> str:
+    if "?" not in raw:
+        return raw
+    parsed = urlsplit(raw)
+    if parsed.scheme and parsed.netloc:
+        return urlunsplit(
+            (parsed.scheme, parsed.netloc, parsed.path, "...", "")
+        )
+    path, _sep, _query = raw.partition("?")
+    return f"{path}?..."
+
+
+def _redact_manifest_line(raw: str) -> str:
+    line = raw.strip()
+    if line.startswith(("http://", "https://")):
+        return _redact_url_for_diagnostic(line)
+    return _URI_ATTR_RE.sub(
+        lambda match: f'URI="{_redact_url_for_diagnostic(match.group(1))}"',
+        line,
+    )
+
+
+def _key_attrs(line: str) -> dict[str, str]:
+    attrs: dict[str, str] = {}
+    if ":" not in line:
+        return attrs
+    _, raw_attrs = line.split(":", 1)
+    for item in raw_attrs.split(","):
+        key, sep, value = item.partition("=")
+        if not sep:
+            continue
+        attrs[key.strip().upper()] = value.strip().strip('"')
+    return attrs
+
+
+def _playlist_summary(
+    text: str,
+) -> dict[str, Any]:
+    raw_lines = [line for line in text.splitlines() if line.strip()]
+    key_attrs = [
+        _key_attrs(line)
+        for line in raw_lines
+        if line.strip().startswith("#EXT-X-KEY")
+    ]
+    key_methods = sorted(
+        {
+            str(attrs["METHOD"])
+            for attrs in key_attrs
+            if attrs.get("METHOD")
+        }
+    )
+    keyformats = sorted(
+        {
+            str(attrs.get("KEYFORMAT") or "identity")
+            for attrs in key_attrs
+        }
+    )
+    return {
+        "is_hls": any(
+            line.strip().startswith("#EXTM3U") for line in raw_lines[:2]
+        ),
+        "has_master_variants": any(
+            line.strip().startswith("#EXT-X-STREAM-INF")
+            for line in raw_lines
+        ),
+        "has_ext_x_key": bool(key_attrs),
+        "key_methods": key_methods,
+        "keyformats": keyformats,
+        "preview_lines": [
+            _redact_manifest_line(line)
+            for line in raw_lines[:_MAX_PLAYLIST_PREVIEW_LINES]
+        ],
+    }
+
+
+def _first_child_playlist_url(
+    text: str,
+    base_url: str,
+) -> str | None:
+    lines = [line.strip() for line in text.splitlines() if line.strip()]
+    for index, line in enumerate(lines):
+        if not line.startswith("#EXT-X-STREAM-INF"):
+            continue
+        for candidate in lines[index + 1 :]:
+            if candidate.startswith("#"):
+                continue
+            return urljoin(base_url, candidate)
+    return None
+
+
+def _diagnostic_origin() -> str | None:
+    if settings.mini_app_url:
+        parsed = urlsplit(settings.mini_app_url)
+        if parsed.scheme and parsed.netloc:
+            return urlunsplit((parsed.scheme, parsed.netloc, "", "", ""))
+    for origin in settings.allowed_origins_list:
+        if origin and origin != "*":
+            return origin
+    return None
+
+
+async def _fetch_playlist_probe(
+    client: httpx.AsyncClient,
+    url: str,
+    *,
+    depth: int = 0,
+) -> dict[str, Any]:
+    headers: dict[str, str] = {
+        "Accept": (
+            "application/vnd.apple.mpegurl,application/x-mpegURL,"
+            "text/plain,*/*"
+        ),
+    }
+    origin = _diagnostic_origin()
+    if origin:
+        headers["Origin"] = origin
+    try:
+        response = await client.get(
+            url,
+            headers=headers,
+            timeout=_PROBE_TIMEOUT_SECONDS,
+        )
+    except httpx.HTTPError as exc:
+        return {
+            "probe": "transport_error",
+            "error": type(exc).__name__,
+        }
+    summary: dict[str, Any] = {
+        "probe": "completed",
+        "status_code": response.status_code,
+        "ok": response.is_success,
+        "content_type": response.headers.get("content-type"),
+        "cors": {
+            "access_control_allow_origin": response.headers.get(
+                "access-control-allow-origin"
+            ),
+            "access_control_allow_credentials": response.headers.get(
+                "access-control-allow-credentials"
+            ),
+        },
+    }
+    if response.is_success:
+        text = response.text
+        summary.update(_playlist_summary(text))
+        child_url = _first_child_playlist_url(text, url)
+        if child_url:
+            child = (
+                await _fetch_playlist_probe(
+                    client,
+                    child_url,
+                    depth=depth + 1,
+                )
+                if depth == 0
+                else {"probe": "skipped_depth_limit"}
+            )
+            summary["first_child_playlist"] = {
+                **child,
+                "url": _redact_url_for_diagnostic(child_url),
+            }
+    return summary
+
+
 async def _probe_transcoding_manifest(
     client: httpx.AsyncClient,
     *,
@@ -190,12 +355,37 @@ async def _probe_transcoding_manifest(
             "probe": "transport_error",
             "error": type(exc).__name__,
         }
-    return {
+    result: dict[str, Any] = {
         **base_summary,
         "probe": "completed",
         "status_code": response.status_code,
         "ok": response.is_success,
     }
+    if not response.is_success:
+        return result
+
+    try:
+        data = response.json()
+    except ValueError:
+        data = None
+    stream_url = data.get("url") if isinstance(data, dict) else None
+    if isinstance(stream_url, str) and stream_url:
+        parsed = urlsplit(stream_url)
+        result["stream_url_present"] = True
+        result["stream_url_host"] = parsed.hostname
+        result["stream_url_redacted"] = _redact_url_for_diagnostic(
+            stream_url
+        )
+        protocol = str(base_summary.get("protocol") or "").lower()
+        mime_type = str(base_summary.get("mime_type") or "").lower()
+        if protocol.endswith("hls") or "mpegurl" in mime_type:
+            result["playlist_probe"] = await _fetch_playlist_probe(
+                client,
+                stream_url,
+            )
+    else:
+        result["stream_url_present"] = False
+    return result
 
 
 @router.get("/diagnose")

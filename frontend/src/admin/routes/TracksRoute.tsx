@@ -120,6 +120,26 @@ function formatScDiagnoseResult(
   return JSON.stringify(result, null, 2)
 }
 
+function summarizeScDiagnoseProbes(
+  result: SoundCloudDiagnoseResponse,
+): string {
+  const probes = result.manifest_probes
+  const ok = probes.filter((p) => p.ok === true).length
+  const encrypted = probes.filter((p) =>
+    String(p.protocol || '').includes('encrypted-hls'),
+  ).length
+  const keyed = probes.filter((p) => {
+    const playlistProbe = p.playlist_probe
+    return (
+      typeof playlistProbe === 'object' &&
+      playlistProbe !== null &&
+      'has_ext_x_key' in playlistProbe &&
+      playlistProbe.has_ext_x_key === true
+    )
+  }).length
+  return `probes: ${ok}/${probes.length} ok, encrypted ${encrypted}, keyed ${keyed}`
+}
+
 type ModalsAction =
   | { type: 'set'; key: keyof ModalsState; value: ModalsState[keyof ModalsState] }
   | { type: 'closeAll' }
@@ -1893,6 +1913,7 @@ export function TracksRoute() {
                 proxied:{' '}
                 {scDiagnoseResult.request.egress.proxied ? 'yes' : 'no'}
               </span>
+              <span>{summarizeScDiagnoseProbes(scDiagnoseResult)}</span>
             </div>
             <pre>{formatScDiagnoseResult(scDiagnoseResult)}</pre>
           </div>

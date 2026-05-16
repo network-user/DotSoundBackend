@@ -49,8 +49,8 @@
   - Backend: new admin endpoint
     `GET /api/v1/admin/soundcloud/diagnose?url=...` (requires
     `tracks.manage`). Resolves the URL, runs the PrivateCore
-    decision, and HEAD-probes every transcoding with the same
-    headers/auth the player uses. Lets an operator see at a
+    decision, and probes every transcoding with the same headers/auth
+    the player uses. Lets an operator see at a
     glance whether the track is `policy=BLOCK`, `SUB_HIGH_TIER`,
     has snipped-only transcodings, etc.
   - Follow-up in the same session: the diagnostic endpoint now
@@ -70,16 +70,27 @@
     track is `policy=MONETIZE`, `monetization_model=AD_SUPPORTED`,
     `streamable=true`; regular `hls`/`progressive` manifests are
     404, but `cbc-encrypted-hls` / `ctr-encrypted-hls` manifests
-    return 200. Backend now treats those SoundCloud encrypted-HLS
-    protocols as the HLS protocol family and normalizes the resolved
-    stream protocol to `hls`. PrivateCore importability policy also
-    counts them as playable.
-  - Frontend follow-up was tested and reverted in-session: switching
-    lazy HLS loading from `hls.js/light` to full `hls.js` with
-    `emeEnabled=true` regressed regular SoundCloud HLS playback
-    (e.g. track `8`). The frontend is back on `hls.js/light`; the
-    encrypted-HLS support remains a backend/diagnostic experiment
-    until browser-side playback is proven safe.
+    return 200. Review found that a 200 transcoding response only
+    proves playlist URL resolution, not browser playability. Backend
+    no longer normalizes encrypted-HLS to ordinary `hls`, and
+    PrivateCore now rejects encrypted-only tracks with
+    `encrypted_hls_unsupported` until a supported/license-safe
+    playback path exists.
+  - Regression fix: SoundCloud HLS signed playlist URLs are now
+    always resolved fresh and are no longer read from or written to
+    Redis stream-url cache. The old `1200s` HLS cache could outlive
+    SoundCloud's CDN policy window while the player expected
+    `expires_in=300`, causing browser-side `403 Forbidden` and mass
+    auto-skips. Plain `hls` transcodings are now preferred before
+    encrypted-HLS variants when both are present.
+  - Admin diagnose now follows the final HLS playlist URL, returns a
+    redacted first-lines preview, detects `EXT-X-KEY`/key methods and
+    key formats, and surfaces CORS headers for the playlist request.
+    The admin modal summarizes ok/encrypted/keyed probe counts.
+  - Frontend HLS startup now waits for actual media readiness/first
+    fragment instead of resolving on `MANIFEST_PARSED`; fatal hls.js
+    errors are logged with type/details/fatal/reason/status/redacted
+    URL and shown through the existing `hlsError` UI.
   - Backend stream-error UX: `_third_party_error_detail` now
     enriches SC 502/4xx responses with `user_message` (RU)
     derived from the structured `reason`, so the frontend can
@@ -89,14 +100,15 @@
     `PlayerContext.recordUnavailableSkip` shows it as the
     in-island title on the first skip, falling back to the
     existing locale string for subsequent skips.
-  - Tests: 28 new PrivateCore tests on
+  - Tests: 31 PrivateCore tests on
     `evaluate_soundcloud_track_importability` /
     `classify_soundcloud_stream_failure_reason`. Backend
     tests cover policy rejection (BLOCK, SUB_HIGH_TIER),
-    phantom-track suppression on verify failure, and 502
-    `provider_manifest_not_found_for_all_formats` → URL
-    refresh recovery path. Frontend `npm run build`,
-    Ruff and targeted pytest all green.
+    encrypted-HLS rejection, cache skip for HLS signed URLs,
+    redacted playlist diagnostics, phantom-track suppression on verify
+    failure, and 502 `provider_manifest_not_found_for_all_formats` →
+    URL refresh recovery path. Frontend `npm run build`, Ruff and
+    targeted pytest all green.
   - Out of scope here (will iterate separately): switching the
     SC manifest egress to a Russia-bypass proxy / Tor — config
     knobs `sc_stream_manifest_proxy_retries` and

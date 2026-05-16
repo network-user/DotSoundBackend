@@ -34,6 +34,24 @@ const EQ_FREQUENCIES = [
   32, 64, 125, 250, 500, 1000, 4000, 16000,
 ]
 const EQ_DEFAULT = [0, 0, 0, 0, 0, 0, 0, 0]
+const HLS_READY_TIMEOUT_MS = 15000
+
+type HlsErrorData = {
+  type?: unknown
+  details?: unknown
+  fatal?: unknown
+  reason?: unknown
+  response?: {
+    code?: unknown
+    text?: unknown
+  }
+  error?: {
+    message?: unknown
+  }
+  frag?: {
+    url?: unknown
+  }
+}
 
 function _dbToLinear(db: number) {
   return 10 ** (db / 20)
@@ -73,6 +91,47 @@ function _applyPitchPreservation(
   } catch {
     // older browsers without the property; ignore
   }
+}
+
+function _stringOrUndefined(value: unknown) {
+  return typeof value === 'string' && value
+    ? value
+    : undefined
+}
+
+function _redactPlaybackUrl(raw: unknown) {
+  if (typeof raw !== 'string' || !raw) return undefined
+  try {
+    const url = new URL(raw)
+    return `${url.origin}${url.pathname}${url.search ? '?...' : ''}`
+  } catch {
+    return raw.split('?')[0] || undefined
+  }
+}
+
+function _hlsErrorTelemetry(data: HlsErrorData) {
+  return {
+    type: _stringOrUndefined(data.type),
+    details: _stringOrUndefined(data.details),
+    fatal: Boolean(data.fatal),
+    reason: _stringOrUndefined(data.reason),
+    status:
+      typeof data.response?.code === 'number'
+        ? data.response.code
+        : undefined,
+    message: _stringOrUndefined(data.error?.message),
+    url: _redactPlaybackUrl(data.frag?.url),
+  }
+}
+
+function _hlsErrorMessage(data: HlsErrorData) {
+  const telemetry = _hlsErrorTelemetry(data)
+  const detail =
+    telemetry.details ||
+    telemetry.reason ||
+    telemetry.message ||
+    'unknown'
+  return `HLS playback failed: ${detail}`
 }
 
 function _loadEqState() {
@@ -1406,6 +1465,7 @@ export function PlayerProvider({
       audio: HTMLAudioElement,
       url: string,
     ) => {
+      setHlsError(null)
       audio.crossOrigin = 'anonymous'
       srcAssignedAtRef.current = Date.now()
       audio.src = url
@@ -1424,10 +1484,49 @@ export function PlayerProvider({
     ) => {
       const Hls = await loadHlsClass()
       return new Promise<void>((resolve, reject) => {
+        let settled = false
+        let readyTimer: number | null = null
         const hls = new Hls({
           enableWorker: true,
           startLevel: -1,
         })
+        const onReady = () => {
+          if (settled) return
+          settled = true
+          cleanupReady()
+          setHlsError(null)
+          audio.volume = volume
+          if (autoplay) void safePlay(audio)
+          resolve()
+        }
+        const cleanupReady = () => {
+          audio.removeEventListener('canplay', onReady)
+          audio.removeEventListener('playing', onReady)
+          hls.off(Hls.Events.FRAG_BUFFERED, onReady)
+          if (readyTimer != null) {
+            window.clearTimeout(readyTimer)
+            readyTimer = null
+          }
+        }
+        const startFallback = () => {
+          hls.destroy()
+          hlsRef.current = null
+          audio.crossOrigin = 'anonymous'
+          audio.src = fallbackUrl || ''
+          audio.volume = volume
+          if (autoplay) void safePlay(audio)
+        }
+        const failBeforeReady = (message: string) => {
+          if (settled) return
+          settled = true
+          cleanupReady()
+          if (fallbackUrl) {
+            startFallback()
+            resolve()
+          } else {
+            reject(new Error(message))
+          }
+        }
         hlsRef.current = hls
         hls.loadSource(sourceUrl)
         hls.attachMedia(audio)
@@ -1435,25 +1534,30 @@ export function PlayerProvider({
           Hls.Events.MANIFEST_PARSED,
           () => {
             audio.volume = volume
-            if (autoplay) void safePlay(audio)
-            resolve()
           },
         )
+        hls.on(Hls.Events.FRAG_BUFFERED, onReady)
+        audio.addEventListener('canplay', onReady, { once: true })
+        audio.addEventListener('playing', onReady, { once: true })
+        readyTimer = window.setTimeout(() => {
+          const message = 'HLS playback failed: startup timeout'
+          setHlsError(message)
+          failBeforeReady(message)
+        }, HLS_READY_TIMEOUT_MS)
         hls.on(Hls.Events.ERROR, (_e, d) => {
-          if (!d.fatal) return
-          hls.destroy()
-          hlsRef.current = null
-          if (fallbackUrl) {
-            audio.crossOrigin = 'anonymous'
-            audio.src = fallbackUrl
-            audio.volume = volume
-            if (autoplay) void safePlay(audio)
-            resolve()
-          } else {
-            reject(
-              new Error('HLS playback failed'),
-            )
+          const telemetry = _hlsErrorTelemetry(d)
+          if (!d.fatal) {
+            console.debug('dotsound:hls_nonfatal_error', telemetry)
+            return
           }
+          const message = _hlsErrorMessage(d)
+          console.warn('dotsound:hls_fatal_error', telemetry)
+          setHlsError(message)
+          if (settled) {
+            if (fallbackUrl) startFallback()
+            return
+          }
+          failBeforeReady(message)
         })
       })
     },
@@ -1938,6 +2042,7 @@ export function PlayerProvider({
     lastStreamUrlRef.current = null
     lastTrackIdRef.current = newTrack.id
     streamLoadFailedTrackIdRef.current = null
+    setHlsError(null)
     void loadEqSettings()
     if (bail()) return
     _initAudioCtx()

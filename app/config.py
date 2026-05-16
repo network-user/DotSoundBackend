@@ -217,10 +217,10 @@ class AppSettings(BaseSettings):
 
     # Redis TTLs for cached stream URLs (seconds).
     stream_url_cache_ttl_soundcloud: int = 3600
-    # SC HLS manifest URLs carry short-lived CDN signatures. Cache them
-    # with a tighter TTL so clients never receive an already-expired URL.
-    # Override with STREAM_URL_CACHE_TTL_SOUNDCLOUD_HLS (seconds).
-    stream_url_cache_ttl_soundcloud_hls: int = 1200
+    # SC HLS manifest URLs carry very short-lived CDN signatures.
+    # Backend resolves SC HLS fresh and does not use Redis cache for it;
+    # this setting is kept only for compatibility with old deployments.
+    stream_url_cache_ttl_soundcloud_hls: int = 120
     stream_url_cache_ttl_bandcamp: int = 7200
 
     # Stage 4 backpressure on ImportJob. New jobs above

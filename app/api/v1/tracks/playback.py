@@ -114,6 +114,11 @@ _SC_USER_MESSAGES_RU: dict[str, str] = {
     "provider_returned_no_playable_url": (
         "У этого трека нет потоков, которые мы могли бы " "воспроизвести."
     ),
+    "encrypted_hls_unsupported": (
+        "SoundCloud отдаёт этот трек только в защищённом HLS-формате, "
+        "который DotSound пока не воспроизводит. Откройте трек на "
+        "SoundCloud или выберите другой источник."
+    ),
 }
 
 

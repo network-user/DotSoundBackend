@@ -41,8 +41,9 @@ _SC_MANIFEST_BROWSER_HEADERS: dict[str, str] = {
 logger: structlog.stdlib.BoundLogger = structlog.get_logger(__name__)
 
 _SC_API_BASE = "https://api-v2.soundcloud.com"
-_SC_HLS_PROTOCOLS: frozenset[str] = frozenset(
-    {"hls", "cbc-encrypted-hls", "ctr-encrypted-hls"}
+_SC_HLS_PROTOCOLS: frozenset[str] = frozenset({"hls"})
+_SC_ENCRYPTED_HLS_PROTOCOLS: frozenset[str] = frozenset(
+    {"cbc-encrypted-hls", "ctr-encrypted-hls"}
 )
 _SC_PROGRESSIVE_PROTOCOLS: frozenset[str] = frozenset({"progressive"})
 
@@ -155,6 +156,8 @@ def _sc_protocol_family(protocol: object) -> str | None:
     normalized = protocol.lower()
     if normalized in _SC_HLS_PROTOCOLS:
         return "hls"
+    if normalized in _SC_ENCRYPTED_HLS_PROTOCOLS:
+        return "hls_encrypted"
     if normalized in _SC_PROGRESSIVE_PROTOCOLS:
         return "progressive"
     return None
@@ -162,6 +165,18 @@ def _sc_protocol_family(protocol: object) -> str | None:
 
 def _sc_protocol_matches(actual: object, wanted_family: str) -> bool:
     return _sc_protocol_family(actual) == wanted_family
+
+
+def _has_unsupported_encrypted_hls(
+    transcodings: list[dict],
+) -> bool:
+    return any(
+        _sc_protocol_family(t.get("format", {}).get("protocol"))
+        == "hls_encrypted"
+        and not t.get("snipped")
+        and isinstance(t.get("url"), str)
+        for t in transcodings
+    )
 
 
 async def _maybe_enqueue_audio_cache(track_id: int) -> None:
@@ -640,6 +655,7 @@ class SoundCloudService:
         protocols_order: list[str],
         params: dict,
         cache_id: str,
+        cache_stream: bool,
         force_direct: bool,
     ) -> tuple[str, str]:
         """Iterate transcodings and resolve a single playable URL.
@@ -751,22 +767,41 @@ class SoundCloudService:
                     protocol_out = (
                         _sc_protocol_family(raw_protocol) or protocol
                     )
-                    cache_ttl = (
-                        settings.stream_url_cache_ttl_soundcloud_hls
-                        if protocol_out == "hls"
-                        else settings.stream_url_cache_ttl_soundcloud
-                    )
-                    await set_cached_stream(
-                        CACHE_KEY_SC,
-                        cache_id,
-                        stream_url,
-                        protocol_out,
-                        cache_ttl,
-                    )
+                    if cache_stream and protocol_out != "hls":
+                        await set_cached_stream(
+                            CACHE_KEY_SC,
+                            cache_id,
+                            stream_url,
+                            protocol_out,
+                            settings.stream_url_cache_ttl_soundcloud,
+                        )
                     report_outbound_proxy_result(proxy_url, ok=True)
                     return stream_url, protocol_out
 
             if not attempted:
+                if _has_unsupported_encrypted_hls(transcodings):
+                    raise HTTPException(
+                        status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                        detail=_sc_error_detail(
+                            code="soundcloud_encrypted_hls_unsupported",
+                            message=(
+                                "SoundCloud returned only encrypted HLS "
+                                "streams for this track."
+                            ),
+                            reason="encrypted_hls_unsupported",
+                            stage="transcoding_manifest",
+                            retryable=False,
+                            attempted_protocols=["hls_encrypted"],
+                            extra={
+                                "diagnostic_hint": (
+                                    "Encrypted SoundCloud HLS resolves to "
+                                    "a playlist URL but is not treated as "
+                                    "browser-playable without a supported "
+                                    "license/key-system flow."
+                                ),
+                            },
+                        ),
+                    )
                 raise HTTPException(
                     status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
                     detail=_sc_error_detail(
@@ -822,15 +857,29 @@ class SoundCloudService:
         signature window).
         """
         cache_id = f"{sc_url}:{'hls' if prefer_hls else 'progressive'}"
-        if use_cache:
+        cache_stream = use_cache and not prefer_hls
+        if cache_stream:
             cached = await get_cached_stream(CACHE_KEY_SC, cache_id)
             if cached:
+                cached_url, cached_protocol = cached
+                if cached_protocol == "hls":
+                    logger.info(
+                        "stream_url_cache_ignored_short_lived_hls",
+                        service="soundcloud",
+                        sc_url=sc_url,
+                    )
+                else:
+                    logger.debug(
+                        "stream_url_cache_hit",
+                        service="soundcloud",
+                        sc_url=sc_url,
+                    )
+                    return cached_url, cached_protocol
                 logger.debug(
-                    "stream_url_cache_hit",
+                    "stream_url_cache_miss_after_hls_skip",
                     service="soundcloud",
                     sc_url=sc_url,
                 )
-                return cached
 
         sc_data = await self.resolve_url(sc_url)
         transcodings: list[dict] = sc_data.get("media", {}).get(
@@ -859,6 +908,7 @@ class SoundCloudService:
                     protocols_order=protocols_order,
                     params=params,
                     cache_id=cache_id,
+                    cache_stream=cache_stream,
                     force_direct=False,
                 )
             except _SCAllTranscodings404 as exc:
@@ -882,6 +932,7 @@ class SoundCloudService:
                             protocols_order=protocols_order,
                             params=params,
                             cache_id=cache_id,
+                            cache_stream=cache_stream,
                             force_direct=False,
                         )
                     except _SCAllTranscodings404 as exc:
@@ -950,6 +1001,7 @@ class SoundCloudService:
                     protocols_order=protocols_order,
                     params=params,
                     cache_id=cache_id,
+                    cache_stream=cache_stream,
                     force_direct=True,
                 )
             except _SCAllTranscodings404 as exc:
