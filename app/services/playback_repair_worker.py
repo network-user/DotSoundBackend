@@ -113,6 +113,7 @@ class TrackPlaybackRepairService:
         if cancelled is not None:
             return cancelled
         before_sc_url = track.sc_url
+        refresh_diagnostics: dict[str, Any] = {}
         refreshed = False
         repair_attempted = False
         try:
@@ -133,6 +134,13 @@ class TrackPlaybackRepairService:
                 return cancelled
             if not _is_soundcloud_track(track):
                 result = self._failed_result(track_id, first_exc)
+                result.update(
+                    {
+                        "sc_url_before": before_sc_url,
+                        "sc_url_after": track.sc_url,
+                        "source_platform": track.source_platform,
+                    }
+                )
                 await progress.safe_set_progress(
                     progress_id,
                     stage="unresolved",
@@ -159,10 +167,19 @@ class TrackPlaybackRepairService:
                 refreshed = await self._try_refresh_soundcloud_source(
                     track,
                     bypass_refresh_cache=bypass_refresh_cache,
+                    diagnostics=refresh_diagnostics,
                 )
             except Exception as refresh_exc:  # noqa: BLE001
                 await self._session.rollback()
                 result = self._error_result(track_id, refresh_exc)
+                result.update(
+                    {
+                        "sc_url_before": before_sc_url,
+                        "sc_url_after": track.sc_url,
+                        "source_platform": track.source_platform,
+                        "refresh_diagnostics": refresh_diagnostics,
+                    }
+                )
                 await progress.safe_set_progress(
                     progress_id,
                     stage="error",
@@ -182,6 +199,10 @@ class TrackPlaybackRepairService:
                 result = await self._record_unresolved(
                     track_id,
                     first_exc,
+                    sc_url_before=before_sc_url,
+                    sc_url_after=track.sc_url,
+                    source_platform=track.source_platform,
+                    refresh_diagnostics=refresh_diagnostics,
                 )
                 await progress.safe_set_progress(
                     progress_id,
@@ -214,6 +235,10 @@ class TrackPlaybackRepairService:
                 result = await self._record_unresolved(
                     track_id,
                     second_exc,
+                    sc_url_before=before_sc_url,
+                    sc_url_after=track.sc_url,
+                    source_platform=track.source_platform,
+                    refresh_diagnostics=refresh_diagnostics,
                 )
                 await progress.safe_set_progress(
                     progress_id,
@@ -236,6 +261,14 @@ class TrackPlaybackRepairService:
                 if cancelled is not None:
                     return cancelled
                 result = self._error_result(track_id, second_exc)
+                result.update(
+                    {
+                        "sc_url_before": before_sc_url,
+                        "sc_url_after": track.sc_url,
+                        "source_platform": track.source_platform,
+                        "refresh_diagnostics": refresh_diagnostics,
+                    }
+                )
                 await progress.safe_set_progress(
                     progress_id,
                     stage="error",
@@ -295,6 +328,10 @@ class TrackPlaybackRepairService:
             "stream_protocol": protocol,
             "refreshed_sc_url": refreshed,
             "sc_url_changed": before_sc_url != new_sc_url,
+            "sc_url_before": before_sc_url,
+            "sc_url_after": new_sc_url,
+            "source_platform": track.source_platform,
+            "refresh_diagnostics": refresh_diagnostics,
         }
         await progress.safe_set_progress(
             progress_id,
@@ -334,6 +371,7 @@ class TrackPlaybackRepairService:
         track: Track,
         *,
         bypass_refresh_cache: bool,
+        diagnostics: dict[str, Any],
     ) -> bool:
         track_id = track.id
         fallback = TrackFallbackService(self._session, settings)
@@ -341,6 +379,7 @@ class TrackPlaybackRepairService:
             return await fallback.try_refresh_sc_url(
                 track,
                 use_no_match_cache=not bypass_refresh_cache,
+                diagnostics=diagnostics,
             )
         except Exception:  # noqa: BLE001
             await self._session.rollback()
@@ -416,8 +455,21 @@ class TrackPlaybackRepairService:
         self,
         track_id: int,
         exc: HTTPException,
+        *,
+        sc_url_before: str | None,
+        sc_url_after: str | None,
+        source_platform: str | None,
+        refresh_diagnostics: dict[str, Any],
     ) -> dict[str, Any]:
         result = self._failed_result(track_id, exc)
+        result.update(
+            {
+                "sc_url_before": sc_url_before,
+                "sc_url_after": sc_url_after,
+                "source_platform": source_platform,
+                "refresh_diagnostics": refresh_diagnostics,
+            }
+        )
         await TrackPlaybackHealthService(
             self._session,
         ).record_scheduled_audit_failed(

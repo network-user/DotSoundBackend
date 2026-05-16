@@ -264,3 +264,157 @@ async def test_admin_playback_repair_summary_aggregates_jobs(
         "progress-done",
         "progress-running",
     }
+
+
+async def test_admin_playback_repair_summary_exposes_unresolved_details(
+    client: AsyncClient,
+    db_session: AsyncSession,
+) -> None:
+    admin = await create_test_user(client, 130011)
+    headers = await admin_bearer_for_user(
+        client, db_session, user_id=admin["id"]
+    )
+    await grant_admin_capability(
+        db_session, admin["id"], "tasks.manage"
+    )
+    task_name = (
+        "app.services.playback_repair_worker:"
+        "repair_track_playback_task"
+    )
+    db_session.add(
+        BackgroundJob(
+            id="bg-repair-unresolved",
+            name=task_name,
+            queue="default",
+            status="done",
+            payload={
+                "track_id": 456,
+                "progress_id": "progress-unresolved",
+            },
+            result_summary={
+                "track_id": 456,
+                "ok": False,
+                "status": "unresolved",
+                "detail": "SoundCloud stream unavailable",
+                "http_status": 502,
+                "sc_url_before": "https://soundcloud.com/old/broken",
+                "refresh_diagnostics": {
+                    "candidate_found": True,
+                    "candidate_url": (
+                        "https://soundcloud.com/new/candidate"
+                    ),
+                    "candidate_title": "Candidate",
+                    "rejected_reason": "candidate_url_taken",
+                    "conflict_track_id": 999,
+                },
+            },
+            max_attempts=2,
+            scheduled_at=datetime.now(UTC),
+        )
+    )
+    await db_session.commit()
+
+    r = await client.post(
+        "/api/v1/admin/tasks/playback-repair/summary",
+        headers=headers,
+        json={"job_ids": ["bg-repair-unresolved"]},
+    )
+
+    assert r.status_code == 200
+    body = r.json()
+    assert body["outcomes"]["unresolved"] == 1
+    assert body["retryable_track_ids"] == [456]
+    item = body["unresolved_items"][0]
+    assert item["job_id"] == "bg-repair-unresolved"
+    assert item["track_id"] == 456
+    assert item["detail"] == "SoundCloud stream unavailable"
+    assert item["http_status"] == 502
+    assert item["sc_url_before"] == "https://soundcloud.com/old/broken"
+    assert item["candidate_found"] is True
+    assert item["candidate_url"] == "https://soundcloud.com/new/candidate"
+    assert item["rejected_reason"] == "candidate_url_taken"
+    assert item["conflict_track_id"] == 999
+
+
+async def test_admin_retry_unresolved_playback_repairs(
+    client: AsyncClient,
+    db_session: AsyncSession,
+) -> None:
+    admin = await create_test_user(client, 130012)
+    headers = await admin_bearer_for_user(
+        client, db_session, user_id=admin["id"]
+    )
+    await grant_admin_capability(
+        db_session, admin["id"], "tasks.manage"
+    )
+    task_name = (
+        "app.services.playback_repair_worker:"
+        "repair_track_playback_task"
+    )
+    db_session.add_all(
+        [
+            BackgroundJob(
+                id="bg-retry-unresolved",
+                name=task_name,
+                queue="default",
+                status="done",
+                payload={"track_id": 501},
+                result_summary={"status": "unresolved"},
+                max_attempts=2,
+                scheduled_at=datetime.now(UTC),
+            ),
+            BackgroundJob(
+                id="bg-retry-done",
+                name=task_name,
+                queue="default",
+                status="done",
+                payload={"track_id": 502},
+                result_summary={"status": "repaired"},
+                max_attempts=2,
+                scheduled_at=datetime.now(UTC),
+            ),
+        ]
+    )
+    await db_session.commit()
+
+    with patch(
+        "app.services.admin_service.AdminService"
+        ".enqueue_tracks_playback_repair",
+        new=AsyncMock(
+            return_value=type(
+                "Result",
+                (),
+                {
+                    "model_dump": lambda self: {
+                        "requested": 1,
+                        "queued": 1,
+                        "skipped": 0,
+                        "missing": 0,
+                        "job_ids": ["new-job"],
+                        "progress_ids": ["new-progress"],
+                        "detail": "ok",
+                    }
+                },
+            )()
+        ),
+    ) as enqueue:
+        r = await client.post(
+            "/api/v1/admin/tasks/playback-repair/retry-unresolved",
+            headers=headers,
+            json={
+                "job_ids": [
+                    "bg-retry-unresolved",
+                    "bg-retry-done",
+                ]
+            },
+        )
+
+    assert r.status_code == 200
+    body = r.json()
+    assert body["requested"] == 1
+    assert body["job_ids"] == ["new-job"]
+    enqueue.assert_awaited_once_with(
+        [501],
+        actor_id=admin["id"],
+        force_requeue=True,
+    )

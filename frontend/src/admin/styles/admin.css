@@ -4233,6 +4233,65 @@
   color: var(--text);
 }
 
+.admin-playback-repair-summary__diagnostics {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  padding-top: var(--space-2);
+  border-top: 1px solid var(--border);
+}
+
+.admin-playback-repair-summary__diag-head {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+
+.admin-playback-repair-summary__diag-head strong {
+  font-size: var(--fs-13);
+}
+
+.admin-playback-repair-summary__diag-head span {
+  color: var(--text-secondary);
+  font-size: var(--fs-12);
+}
+
+.admin-playback-repair-summary__diag-table {
+  overflow-x: auto;
+}
+
+.admin-playback-repair-summary__diag-table table {
+  width: 100%;
+  min-width: 760px;
+  border-collapse: collapse;
+  font-size: var(--fs-12);
+}
+
+.admin-playback-repair-summary__diag-table th,
+.admin-playback-repair-summary__diag-table td {
+  padding: var(--space-2);
+  border-bottom: 1px solid var(--border);
+  text-align: left;
+  vertical-align: top;
+}
+
+.admin-playback-repair-summary__diag-table th {
+  color: var(--text-secondary);
+  font-weight: 600;
+}
+
+.admin-playback-repair-summary__diag-table td {
+  max-width: 240px;
+}
+
+.admin-playback-repair-summary__diag-table .admin-mono {
+  display: inline-block;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .admin-bg-detail {
   display: flex;
   flex-direction: column;

@@ -274,6 +274,7 @@ class AdminService:
         track_id: int,
         *,
         actor_id: int,
+        force_requeue: bool = False,
     ) -> AdminPlaybackRepairEnqueueResponse | None:
         track = await self._repo.get_track(track_id)
         if track is None:
@@ -305,7 +306,11 @@ class AdminService:
                 },
                 queue="default",
                 max_attempts=2,
-                idempotency_key=f"playback-repair:track:{track_id}",
+                idempotency_key=(
+                    None
+                    if force_requeue
+                    else f"playback-repair:track:{track_id}"
+                ),
                 idempotency_ttl_seconds=600,
                 created_by_user_id=actor_id,
                 job_id_payload_key="background_job_id",
@@ -335,6 +340,7 @@ class AdminService:
         track_ids: list[int],
         *,
         actor_id: int,
+        force_requeue: bool = False,
     ) -> AdminPlaybackRepairBulkResponse:
         unique_ids = list(dict.fromkeys(track_ids))
         queued = 0
@@ -346,6 +352,7 @@ class AdminService:
             result = await self.enqueue_track_playback_repair(
                 track_id,
                 actor_id=actor_id,
+                force_requeue=force_requeue,
             )
             if result is None:
                 missing += 1

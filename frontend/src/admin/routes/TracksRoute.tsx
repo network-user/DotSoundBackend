@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from 'r
 import { useTranslation } from 'react-i18next'
 import {
   keepPreviousData,
+  useMutation,
   useQuery,
   useQueryClient,
 } from '@tanstack/react-query'
@@ -298,6 +299,28 @@ export function TracksRoute() {
     refetchInterval: playbackRepairRun ? 2500 : false,
     refetchIntervalInBackground: false,
   })
+  const retryUnresolvedPlayback = useMutation({
+    mutationFn: (jobIds: string[]) =>
+      adminApi.retryUnresolvedPlaybackRepairs(jobIds),
+    onSuccess: async (result) => {
+      if (result.job_ids.length > 0) {
+        setPlaybackRepairRun({
+          jobIds: result.job_ids,
+          requested: result.requested,
+          queued: result.queued,
+          startedAt: new Date().toISOString(),
+        })
+      }
+      await showAlert(
+        t('admin.tasks.bg.playbackRepair.retryQueued', {
+          count: result.queued,
+        }),
+      )
+    },
+    onError: async () => {
+      await showAlert(t('admin.tasks.bg.playbackRepair.retryFailed'))
+    },
+  })
   const total = data?.total || 0
   const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE))
   const rows = (data?.items || []) as unknown as TrackRow[]
@@ -501,6 +524,16 @@ export function TracksRoute() {
         missing: result.missing,
       }),
     )
+  }
+
+  const retryUnresolvedPlaybackRepair = async (jobIds: string[]) => {
+    const ok = await showConfirm(
+      t('admin.tasks.bg.playbackRepair.confirmRetryUnresolved', {
+        count: jobIds.length,
+      }),
+    )
+    if (!ok) return
+    retryUnresolvedPlayback.mutate(jobIds)
   }
 
   const handleRepairSelectedPlayback = async () => {
@@ -1410,6 +1443,8 @@ export function TracksRoute() {
           onOpenTrack={(trackId) =>
             window.open(`/mini_app/track/${trackId}`, '_blank')
           }
+          onRetryUnresolved={retryUnresolvedPlaybackRepair}
+          retryingUnresolved={retryUnresolvedPlayback.isPending}
           onClose={() => setPlaybackRepairRun(null)}
         />
       )}

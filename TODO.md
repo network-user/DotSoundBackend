@@ -17,6 +17,9 @@
   - Admin-triggered playback repair bypasses the 24h SoundCloud
     no-match Redis cache so a retry after fixing SC search/client-id/proxy
     configuration actually rechecks affected tracks.
+  - Playback repair summary now includes unresolved diagnostics per track:
+    source URL, detail, candidate URL/title, rejection reason, conflict
+    track id where relevant, and a retry action for unresolved rows.
 
 - [x] **Mini App PWA precache diet (2026-05-16)**
   - Replaced the broad Workbox precache glob for all Mini App JS/CSS with a

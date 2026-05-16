@@ -1492,6 +1492,19 @@ export const adminApi = {
         body: { job_ids: jobIds },
       },
     ),
+  retryUnresolvedPlaybackRepairs: (jobIds: string[]) =>
+    adminFetch<{
+      requested: number
+      queued: number
+      skipped: number
+      missing: number
+      job_ids: string[]
+      progress_ids: string[]
+      detail: string
+    }>('/tasks/playback-repair/retry-unresolved', {
+      method: 'POST',
+      body: { job_ids: jobIds },
+    }),
   listActiveBackgroundJobs: () =>
     adminFetch<{
       items: Array<Record<string, unknown>>

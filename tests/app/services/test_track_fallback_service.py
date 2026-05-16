@@ -305,11 +305,17 @@ async def test_try_refresh_sc_url_can_bypass_no_match_cache(
     mock_sc_class.return_value = mock_instance
 
     svc = TrackFallbackService(db_session, _SETTINGS)
+    diagnostics: dict[str, object] = {}
     assert await svc.try_refresh_sc_url(
         stale,
         use_no_match_cache=False,
+        diagnostics=diagnostics,
     ) is True
 
     mock_instance.search_best_match.assert_awaited_once()
     await db_session.refresh(stale)
     assert stale.sc_url == new_url
+    assert diagnostics["cache"] == "bypassed"
+    assert diagnostics["candidate_found"] is True
+    assert diagnostics["candidate_url"] == new_url
+    assert diagnostics["refreshed"] is True

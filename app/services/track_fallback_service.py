@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import re
+from typing import Any
 
 import structlog
 from dotsound_private_core.services.playback_variant_policy import (
@@ -20,6 +21,15 @@ _SC_REFRESH_PREFIX = "sc_refresh:no_match:"
 _SC_REFRESH_NO_MATCH_TTL = 86400
 _SC_REFRESH_SAME_URL_TTL = 3600
 _TITLE_WORD_RE = re.compile(r"[a-zA-Zа-яА-Я0-9]+")
+
+
+def _update_refresh_diagnostics(
+    diagnostics: dict[str, Any] | None,
+    **values: object,
+) -> None:
+    if diagnostics is None:
+        return
+    diagnostics.update(values)
 
 
 class TrackFallbackService:
@@ -114,8 +124,14 @@ class TrackFallbackService:
         track: Track,
         *,
         use_no_match_cache: bool = True,
+        diagnostics: dict[str, Any] | None = None,
     ) -> bool:
         if not track.title:
+            _update_refresh_diagnostics(
+                diagnostics,
+                candidate_found=False,
+                rejected_reason="missing_title",
+            )
             return False
 
         from app.core.redis import get_redis_client
@@ -126,19 +142,43 @@ class TrackFallbackService:
         redis = get_redis_client()
         no_match_key = f"{_SC_REFRESH_PREFIX}{track.id}"
         if use_no_match_cache and await redis.get(no_match_key):
+            _update_refresh_diagnostics(
+                diagnostics,
+                cache="hit",
+                candidate_found=False,
+                rejected_reason="no_match_cache_hit",
+            )
             return False
+        _update_refresh_diagnostics(
+            diagnostics,
+            cache="miss" if use_no_match_cache else "bypassed",
+        )
 
         sc_svc = SoundCloudService(
             getattr(self._settings, "sc_client_id", "") or "",
             self._session,
         )
-        best = await sc_svc.search_best_match(
-            title=track.title,
-            artist=track.artist or None,
-            duration_seconds=track.duration_seconds,
-        )
+        try:
+            best = await sc_svc.search_best_match(
+                title=track.title,
+                artist=track.artist or None,
+                duration_seconds=track.duration_seconds,
+            )
+        except Exception as exc:
+            _update_refresh_diagnostics(
+                diagnostics,
+                candidate_found=False,
+                rejected_reason="search_failed",
+                error=f"{type(exc).__name__}: {exc}",
+            )
+            raise
 
         if not best:
+            _update_refresh_diagnostics(
+                diagnostics,
+                candidate_found=False,
+                rejected_reason="no_candidate",
+            )
             await redis.set(
                 no_match_key,
                 "1",
@@ -151,7 +191,19 @@ class TrackFallbackService:
             return False
 
         new_url: str | None = best.get("permalink_url")
+        new_ext_id: str | None = str(best["id"]) if best.get("id") else None
+        _update_refresh_diagnostics(
+            diagnostics,
+            candidate_found=True,
+            candidate_url=new_url,
+            candidate_external_id=new_ext_id,
+            candidate_title=best.get("title"),
+        )
         if not new_url:
+            _update_refresh_diagnostics(
+                diagnostics,
+                rejected_reason="candidate_missing_permalink",
+            )
             await redis.set(
                 no_match_key,
                 "1",
@@ -160,6 +212,10 @@ class TrackFallbackService:
             return False
 
         if new_url == track.sc_url:
+            _update_refresh_diagnostics(
+                diagnostics,
+                rejected_reason="same_url",
+            )
             await redis.set(
                 no_match_key,
                 "1",
@@ -171,10 +227,14 @@ class TrackFallbackService:
             )
             return False
 
-        new_ext_id: str | None = str(best["id"]) if best.get("id") else None
         repo = TrackRepository(self._session)
         url_owner = await repo.get_track_id_by_sc_url(new_url)
         if url_owner is not None:
+            _update_refresh_diagnostics(
+                diagnostics,
+                rejected_reason="candidate_url_taken",
+                conflict_track_id=url_owner,
+            )
             await redis.set(
                 no_match_key,
                 "1",
@@ -195,6 +255,10 @@ class TrackFallbackService:
                 exclude_track_id=track.id,
             )
         ):
+            _update_refresh_diagnostics(
+                diagnostics,
+                rejected_reason="candidate_external_id_taken",
+            )
             await redis.set(
                 no_match_key,
                 "1",
@@ -210,6 +274,10 @@ class TrackFallbackService:
             await repo.update_sc_url(track.id, new_url, new_ext_id)
         except IntegrityError:
             await self._session.rollback()
+            _update_refresh_diagnostics(
+                diagnostics,
+                rejected_reason="integrity_error",
+            )
             await redis.set(
                 no_match_key,
                 "1",
@@ -229,6 +297,12 @@ class TrackFallbackService:
         logger.info(
             "sc_url_refreshed",
             track_id=track.id,
+            new_url=new_url,
+        )
+        _update_refresh_diagnostics(
+            diagnostics,
+            refreshed=True,
+            rejected_reason=None,
             new_url=new_url,
         )
         return True

@@ -7,6 +7,7 @@ from typing import Any
 import structlog
 from fastapi import APIRouter, Body, Depends, HTTPException, Query, Request
 from pydantic import BaseModel, Field
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.redis import get_redis_client
@@ -17,6 +18,7 @@ from app.dependencies import (
 )
 from app.models.background_job import BackgroundJob
 from app.models.scheduled_job import ScheduledJob
+from app.models.track import Track
 from app.models.user import User
 from app.repositories.admin_action_log import AdminActionLogRepository
 from app.repositories.admin_tasks import AdminTasksRepository
@@ -89,6 +91,10 @@ class BackgroundJobBulkCancelResponse(BaseModel):
 
 
 class PlaybackRepairSummaryRequest(BaseModel):
+    job_ids: list[str] = Field(default_factory=list)
+
+
+class PlaybackRepairRetryUnresolvedRequest(BaseModel):
     job_ids: list[str] = Field(default_factory=list)
 
 
@@ -551,6 +557,10 @@ def _bgjob_result_status(row: BackgroundJob) -> str | None:
     return raw if isinstance(raw, str) and raw else None
 
 
+def _bgjob_result_summary(row: BackgroundJob) -> dict[str, Any]:
+    return row.result_summary if isinstance(row.result_summary, dict) else {}
+
+
 def _live_stage(live: dict[str, Any] | None) -> str | None:
     if not live:
         return None
@@ -578,6 +588,69 @@ def _playback_repair_outcome(row: BackgroundJob) -> str:
 
 def _inc(counter: dict[str, int], key: str) -> None:
     counter[key] = counter.get(key, 0) + 1
+
+
+def _string_result_value(
+    result: dict[str, Any],
+    key: str,
+) -> str | None:
+    raw = result.get(key)
+    return raw if isinstance(raw, str) and raw else None
+
+
+def _bool_result_value(
+    result: dict[str, Any],
+    key: str,
+) -> bool | None:
+    raw = result.get(key)
+    return raw if isinstance(raw, bool) else None
+
+
+def _int_result_value(
+    result: dict[str, Any],
+    key: str,
+) -> int | None:
+    raw = result.get(key)
+    return raw if isinstance(raw, int) else None
+
+
+def _dict_result_value(
+    result: dict[str, Any],
+    key: str,
+) -> dict[str, Any]:
+    raw = result.get(key)
+    return raw if isinstance(raw, dict) else {}
+
+
+def _playback_repair_diagnostic_item(
+    row: BackgroundJob,
+    *,
+    current_sc_url: str | None,
+) -> dict[str, Any]:
+    result = _bgjob_result_summary(row)
+    refresh = _dict_result_value(result, "refresh_diagnostics")
+    return {
+        "job_id": row.id,
+        "track_id": _bgjob_track_id(row),
+        "status": row.status,
+        "outcome": _playback_repair_outcome(row),
+        "detail": _string_result_value(result, "detail"),
+        "http_status": _int_result_value(result, "http_status"),
+        "source_platform": _string_result_value(result, "source_platform"),
+        "sc_url_before": _string_result_value(result, "sc_url_before"),
+        "sc_url_after": (
+            _string_result_value(result, "sc_url_after") or current_sc_url
+        ),
+        "candidate_found": _bool_result_value(refresh, "candidate_found"),
+        "candidate_url": _string_result_value(refresh, "candidate_url"),
+        "candidate_title": _string_result_value(refresh, "candidate_title"),
+        "rejected_reason": _string_result_value(
+            refresh,
+            "rejected_reason",
+        ),
+        "conflict_track_id": _int_result_value(refresh, "conflict_track_id"),
+        "refresh_error": _string_result_value(refresh, "error"),
+    }
 
 
 async def _purge_bgjob_messages(job_ids: set[str]) -> int:
@@ -708,6 +781,20 @@ async def playback_repair_summary(
         ).list_background_jobs_by_ids(job_ids)
         if row.name == _PLAYBACK_REPAIR_TASK_NAME
     ]
+    track_ids = [
+        track_id
+        for track_id in (_bgjob_track_id(row) for row in rows)
+        if track_id is not None
+    ]
+    current_sc_urls: dict[int, str | None] = {}
+    if track_ids:
+        track_rows = await session.execute(
+            select(Track.id, Track.sc_url).where(Track.id.in_(track_ids))
+        )
+        current_sc_urls = {
+            int(track_id): sc_url
+            for track_id, sc_url in track_rows.all()
+        }
     progress_by_job: dict[str, str] = {}
     for row in rows:
         progress_id = _bgjob_progress_id(row)
@@ -739,6 +826,8 @@ async def playback_repair_summary(
     stages: dict[str, int] = {}
     current: dict[str, Any] | None = None
     items: list[dict[str, Any]] = []
+    unresolved_items: list[dict[str, Any]] = []
+    retryable_track_ids: list[int] = []
     processed = 0
 
     for row in rows:
@@ -765,7 +854,22 @@ async def playback_repair_summary(
             is_terminal = True
         if is_terminal:
             processed += 1
-            _inc(outcomes, _playback_repair_outcome(row))
+            outcome = _playback_repair_outcome(row)
+            _inc(outcomes, outcome)
+            if outcome == "unresolved":
+                track_id = _bgjob_track_id(row)
+                if track_id is not None:
+                    retryable_track_ids.append(track_id)
+                unresolved_items.append(
+                    _playback_repair_diagnostic_item(
+                        row,
+                        current_sc_url=(
+                            current_sc_urls.get(track_id)
+                            if track_id is not None
+                            else None
+                        ),
+                    )
+                )
 
         item = {
             "job_id": row.id,
@@ -797,7 +901,64 @@ async def playback_repair_summary(
         "stages": stages,
         "current": current,
         "items": items[:20],
+        "unresolved_items": unresolved_items[:500],
+        "retryable_track_ids": list(dict.fromkeys(retryable_track_ids)),
     }
+
+
+@router.post("/playback-repair/retry-unresolved")
+async def retry_unresolved_playback_repairs(
+    body: PlaybackRepairRetryUnresolvedRequest,
+    admin: User = Depends(require_capability("tasks.manage")),
+    session: AsyncSession = Depends(get_db),
+) -> dict[str, Any]:
+    job_ids = [
+        job_id
+        for job_id in dict.fromkeys(body.job_ids)
+        if isinstance(job_id, str) and job_id
+    ]
+    if len(job_ids) > _PLAYBACK_REPAIR_SUMMARY_LIMIT:
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                "too many job ids; "
+                f"max {_PLAYBACK_REPAIR_SUMMARY_LIMIT}"
+            ),
+        )
+    rows = [
+        row
+        for row in await AdminTasksRepository(
+            session,
+        ).list_background_jobs_by_ids(job_ids)
+        if (
+            row.name == _PLAYBACK_REPAIR_TASK_NAME
+            and _bgjob_result_status(row) == "unresolved"
+        )
+    ]
+    track_ids = [
+        track_id
+        for track_id in (_bgjob_track_id(row) for row in rows)
+        if track_id is not None
+    ]
+    if not track_ids:
+        return {
+            "requested": 0,
+            "queued": 0,
+            "skipped": 0,
+            "missing": 0,
+            "job_ids": [],
+            "progress_ids": [],
+            "detail": "No unresolved playback repair jobs to retry",
+        }
+
+    from app.services.admin_service import AdminService
+
+    result = await AdminService(session).enqueue_tracks_playback_repair(
+        list(dict.fromkeys(track_ids)),
+        actor_id=admin.id,
+        force_requeue=True,
+    )
+    return result.model_dump()
 
 
 @router.get("/jobs")

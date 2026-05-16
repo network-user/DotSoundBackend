@@ -659,6 +659,27 @@ export function TasksRoute() {
       adminApi.retryBackgroundJob(id),
     onSuccess: () => invalidateBg(),
   })
+  const retryUnresolvedPlayback = useMutation({
+    mutationFn: (jobIds: string[]) =>
+      adminApi.retryUnresolvedPlaybackRepairs(jobIds),
+    onSuccess: (data) => {
+      invalidateBg()
+      showIsland({
+        kind: 'toast',
+        title: t('admin.tasks.bg.playbackRepair.retryQueued', {
+          count: data.queued,
+        }),
+        durationMs: 2600,
+      })
+    },
+    onError: () => {
+      showIsland({
+        kind: 'error',
+        title: t('admin.tasks.bg.playbackRepair.retryFailed'),
+        durationMs: 4000,
+      })
+    },
+  })
 
   const queues = useQuery({
     queryKey: ['admin', 'tasks', 'queues'],
@@ -846,6 +867,15 @@ export function TasksRoute() {
     )
     if (!ok) return
     retryBg.mutate(id)
+  }
+  const handleRetryUnresolvedPlayback = async (jobIds: string[]) => {
+    const ok = await showConfirm(
+      t('admin.tasks.bg.playbackRepair.confirmRetryUnresolved', {
+        count: jobIds.length,
+      }),
+    )
+    if (!ok) return
+    retryUnresolvedPlayback.mutate(jobIds)
   }
 
   const setBgPreset = (
@@ -1358,6 +1388,8 @@ export function TasksRoute() {
             onOpenTrack={(trackId) =>
               window.open(`/mini_app/track/${trackId}`, '_blank')
             }
+            onRetryUnresolved={handleRetryUnresolvedPlayback}
+            retryingUnresolved={retryUnresolvedPlayback.isPending}
           />
         )}
         <p className="admin-card__sub">

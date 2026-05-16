@@ -15,6 +15,24 @@ export interface PlaybackRepairSummaryItem {
   updated_at: string | null
 }
 
+export interface PlaybackRepairDiagnosticItem {
+  job_id: string
+  track_id: number | null
+  status: string
+  outcome: string
+  detail: string | null
+  http_status: number | null
+  source_platform: string | null
+  sc_url_before: string | null
+  sc_url_after: string | null
+  candidate_found: boolean | null
+  candidate_url: string | null
+  candidate_title: string | null
+  rejected_reason: string | null
+  conflict_track_id: number | null
+  refresh_error: string | null
+}
+
 export interface PlaybackRepairSummary {
   requested: number
   matched: number
@@ -25,6 +43,8 @@ export interface PlaybackRepairSummary {
   stages: Record<string, number>
   current: PlaybackRepairSummaryItem | null
   items: PlaybackRepairSummaryItem[]
+  unresolved_items?: PlaybackRepairDiagnosticItem[]
+  retryable_track_ids?: number[]
 }
 
 interface Props {
@@ -32,6 +52,8 @@ interface Props {
   title?: string
   onOpenTasks?: () => void
   onOpenTrack?: (trackId: number) => void
+  onRetryUnresolved?: (jobIds: string[]) => void
+  retryingUnresolved?: boolean
   onClose?: () => void
 }
 
@@ -73,6 +95,21 @@ function statusKind(status: string | null | undefined): StatusKind {
   return 'unknown'
 }
 
+function shortUrl(url: string | null | undefined): string {
+  if (!url) return '—'
+  return url.replace(/^https?:\/\//, '')
+}
+
+function repairReasonLabel(
+  t: TFunction,
+  reason: string | null | undefined,
+): string {
+  if (!reason) return String(t('admin.tasks.bg.playbackRepair.reasonUnknown'))
+  const key = `admin.tasks.bg.playbackRepair.reasons.${reason}`
+  const label = String(t(key))
+  return label === key ? reason : label
+}
+
 export function playbackRepairStageLabel(
   t: TFunction,
   stage: string | null | undefined,
@@ -90,6 +127,8 @@ export function PlaybackRepairSummaryPanel({
   title,
   onOpenTasks,
   onOpenTrack,
+  onRetryUnresolved,
+  retryingUnresolved = false,
   onClose,
 }: Props) {
   const { t } = useTranslation()
@@ -99,6 +138,8 @@ export function PlaybackRepairSummaryPanel({
     summary.remaining === 0 ? 'repaired' : 'queued'
   )
   const width = `${percent(summary)}%`
+  const unresolvedItems = summary.unresolved_items || []
+  const retryJobIds = unresolvedItems.map((item) => item.job_id)
   const outcomeItems = [
     ['repaired', count(summary.outcomes, 'repaired')],
     ['unresolved', count(summary.outcomes, 'unresolved')],
@@ -131,6 +172,21 @@ export function PlaybackRepairSummaryPanel({
               onClick={onOpenTasks}
             >
               {t('admin.tasks.bg.playbackRepair.openTasks')}
+            </MotionPress>
+          )}
+          {onRetryUnresolved && retryJobIds.length > 0 && (
+            <MotionPress
+              variant="ghost"
+              haptic="selection"
+              className="admin-link"
+              disabled={retryingUnresolved}
+              onClick={() => onRetryUnresolved(retryJobIds)}
+            >
+              {retryingUnresolved
+                ? t('admin.tasks.bg.playbackRepair.retrying')
+                : t('admin.tasks.bg.playbackRepair.retryUnresolved', {
+                    count: retryJobIds.length,
+                  })}
             </MotionPress>
           )}
           {onClose && (
@@ -191,6 +247,75 @@ export function PlaybackRepairSummaryPanel({
               })}
             </MotionPress>
           )}
+        </div>
+      )}
+      {unresolvedItems.length > 0 && (
+        <div className="admin-playback-repair-summary__diagnostics">
+          <div className="admin-playback-repair-summary__diag-head">
+            <strong>
+              {t('admin.tasks.bg.playbackRepair.unresolvedTitle')}
+            </strong>
+            <span>
+              {t('admin.tasks.bg.playbackRepair.unresolvedHint')}
+            </span>
+          </div>
+          <div className="admin-playback-repair-summary__diag-table">
+            <table>
+              <thead>
+                <tr>
+                  <th>{t('admin.tasks.bg.playbackRepair.diagTrack')}</th>
+                  <th>{t('admin.tasks.bg.playbackRepair.diagSource')}</th>
+                  <th>{t('admin.tasks.bg.playbackRepair.diagReason')}</th>
+                  <th>{t('admin.tasks.bg.playbackRepair.diagCandidate')}</th>
+                  <th>{t('admin.tasks.bg.playbackRepair.diagDetail')}</th>
+                </tr>
+              </thead>
+              <tbody>
+                {unresolvedItems.map((item) => (
+                  <tr key={item.job_id}>
+                    <td>
+                      {item.track_id != null ? (
+                        <MotionPress
+                          variant="ghost"
+                          haptic="selection"
+                          className="admin-link admin-mono"
+                          onClick={() => onOpenTrack?.(item.track_id as number)}
+                        >
+                          #{item.track_id}
+                        </MotionPress>
+                      ) : (
+                        <span>—</span>
+                      )}
+                    </td>
+                    <td>
+                      <span className="admin-mono">
+                        {shortUrl(item.sc_url_before || item.sc_url_after)}
+                      </span>
+                    </td>
+                    <td>
+                      <StatusPill kind="error">
+                        {repairReasonLabel(t, item.rejected_reason)}
+                      </StatusPill>
+                    </td>
+                    <td>
+                      <span className="admin-mono">
+                        {item.candidate_found === false
+                          ? t('admin.tasks.bg.playbackRepair.noCandidate')
+                          : shortUrl(item.candidate_url)}
+                      </span>
+                    </td>
+                    <td>
+                      <span>
+                        {item.refresh_error ||
+                          item.detail ||
+                          t('admin.tasks.bg.playbackRepair.noDetail')}
+                      </span>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         </div>
       )}
     </div>
