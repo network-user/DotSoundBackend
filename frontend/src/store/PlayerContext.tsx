@@ -19,7 +19,6 @@ import {
   getCachedIdsSync,
   markPlayed as markCachePlayed,
   trackProgressiveAudioUrl,
-  warmProgressiveAudioForPlayback,
 } from '@/lib/offlineCache'
 import { queueOrSend } from '@/lib/pendingEvents'
 import {
@@ -679,8 +678,6 @@ export function PlayerProvider({
   const wantResumeAfterCardCloseRef = useRef(false)
   const prefetchAudioRef =
     useRef<HTMLAudioElement | null>(null)
-  const prefetchWarmAbortRef =
-    useRef<AbortController | null>(null)
   const manualQueueRef = useRef<Track[]>([])
   const analyserRef = useRef<AnalyserNode | null>(null)
   const streamExpiresAtRef = useRef<number | null>(null)
@@ -2509,7 +2506,23 @@ export function PlayerProvider({
     const tookPlayNextLock = !playNextInFlightRef.current
     if (tookPlayNextLock) {
       playNextInFlightRef.current = true
+    }
+    // Always declare this advance as forward-injected so the inner
+    // playTrack call doesn't treat it as a fresh user action and
+    // wipe the radio session / manual queue. Without this guard
+    // skipUnavailableTrack -> playNext (bypassInFlightGuard) running
+    // re-entrantly while another playNext owns the lock would land
+    // in playTrack with isInjectedAdvance=false and reset radio mode.
+    if (playTrackSlideInjectRef.current === null) {
       playTrackSlideInjectRef.current = 1
+    }
+    const advance = async (next: Track): Promise<boolean> => {
+      if (radioAutoSkipHaltedRef.current) return false
+      if (playTrackSlideInjectRef.current === null) {
+        playTrackSlideInjectRef.current = 1
+      }
+      await playTrack(next, { preserveQueue: true })
+      return true
     }
     try {
     if (radioAutoSkipHaltedRef.current) {
@@ -2539,9 +2552,7 @@ export function PlayerProvider({
           if (await isCached(item.id)) {
             manualQueueRef.current.splice(i, 1)
             setQueue([...manualQueueRef.current])
-            if (radioAutoSkipHaltedRef.current) return false
-            await playTrack(item)
-            return true
+            return await advance(item)
           }
         }
       }
@@ -2569,9 +2580,7 @@ export function PlayerProvider({
           return false
         }
         setQueue([...manualQueueRef.current])
-        if (radioAutoSkipHaltedRef.current) return false
-        await playTrack(next)
-        return true
+        return await advance(next)
       }
 
       if (radioModeRef.current && radioSeedTrackIdRef.current) {
@@ -2597,9 +2606,7 @@ export function PlayerProvider({
             }
             manualQueueRef.current = newTracks.slice(1)
             setQueue([...manualQueueRef.current])
-            if (radioAutoSkipHaltedRef.current) return false
-            await playTrack(next)
-            return true
+            return await advance(next)
           }
         } catch {
           /* continue to adjacent fallback */
@@ -2639,9 +2646,7 @@ export function PlayerProvider({
             tracks: availableCacheTracks.slice(1),
           }
         }
-        if (radioAutoSkipHaltedRef.current) return false
-        await playTrack(next)
-        return true
+        return await advance(next)
         }
       }
       if (radioAutoSkipHaltedRef.current) return false
@@ -2681,7 +2686,7 @@ export function PlayerProvider({
           rec.track !== undefined,
       )
       if (!next || !next.track) return false
-      await playTrack(next.track)
+      await playTrack(next.track, { preserveQueue: true })
       return true
     } catch {
       return false
@@ -2717,10 +2722,6 @@ export function PlayerProvider({
         prefetchAudioRef.current.src = ''
         prefetchAudioRef.current = null
       }
-      if (prefetchWarmAbortRef.current) {
-        prefetchWarmAbortRef.current.abort()
-        prefetchWarmAbortRef.current = null
-      }
       teardownPreloadHls()
       if (
         next.access_mode === 'official_embed' ||
@@ -2734,18 +2735,6 @@ export function PlayerProvider({
       pa.src = trackProgressiveAudioUrl(next.id)
       _applyPitchPreservation(pa)
       prefetchAudioRef.current = pa
-
-      if (getPrefetchManager().isEnabled()) {
-        const warmAbort = new AbortController()
-        prefetchWarmAbortRef.current = warmAbort
-        void warmProgressiveAudioForPlayback(next.id, {
-          signal: warmAbort.signal,
-        }).finally(() => {
-          if (prefetchWarmAbortRef.current === warmAbort) {
-            prefetchWarmAbortRef.current = null
-          }
-        })
-      }
 
       void (async () => {
         if (!shouldUseInternalHlsPlayback(next)) return
@@ -2834,10 +2823,6 @@ export function PlayerProvider({
         prefetchAudioRef.current.src = ''
         prefetchAudioRef.current = null
       }
-      if (prefetchWarmAbortRef.current) {
-        prefetchWarmAbortRef.current.abort()
-        prefetchWarmAbortRef.current = null
-      }
       teardownPreloadHls()
     }
   }, [track?.id])
@@ -2863,7 +2848,7 @@ export function PlayerProvider({
       setRadioSessionTimeline([...nextTimeline])
       const prevT = nextTimeline[nextTimeline.length - 1]
       if (!prevT) return false
-      await playTrack(prevT)
+      await playTrack(prevT, { preserveQueue: true })
       return true
     } finally {
       playTrackSlideInjectRef.current = null

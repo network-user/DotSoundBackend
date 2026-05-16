@@ -44,10 +44,7 @@ import {
   type WarmRecord,
 } from './storage'
 import {
-  getAutoCacheEnabled,
   getCachedIdsSync,
-  isCachedSync,
-  queueAutoCache,
   warmProgressiveAudioForPlayback,
 } from '@/lib/offlineCache'
 import { shouldUseInternalHlsPlayback } from '@/lib/playbackSourcePolicy'
@@ -63,23 +60,6 @@ interface PendingTask {
   sourcePlatform: string | null
   serverWarmOnly: boolean
   abort: AbortController
-  escalateFullDownload: 'queue-prefetch' | 'recommendation' | null
-  escalateTrack: PrefetchInputTrack | null
-}
-
-const FULL_DOWNLOAD_CONTEXTS: Partial<
-  Record<PrefetchContextName, 'queue-prefetch' | 'recommendation'>
-> = {
-  queue: 'queue-prefetch',
-  playback: 'queue-prefetch',
-  radio: 'recommendation',
-  daily_mix: 'recommendation',
-  weekly_mix: 'recommendation',
-  weekly_top: 'recommendation',
-  genre_mix: 'recommendation',
-  forgotten_treasures: 'recommendation',
-  user_choice: 'recommendation',
-  similar_in_card: 'recommendation',
 }
 
 
@@ -403,22 +383,12 @@ export class PrefetchManager {
 
     const list = this.contextTasks.get(options.context) ?? []
     let scheduled = 0
-    const escalateSource = this._resolveEscalationSource(
-      options.context,
-    )
-    const escalateBudget = this._resolveEscalationBudget()
-    let escalatedSoFar = 0
     for (const track of eligible) {
       const abort = new AbortController()
       const serverWarmOnly =
         (track as { access_mode?: string }).access_mode ===
           'third_party_stream' &&
         this.policy.skipThirdPartyAudioCache
-      const canEscalate =
-        escalateSource != null &&
-        !serverWarmOnly &&
-        escalatedSoFar < escalateBudget &&
-        !isCachedSync(track.id)
       const task: PendingTask = {
         trackId: track.id,
         context: options.context,
@@ -434,10 +404,7 @@ export class PrefetchManager {
           null,
         serverWarmOnly,
         abort,
-        escalateFullDownload: canEscalate ? escalateSource : null,
-        escalateTrack: canEscalate ? track : null,
       }
-      if (canEscalate) escalatedSoFar += 1
       list.push(task)
       this.inFlightTrackIds.add(track.id)
       scheduled += 1
@@ -445,30 +412,6 @@ export class PrefetchManager {
     }
     this.contextTasks.set(options.context, list)
     return scheduled
-  }
-
-  private _resolveEscalationSource(
-    context: PrefetchContextName,
-  ): 'queue-prefetch' | 'recommendation' | null {
-    if (!getAutoCacheEnabled()) return null
-    if (typeof navigator !== 'undefined' && !navigator.onLine) {
-      return null
-    }
-    const net = readNetworkSnapshot()
-    if (net.saveData) return null
-    if (
-      net.effectiveType === 'slow-2g' ||
-      net.effectiveType === '2g'
-    ) {
-      return null
-    }
-    return FULL_DOWNLOAD_CONTEXTS[context] ?? null
-  }
-
-  private _resolveEscalationBudget(): number {
-    const raw = this.policy.fullDownloadAhead
-    if (typeof raw !== 'number' || raw <= 0) return 0
-    return Math.min(raw, 5)
   }
 
   private _resolveLookahead(
@@ -536,18 +479,6 @@ export class PrefetchManager {
           bytes,
           sourcePlatform: task.sourcePlatform,
         })
-        if (
-          task.escalateFullDownload &&
-          task.escalateTrack &&
-          !isCachedSync(task.trackId) &&
-          (typeof navigator === 'undefined' ||
-            navigator.onLine !== false)
-        ) {
-          queueAutoCache(task.escalateTrack as never, {
-            source: task.escalateFullDownload,
-            pinned: false,
-          })
-        }
       }
     } catch {
       /* swallow individual task failures */
@@ -675,19 +606,16 @@ export class PrefetchManager {
   ): Promise<number> {
     if (!task.progressiveUrl) return 0
     if (task.abort.signal.aborted) return 0
-    const maxBytes =
-      this.policy.maxStorageBytes > 0
-        ? Math.min(
-            this.policy.maxStorageBytes,
-            64 * 1024 * 1024,
-          )
-        : 64 * 1024 * 1024
+    const initBytes = Math.max(
+      32 * 1024,
+      this.policy.initialBytesPerTrack || 256 * 1024,
+    )
     const result = await warmProgressiveAudioForPlayback(task.trackId, {
       signal: task.abort.signal,
-      maxBytes,
+      maxBytes: initBytes,
     })
     if (!result.ok) return 0
-    return Math.max(1, result.bytes || this.policy.initialBytesPerTrack)
+    return Math.max(1, result.bytes || initBytes)
   }
 
   private async _safeFetch(

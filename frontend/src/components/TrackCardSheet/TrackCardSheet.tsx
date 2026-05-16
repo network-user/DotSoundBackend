@@ -1344,18 +1344,24 @@ export function TrackCardSheet({
               {...(desktopFineNav ? {} : tcsNavSwipe)}
               style={tcsNavSwipeTouchStyle}
             >
-              <button
-                className="tcs-lyrics-expand icon-btn"
-                onClick={() => {
-                  setShowLyrics(false)
-                  openLyrics()
-                }}
-              >
-                <Icon
-                  name="maximize"
-                  size={16}
-                />
-              </button>
+              <div className="tcs-lyrics-section-bar">
+                <span className="tcs-lyrics-section-label">
+                  {t('trackSheet.lyrics')}
+                </span>
+                <button
+                  className="tcs-lyrics-expand icon-btn"
+                  onClick={() => {
+                    setShowLyrics(false)
+                    openLyrics()
+                  }}
+                  aria-label={t('trackSheet.lyricsExpand', 'Открыть текст')}
+                >
+                  <Icon
+                    name="maximize"
+                    size={16}
+                  />
+                </button>
+              </div>
               <LyricsPanel
                 trackId={track.id}
                 isOwner={isOwner || canEditUi}
@@ -1376,18 +1382,24 @@ export function TrackCardSheet({
               {...(desktopFineNav ? {} : tcsNavSwipe)}
               style={tcsNavSwipeTouchStyle}
             >
-              <button
-                className="tcs-lyrics-expand icon-btn"
-                onClick={() => {
-                  setShowLyrics(false)
-                  openLyrics()
-                }}
-              >
-                <Icon
-                  name="maximize"
-                  size={16}
-                />
-              </button>
+              <div className="tcs-lyrics-section-bar">
+                <span className="tcs-lyrics-section-label">
+                  {t('trackSheet.lyrics')}
+                </span>
+                <button
+                  className="tcs-lyrics-expand icon-btn"
+                  onClick={() => {
+                    setShowLyrics(false)
+                    openLyrics()
+                  }}
+                  aria-label={t('trackSheet.lyricsExpand', 'Открыть текст')}
+                >
+                  <Icon
+                    name="maximize"
+                    size={16}
+                  />
+                </button>
+              </div>
               <LyricsPanel
                 trackId={track.id}
                 isOwner={isOwner || canEditUi}
@@ -1724,10 +1736,8 @@ export function TrackCardSheet({
             onClick={() => {
               void startRadio(track)
                 .then(() => {
-                  if (isCoarsePointer) {
-                    closeCard()
-                    navigate('/radio')
-                  }
+                  closeCard()
+                  navigate('/radio')
                 })
                 .catch(() => {
                   showIsland({

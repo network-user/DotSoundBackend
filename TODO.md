@@ -1,5 +1,71 @@
 # DotSound - TODO Tracker
 
+- [x] **Mini App buffering regression + radio mode reset bug (2026-05-16)**
+  - Регрессия после `3120c5a fix(playback): stabilize SoundCloud and progressive
+    buffering`: на каждое переключение трека стартовало 2–3 параллельных загрузки
+    одного и того же файла (`<audio preload='auto'>` для следующего трека +
+    полная закачка прогрессивного аудио в Cache API через
+    `warmProgressiveAudioForPlayback` до 64 МБ × N + эскалация
+    `queueAutoCache` для контекстов radio/queue/playback). На мобильном это
+    забивало канал и трек не успевал буферизоваться к моменту воспроизведения.
+  - `frontend/src/lib/offlineCache.ts`: `warmProgressiveAudioForPlayback`
+    переписан на лёгкий Range-warm (по умолчанию первые 512 КБ, hard cap 2 МБ),
+    тело ответа сразу `cancel()`, ничего не пишется в Cache API. Только
+    прогревает upstream / TCP-соединение / диск-кэш. Удалена логика
+    `LS_PLAYBACK_WARM_INDEX`. Добавлена one-shot миграция
+    `_cleanupLegacyPlaybackWarmCache` — на первый запуск после фикса вычищает
+    из Cache API старые «warm-blob» записи (до 64 МБ каждая), оставляя
+    то, что лежит в IDB как явно скачанное пользователем.
+  - `frontend/src/lib/prefetch/PrefetchManager.ts`: убраны
+    `FULL_DOWNLOAD_CONTEXTS` + `_resolveEscalationSource` +
+    `_resolveEscalationBudget` — больше нет авто-эскалации warm →
+    `queueAutoCache` для радио/очереди/playback (это удваивало трафик
+    и съедало storage квоту). Auto-cache по-прежнему доступен для лайков
+    и ручной загрузки через `LikesContext`/`downloadTrack`.
+    `_warmProgressivePlaybackCache` теперь использует
+    `policy.initialBytesPerTrack` (256 КБ по дефолту).
+  - `frontend/src/store/PlayerContext.tsx`: убран дублирующий
+    per-track-switch вызов `warmProgressiveAudioForPlayback` в
+    `preloadFirst` — `<audio preload='auto'>` уже держит скачивание
+    следующего трека, плюс PrefetchManager.enqueue делает Range warm.
+  - **Бага «слетает режим бесконечного радио при попадании недоступного
+    трека»**: гонка в `playNext` — когда `skipUnavailableTrack` вызывал
+    `playNext({bypassInFlightGuard: true})` поверх уже идущего `playNext`,
+    флаг `playTrackSlideInjectRef.current = 1` не выставлялся (это
+    делалось только при взятии лока). Дальше `playTrack(next)` видел
+    `isInjectedAdvance = false`, попадал в ветку сброса
+    `radioModeRef.current = false` — кнопка/анимация радио пропадала,
+    хотя треки из `manualQueue` продолжали играть.
+    Исправлено: все внутренние вызовы `playTrack` из `playNext`,
+    `_fallbackToCachedTrack` и `applyRadioTimelineBack` теперь идут
+    с `preserveQueue: true`, а слайд-направление выставляется
+    независимо от владения локом. Введён локальный helper `advance`
+    в `playNext`, который форсит `playTrackSlideInjectRef.current = 1`
+    перед вызовом `playTrack`.
+  - `frontend/src/lib/prefetch/PrefetchManager.test.ts`: моки переписаны
+    на новый API `warmProgressiveAudioForPlayback` + `playbackSourcePolicy`,
+    HLS-тесты восстановлены, добавлен прогрессивный fallback-сценарий.
+  - **Реальная причина, по которой ранее выключили HLS флагом
+    `USE_INTERNAL_HLS_PLAYBACK = false`**: после миграции пайплайна
+    транскодинга на CAS-хранение (`hls-blobs/{xx}/{sha}/...` в
+    `transcode_full` с `source_sha256`), backend `hls_variant_playlist`
+    и `hls_segment` остались с жёстко зашитой legacy-схемой ключей
+    `hls/{track_id}/...`. Master.m3u8 отдавался корректно (берётся
+    напрямую по `track.hls_manifest_key`), а варианты `hi/playlist.m3u8`
+    и сегменты — 404. HLS.js на каждом таком треке делал лишний
+    round-trip и фолбэкался на progressive — и кто-то отключил HLS
+    глобально, чтобы не платить эту задержку каждое переключение.
+    Починил: `app/api/v1/tracks/hls.py` — введён `_hls_storage_prefix`,
+    извлекающий префикс из `track.hls_manifest_key` (CAS или legacy);
+    variant и segment эндпоинты используют его. `tests/app/api/v1/tracks/
+    test_hls.py` — 3 unit-теста на `_hls_storage_prefix` (CAS, legacy,
+    fallback). HLS снова включён: `USE_INTERNAL_HLS_PLAYBACK = true`,
+    `shouldUseInternalHlsPlayback` дополнительно отсекает треки с
+    пустым `hls_manifest_key` (если поле когда-нибудь попадёт в
+    публичную схему — пока в `Track` его нет, гейт мягкий).
+  - Итог: 23 frontend-теста + 7 backend HLS-тестов зелёные;
+    `npx tsc --noEmit` чисто.
+
 - [x] **Artist similar-station: SoundCloudStationNotAvailable + graceful retry (2026-05-16)**
   - `app/services/soundcloud_service.py`: добавлен класс `SoundCloudStationNotAvailable`.
     `fetch_expanded_artist_station_playlist` перехватывает `HTTPException(404)` от

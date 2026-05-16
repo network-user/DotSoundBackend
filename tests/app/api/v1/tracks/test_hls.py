@@ -55,3 +55,30 @@ async def test_hls_segment_track_not_found(
         "/api/v1/tracks/99999/hls/hi/000.ts",
     )
     assert r.status_code == 404
+
+
+def test_hls_storage_prefix_cas() -> None:
+    from app.api.v1.tracks.hls import _hls_storage_prefix
+
+    cas_master = (
+        "hls-blobs/ab/abcdef0123456789abcdef0123456789"
+        "abcdef0123456789abcdef0123456789/master.m3u8"
+    )
+    assert _hls_storage_prefix(42, cas_master) == (
+        "hls-blobs/ab/abcdef0123456789abcdef0123456789"
+        "abcdef0123456789abcdef0123456789"
+    )
+
+
+def test_hls_storage_prefix_legacy_track_id() -> None:
+    from app.api.v1.tracks.hls import _hls_storage_prefix
+
+    legacy = "hls/42/master.m3u8"
+    assert _hls_storage_prefix(42, legacy) == "hls/42"
+
+
+def test_hls_storage_prefix_falls_back_to_legacy_when_unknown() -> None:
+    from app.api.v1.tracks.hls import _hls_storage_prefix
+
+    assert _hls_storage_prefix(7, None) == "hls/7"
+    assert _hls_storage_prefix(7, "weird/key.txt") == "hls/7"

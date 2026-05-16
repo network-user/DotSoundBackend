@@ -17,10 +17,41 @@ vi.mock('./storage', () => ({
 }))
 
 vi.mock('@/lib/offlineCache', () => ({
-  getAutoCacheEnabled: vi.fn(() => false),
   getCachedIdsSync: vi.fn(() => new Set<number>()),
-  isCachedSync: vi.fn(() => false),
-  queueAutoCache: vi.fn(),
+  warmProgressiveAudioForPlayback: vi.fn(
+    async (
+      _trackId: number,
+      options?: { signal?: AbortSignal; maxBytes?: number },
+    ) => {
+      const { signal } = options ?? {}
+      const url = `/api/v1/tracks/${_trackId}/audio?force_progressive=true`
+      try {
+        await fetch(url, {
+          credentials: 'same-origin',
+          signal,
+          headers: { Range: `bytes=0-${(options?.maxBytes ?? 4096) - 1}` },
+        })
+      } catch {
+        return { ok: false, bytes: 0, alreadyCached: false }
+      }
+      return {
+        ok: true,
+        bytes: options?.maxBytes ?? 4096,
+        alreadyCached: false,
+      }
+    },
+  ),
+}))
+
+vi.mock('@/lib/playbackSourcePolicy', () => ({
+  USE_INTERNAL_HLS_PLAYBACK: true,
+  shouldUseInternalHlsPlayback: (track: {
+    access_mode?: string | null
+    is_public?: boolean | null
+  }) =>
+    track.is_public !== false &&
+    (track.access_mode == null ||
+      track.access_mode === 'internal_stream'),
 }))
 
 vi.mock('./network', () => ({
@@ -182,6 +213,31 @@ describe('PrefetchManager', () => {
     expect(urls.filter((u) => /\/\d+\.ts$/.test(u))).toHaveLength(2)
   })
 
+  it('falls back to progressive warm when HLS is gated off for the track', async () => {
+    const { spy, calls } = _buildFetchSpy()
+    vi.stubGlobal('fetch', spy)
+
+    const m = new PrefetchManager()
+    m.configurePolicyFetcher(_makePolicyFetcher(_policy()))
+    await m.start()
+
+    const scheduled = await m.enqueue(
+      [{ id: 110, is_public: false }],
+      { context: 'home' },
+    )
+    expect(scheduled).toBe(1)
+
+    await vi.waitFor(() => expect(m.wasWarm(110)).toBe(true))
+
+    const urls = calls.map((c) => c.url)
+    expect(
+      urls.some((u) => u.endsWith('/tracks/110/hls/master.m3u8')),
+    ).toBe(false)
+    expect(
+      urls.some((u) => u.startsWith('/api/v1/tracks/110/audio')),
+    ).toBe(true)
+  })
+
   it('picks a known variant from the ffmpeg master without leading slash', async () => {
     const { spy, calls } = _buildFetchSpy()
     vi.stubGlobal('fetch', spy)
@@ -340,14 +396,18 @@ describe('PrefetchManager', () => {
     expect(stats.warmed).toBe(1)
   })
 
-  it('refuses new HLS warm-ups once budget is exhausted', async () => {
+  it('refuses new warm-ups once storage budget is exhausted', async () => {
     const { spy, calls } = _buildFetchSpy()
     vi.stubGlobal('fetch', spy)
 
     const m = new PrefetchManager()
     m.configurePolicyFetcher(
       _makePolicyFetcher(
-        _policy({ maxStorageBytes: 100, warmSegmentsPerTrack: 1 }),
+        _policy({
+          maxStorageBytes: 100,
+          warmSegmentsPerTrack: 1,
+          initialBytesPerTrack: 4096,
+        }),
       ),
     )
     await m.start()

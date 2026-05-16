@@ -643,6 +643,7 @@ export function HomeView({ onOpenArtist }: HomeViewProps) {
       try {
         await startRadio(seed)
         trackActivationEvent(activation)
+        navigate('/radio')
       } catch (e) {
         showIsland({
           kind: 'error',
@@ -656,7 +657,14 @@ export function HomeView({ onOpenArtist }: HomeViewProps) {
         })
       }
     },
-    [sections, fallbackTracks, genreMixes, startRadio, t],
+    [
+      sections,
+      fallbackTracks,
+      genreMixes,
+      navigate,
+      startRadio,
+      t,
+    ],
   )
 
   const handleStartFirstSession = useCallback(async () => {

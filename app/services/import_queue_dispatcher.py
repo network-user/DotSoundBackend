@@ -119,6 +119,15 @@ async def sweep_stuck_jobs() -> int:
         return len(ids)
 
 
+async def _requeue_import_job(job_id: int) -> None:
+    async with AsyncSessionLocal() as session:
+        job = await session.get(ImportJob, job_id)
+        if job is None:
+            return
+        job.status = "queued"
+        await session.commit()
+
+
 async def dispatch_once() -> int:
     """Promote up to ``slots`` queued jobs into ``importing``.
 
@@ -126,6 +135,7 @@ async def dispatch_once() -> int:
     were free or no queued jobs existed).
     """
     await sweep_stuck_jobs()
+    promoted: list[ImportJob] = []
     async with AsyncSessionLocal() as session:
         global_active = await _count_active(session)
         slots = max(
@@ -151,7 +161,6 @@ async def dispatch_once() -> int:
         per_user = await _per_user_active(session)
         per_user_cap = int(settings.import_per_user_max_concurrent)
 
-        promoted: list[ImportJob] = []
         for job in candidates:
             if len(promoted) >= slots:
                 break
@@ -163,30 +172,28 @@ async def dispatch_once() -> int:
             per_user[uid] = per_user.get(uid, 0) + 1
         await session.commit()
 
-        for job in promoted:
+    for job in promoted:
+        try:
+            await _kiq_for_job(job)
+            logger.info(
+                "import_dispatcher_promoted",
+                job_id=job.id,
+                source=job.source,
+            )
+        except Exception as exc:  # noqa: BLE001
             try:
-                await _kiq_for_job(job)
-                logger.info(
-                    "import_dispatcher_promoted",
-                    job_id=job.id,
-                    source=job.source,
-                )
-            except Exception as exc:  # noqa: BLE001
-                try:
-                    await session.refresh(job)
-                    job.status = "queued"
-                    await session.commit()
-                except Exception:
-                    logger.error(
-                        "import_dispatcher_rollback_failed",
-                        job_id=job.id,
-                    )
+                await _requeue_import_job(job.id)
+            except Exception:
                 logger.error(
-                    "import_dispatcher_kiq_failed",
+                    "import_dispatcher_rollback_failed",
                     job_id=job.id,
-                    error=str(exc),
                 )
-        return len(promoted)
+            logger.error(
+                "import_dispatcher_kiq_failed",
+                job_id=job.id,
+                error=str(exc),
+            )
+    return len(promoted)
 
 
 async def _dispatcher_loop() -> None:

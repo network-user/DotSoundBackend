@@ -945,7 +945,9 @@
 
 /* === Radio screen — minimal + ambient =================================== */
 .rh-radio-root .view-header {
+  display: flex;
   align-items: flex-start;
+  gap: var(--space-2);
 }
 
 .rh-radio-header__meta {
@@ -1417,7 +1419,36 @@
   }
 }
 
+/* Standard mobile phones (≤480 px): shrink the hero so the
+ * transport controls stay visible without scrolling. */
+@media (max-width: 480px) {
+  .rh-radio-hero .ambient-stage {
+    min-height: 440px;
+  }
+}
+
+/* Landscape phones / short split-screen: reduce hero height significantly
+ * so the transport controls remain in view without scrolling. */
+@media (orientation: landscape) and (max-height: 500px) {
+  .rh-radio-hero .ambient-stage {
+    min-height: 260px;
+  }
+
+  .rh-radio-hero__inner {
+    padding: var(--space-3) var(--space-4);
+    gap: var(--space-3);
+  }
+
+  .rh-radio-stage {
+    height: min(54vw, 200px);
+  }
+}
+
 @media (max-width: 380px) {
+  .rh-radio-hero .ambient-stage {
+    min-height: 380px;
+  }
+
   .rh-radio-hero__inner {
     padding: var(--space-4);
     gap: var(--space-4);

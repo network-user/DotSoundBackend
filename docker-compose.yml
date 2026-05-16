@@ -142,6 +142,10 @@ services:
     command:
       - taskiq
       - worker
+      - --workers
+      - "1"
+      - --max-async-tasks
+      - "30"
       - app.core.tkq:broker
       - app.services.transcoding
       - app.services.import_worker
@@ -174,6 +178,8 @@ services:
       MINIO_ENDPOINT: minio:9000
       REDIS_URL: redis://redis:6379/0
       DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-dotsound}:${POSTGRES_PASSWORD:-dotsound}@postgres:5432/${POSTGRES_DB:-dotsound}
+      DB_POOL_SIZE: "15"
+      DB_MAX_OVERFLOW: "25"
       ELASTICSEARCH_URL: http://elasticsearch:9200
       INTERNAL_API_ALLOWED_CIDRS: ${INTERNAL_API_ALLOWED_CIDRS:-},172.16.0.0/12
       PYTHONPATH: /DotSoundPrivateCore/src

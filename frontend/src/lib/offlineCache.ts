@@ -17,10 +17,10 @@ const UNPINNED_TTL_DEFAULT_DAYS = 7
 const RECOMMENDATION_TTL_HOURS = 48
 const GC_FILL_THRESHOLD = 0.8
 const GC_FILL_TARGET = 0.6
-const PLAYBACK_WARM_MAX_BYTES = 64 * 1024 * 1024
-const PLAYBACK_WARM_TOTAL_MAX_BYTES = 192 * 1024 * 1024
-const PLAYBACK_WARM_MAX_ENTRIES = 8
-const LS_PLAYBACK_WARM_INDEX = 'ds:playback-warm-index:v1'
+const PLAYBACK_WARM_DEFAULT_BYTES = 512 * 1024
+const PLAYBACK_WARM_HARD_CAP_BYTES = 2 * 1024 * 1024
+const LS_PLAYBACK_WARM_INDEX_LEGACY = 'ds:playback-warm-index:v1'
+const LS_PLAYBACK_WARM_CLEANED = 'ds:playback-warm-cleaned:v1'
 
 type FetchPriority = 'low' | 'high' | 'auto'
 
@@ -28,11 +28,11 @@ interface FetchInitWithPriority extends RequestInit {
   priority?: FetchPriority
 }
 
-interface PlaybackWarmRecord {
-  trackId: number
-  url: string
-  bytes: number
-  warmedAt: number
+interface LegacyPlaybackWarmRecord {
+  trackId?: number
+  url?: string
+  bytes?: number
+  warmedAt?: number
 }
 
 export interface PlaybackWarmResult {
@@ -159,87 +159,17 @@ export async function getCachedAudioUrl(
   }
 }
 
-function readPlaybackWarmIndex(): PlaybackWarmRecord[] {
-  try {
-    const raw = localStorage.getItem(LS_PLAYBACK_WARM_INDEX)
-    if (!raw) return []
-    const parsed = JSON.parse(raw) as unknown
-    if (!Array.isArray(parsed)) return []
-    return parsed
-      .map((item): PlaybackWarmRecord | null => {
-        if (!item || typeof item !== 'object') return null
-        const rec = item as Partial<PlaybackWarmRecord>
-        if (
-          typeof rec.trackId !== 'number' ||
-          typeof rec.url !== 'string' ||
-          typeof rec.bytes !== 'number' ||
-          typeof rec.warmedAt !== 'number'
-        ) {
-          return null
-        }
-        return rec as PlaybackWarmRecord
-      })
-      .filter((rec): rec is PlaybackWarmRecord => rec !== null)
-  } catch {
-    return []
-  }
-}
-
-function writePlaybackWarmIndex(records: PlaybackWarmRecord[]): void {
-  try {
-    localStorage.setItem(
-      LS_PLAYBACK_WARM_INDEX,
-      JSON.stringify(records),
-    )
-  } catch {
-    /* ignore */
-  }
-}
-
-function upsertPlaybackWarmRecord(
-  record: PlaybackWarmRecord,
-): PlaybackWarmRecord[] {
-  const next = readPlaybackWarmIndex().filter(
-    (item) =>
-      item.trackId !== record.trackId && item.url !== record.url,
-  )
-  next.push(record)
-  writePlaybackWarmIndex(next)
-  return next
-}
-
-async function trimPlaybackWarmCache(
-  cache: Cache,
-  records = readPlaybackWarmIndex(),
-): Promise<void> {
-  const unique = new Map<string, PlaybackWarmRecord>()
-  for (const rec of records) {
-    unique.set(`${rec.trackId}:${rec.url}`, rec)
-  }
-  const warmOnly: PlaybackWarmRecord[] = []
-  for (const rec of unique.values()) {
-    if (await isCached(rec.trackId)) continue
-    warmOnly.push(rec)
-  }
-  warmOnly.sort((a, b) => b.warmedAt - a.warmedAt)
-  let total = warmOnly.reduce((sum, rec) => sum + rec.bytes, 0)
-  const keep = [...warmOnly]
-  while (
-    keep.length > PLAYBACK_WARM_MAX_ENTRIES ||
-    total > PLAYBACK_WARM_TOTAL_MAX_BYTES
-  ) {
-    const evicted = keep.pop()
-    if (!evicted) break
-    total -= evicted.bytes
-    try {
-      await cache.delete(evicted.url)
-    } catch {
-      /* ignore */
-    }
-  }
-  writePlaybackWarmIndex(keep)
-}
-
+/**
+ * Fire a low-priority Range request for the first ``maxBytes`` of
+ * the progressive audio file so the upstream (server, CDN, MinIO)
+ * pre-warms its caches and the underlying TCP / TLS connection is
+ * already established by the time the actual ``<audio>`` element
+ * starts streaming. We deliberately discard the response body and
+ * avoid writing into Cache API so this prefetch never competes with
+ * playback for storage quota or bandwidth.
+ *
+ * For full offline storage of a track use ``downloadTrack``.
+ */
 export async function warmProgressiveAudioForPlayback(
   trackId: number,
   options?: {
@@ -252,35 +182,32 @@ export async function warmProgressiveAudioForPlayback(
     bytes: 0,
     alreadyCached: false,
   }
-  if (!isOfflineCacheSupported()) return failed
   const signal = options?.signal
   if (signal?.aborted) return failed
+  if (typeof fetch !== 'function') return failed
+  if (cachedIds.has(trackId)) {
+    return { ok: true, bytes: 0, alreadyCached: true }
+  }
   const url = trackProgressiveAudioUrl(trackId)
+  const requestedBytes = Math.max(
+    16 * 1024,
+    Math.min(
+      options?.maxBytes ?? PLAYBACK_WARM_DEFAULT_BYTES,
+      PLAYBACK_WARM_HARD_CAP_BYTES,
+    ),
+  )
   try {
-    if (await isCached(trackId)) {
-      return { ok: true, bytes: 0, alreadyCached: true }
-    }
-    const cache = await caches.open(CACHE_NAME)
-    const existing = await cache.match(url)
-    if (existing) {
-      const bytes = Number(existing.headers.get('content-length') || 0)
-      const records = upsertPlaybackWarmRecord({
-        trackId,
-        url,
-        bytes,
-        warmedAt: Date.now(),
-      })
-      await trimPlaybackWarmCache(cache, records)
-      return { ok: true, bytes, alreadyCached: true }
-    }
     const init: FetchInitWithPriority = {
       credentials: 'same-origin',
       cache: 'default',
       signal,
       priority: 'low',
+      headers: {
+        Range: `bytes=0-${requestedBytes - 1}`,
+      },
     }
     const res = await fetch(url, init)
-    if (!res.ok || res.status === 206) {
+    if (!res.ok && res.status !== 206) {
       try {
         await res.body?.cancel()
       } catch {
@@ -288,40 +215,65 @@ export async function warmProgressiveAudioForPlayback(
       }
       return failed
     }
-    if (res.headers.get('X-Offline-Allowed') === '0') {
-      try {
-        await res.body?.cancel()
-      } catch {
-        /* ignore */
-      }
-      return failed
-    }
-    const maxBytes = options?.maxBytes ?? PLAYBACK_WARM_MAX_BYTES
     const len = Number(res.headers.get('content-length') || 0)
-    if (!Number.isFinite(len) || len <= 0 || len > maxBytes) {
-      try {
-        await res.body?.cancel()
-      } catch {
-        /* ignore */
-      }
-      return failed
-    }
-    await cache.put(url, res.clone())
     try {
       await res.body?.cancel()
     } catch {
       /* ignore */
     }
-    const records = upsertPlaybackWarmRecord({
-      trackId,
-      url,
-      bytes: len,
-      warmedAt: Date.now(),
-    })
-    await trimPlaybackWarmCache(cache, records)
-    return { ok: true, bytes: len, alreadyCached: false }
+    const bytes = Number.isFinite(len) && len > 0 ? len : requestedBytes
+    return { ok: true, bytes, alreadyCached: false }
   } catch {
     return failed
+  }
+}
+
+/**
+ * One-shot migration: previous builds of the Mini App stored the
+ * ENTIRE progressive audio body (up to 64 MB per track) into the
+ * runtime Cache API as a "playback warm" entry. On slow networks
+ * that download competed with the live ``<audio>`` request and
+ * caused the buffering stalls reported by users. Sweep those
+ * leftovers on first launch under the new build, but never touch
+ * tracks the user explicitly downloaded for offline (those live in
+ * IndexedDB and are kept).
+ */
+async function _cleanupLegacyPlaybackWarmCache(): Promise<void> {
+  if (typeof window === 'undefined') return
+  if (!isOfflineCacheSupported()) return
+  try {
+    if (localStorage.getItem(LS_PLAYBACK_WARM_CLEANED) === '1') {
+      return
+    }
+  } catch {
+    return
+  }
+  try {
+    const raw = localStorage.getItem(LS_PLAYBACK_WARM_INDEX_LEGACY)
+    const records: LegacyPlaybackWarmRecord[] = raw
+      ? (JSON.parse(raw) as LegacyPlaybackWarmRecord[])
+      : []
+    const cache = await caches.open(CACHE_NAME)
+    await ensureCachedIdsLoaded()
+    for (const rec of records) {
+      if (!rec || typeof rec.url !== 'string') continue
+      if (typeof rec.trackId === 'number' && cachedIds.has(rec.trackId)) {
+        continue
+      }
+      try {
+        await cache.delete(rec.url)
+      } catch {
+        /* best effort */
+      }
+    }
+    try {
+      localStorage.removeItem(LS_PLAYBACK_WARM_INDEX_LEGACY)
+      localStorage.setItem(LS_PLAYBACK_WARM_CLEANED, '1')
+    } catch {
+      /* ignore */
+    }
+  } catch {
+    /* swallow */
   }
 }
 
@@ -1064,6 +1016,7 @@ function startGcScheduler(): void {
   if (!isOfflineCacheSupported()) return
   gcSchedulerStarted = true
   window.setTimeout(() => {
+    void _cleanupLegacyPlaybackWarmCache().catch(() => {})
     void runCacheGC().catch(() => {})
   }, 5000)
   window.setInterval(

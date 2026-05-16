@@ -66,6 +66,7 @@ async def _worker_third_party_log_level(_st: TaskiqState) -> None:
 @broker.on_event(TaskiqEvents.WORKER_SHUTDOWN)
 async def _taskiq_worker_shutdown(_st: TaskiqState) -> None:
     global _worker_tor_pool_started
+    from app.core.db import dispose_engine
     from app.search.es_client import close_es
     from app.services import (
         import_queue_dispatcher,
@@ -80,6 +81,10 @@ async def _taskiq_worker_shutdown(_st: TaskiqState) -> None:
         await lyrics_global_orchestrator.stop_orchestrator_task()
     except Exception:  # noqa: BLE001
         logger.exception("lyrics_orchestrator_shutdown_failed")
+    try:
+        await dispose_engine()
+    except Exception:  # noqa: BLE001
+        logger.exception("db_engine_worker_shutdown_failed")
     try:
         await close_es()
     except Exception:  # noqa: BLE001

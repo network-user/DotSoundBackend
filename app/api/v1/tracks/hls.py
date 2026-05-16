@@ -21,6 +21,26 @@ logger: structlog.stdlib.BoundLogger = structlog.get_logger(__name__)
 _HLS_MIME = "application/vnd.apple.mpegurl"
 _TS_MIME = "video/MP2T"
 _VALID_VARIANTS = frozenset({"hi", "lo"})
+_LEGACY_HLS_PREFIX_TEMPLATE = "hls/{track_id}"
+
+
+def _hls_storage_prefix(track_id: int, manifest_key: str | None) -> str:
+    """Resolve the S3 prefix where this track's HLS bundle lives.
+
+    Internal-stream tracks transcoded by ``transcode_full`` with a
+    known source SHA-256 land under the content-addressed prefix
+    ``hls-blobs/{xx}/{sha}/...``. Older or non-CAS tracks live at
+    the legacy ``hls/{track_id}/...`` path. The master playlist
+    references variants relatively (``hi/playlist.m3u8``), so the
+    variant and segment endpoints must derive the prefix from the
+    same ``track.hls_manifest_key`` the master came from -- otherwise
+    HLS playback 404s on the very first variant fetch and HLS.js
+    falls back to progressive every track switch, killing the
+    benefit of HLS entirely.
+    """
+    if manifest_key and manifest_key.endswith("/master.m3u8"):
+        return manifest_key[: -len("/master.m3u8")]
+    return _LEGACY_HLS_PREFIX_TEMPLATE.format(track_id=track_id)
 
 
 def _offline_header(track: object) -> dict[str, str]:
@@ -122,7 +142,8 @@ async def hls_variant_playlist(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail="Playback temporarily unavailable for this track",
         )
-    key = f"hls/{track_id}/{variant}/playlist.m3u8"
+    prefix = _hls_storage_prefix(track_id, track.hls_manifest_key)
+    key = f"{prefix}/{variant}/playlist.m3u8"
     try:
         data = await s3.download_object(key)
     except Exception:
@@ -182,7 +203,8 @@ async def hls_segment(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Invalid segment name",
         )
-    key = f"hls/{track_id}/{variant}/{segment}"
+    prefix = _hls_storage_prefix(track_id, track.hls_manifest_key)
+    key = f"{prefix}/{variant}/{segment}"
     try:
         data = await s3.download_object(key)
     except Exception:
