@@ -1,6 +1,8 @@
 import pytest
 from httpx import AsyncClient
 
+from app.main import MINI_APP_STATIC_DIR
+
 pytestmark = pytest.mark.anyio
 
 
@@ -24,6 +26,10 @@ async def test_no_csp_on_json_response(
     )
 
 
+@pytest.mark.skipif(
+    not MINI_APP_STATIC_DIR.is_dir(),
+    reason="mini_app static build missing",
+)
 async def test_html_csp_allows_soundcloud_widget_frame(
     client: AsyncClient,
 ) -> None:

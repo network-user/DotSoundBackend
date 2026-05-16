@@ -3,6 +3,7 @@ import contextlib
 import sys
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
+from pathlib import Path
 
 import structlog
 from fastapi import FastAPI
@@ -38,6 +39,10 @@ from app.middlewares.internal_api_allowlist import (
 )
 from app.middlewares.request_logging import RequestLoggingMiddleware
 from app.middlewares.secure_static import SecureStaticMiddleware
+
+MINI_APP_STATIC_DIR = (
+    Path(__file__).resolve().parent / "static" / "mini_app"
+)
 from app.middlewares.security_headers import SecurityHeadersMiddleware
 
 logger: structlog.stdlib.BoundLogger = structlog.get_logger(__name__)
@@ -372,11 +377,20 @@ def create_app() -> FastAPI:
     application.add_middleware(AdminAuditLogMiddleware)
 
     application.include_router(api_router)
-    application.mount(
-        "/mini_app",
-        StaticFiles(directory="app/static/mini_app", html=True),
-        name="mini_app",
-    )
+    if MINI_APP_STATIC_DIR.is_dir():
+        application.mount(
+            "/mini_app",
+            StaticFiles(
+                directory=str(MINI_APP_STATIC_DIR),
+                html=True,
+            ),
+            name="mini_app",
+        )
+    else:
+        structlog.get_logger(__name__).warning(
+            "mini_app_static_missing",
+            path=str(MINI_APP_STATIC_DIR),
+        )
 
     setup_observability(application)
 
