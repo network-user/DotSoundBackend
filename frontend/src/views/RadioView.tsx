@@ -18,7 +18,9 @@ import { MorphIcon } from '@/components/ui/MorphIcon'
 import { MotionPress } from '@/components/ui/MotionPress'
 import { showIsland } from '@/lib/island'
 import { api } from '@/lib/api'
+import { coverProxySrcSet, coverProxyUrl } from '@/lib/coverProxy'
 import { extractCoverPalette } from '@/lib/coverPalette'
+import { isPerfLiteActive } from '@/lib/glassPerformance'
 import { getPrefetchManager } from '@/lib/prefetch/PrefetchManager'
 import { haptic } from '@/lib/telegram'
 import {
@@ -35,9 +37,12 @@ import {
 } from '@/lib/motion'
 import type { Track } from '@/types/api'
 
-function coverUrl(key: string | null): string | null {
+function coverUrl(
+  key: string | null,
+  width: 120 | 240 | 480 = 240,
+): string | null {
   if (!key) return null
-  return `/api/v1/tracks/cover_proxy?key=${encodeURIComponent(key)}`
+  return coverProxyUrl(key, { width })
 }
 
 const SWIPE_DISTANCE_THRESHOLD_PX = 56
@@ -97,19 +102,25 @@ export function RadioView() {
     [radioSessionTimeline],
   )
 
-  const heroCover = currentTrack ? coverUrl(currentTrack.cover_key) : null
+  const perfLite = isPerfLiteActive()
+  const heroCover = currentTrack
+    ? coverUrl(currentTrack.cover_key, 480)
+    : null
+  const heroCoverSrcSet = currentTrack?.cover_key
+    ? coverProxySrcSet(currentTrack.cover_key)
+    : undefined
   const isLive = Boolean(currentTrack && isPlaying)
 
   const nextTrack = queue[0] ?? radioPreviewTracks[0] ?? null
-  const nextCover = nextTrack ? coverUrl(nextTrack.cover_key) : null
+  const nextCover = nextTrack ? coverUrl(nextTrack.cover_key, 120) : null
   const prevTrack =
     radioSessionTimeline.length > 1
       ? radioSessionTimeline[radioSessionTimeline.length - 2] ?? null
       : null
-  const prevCover = prevTrack ? coverUrl(prevTrack.cover_key) : null
+  const prevCover = prevTrack ? coverUrl(prevTrack.cover_key, 120) : null
 
   useEffect(() => {
-    if (!heroCover) {
+    if (!heroCover || perfLite) {
       setAccentColor(undefined)
       return
     }
@@ -120,7 +131,7 @@ export function RadioView() {
     return () => {
       cancelled = true
     }
-  }, [heroCover])
+  }, [heroCover, perfLite])
 
   useEffect(() => {
     if (!radioMode || !currentTrack) {
@@ -420,6 +431,7 @@ export function RadioView() {
                       {heroCover ? (
                         <KenBurnsCover
                           src={heroCover}
+                          srcSet={heroCoverSrcSet}
                           alt=""
                           active={isLive}
                           motion="breathe"

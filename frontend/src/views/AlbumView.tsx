@@ -10,6 +10,7 @@ import { MotionPress } from '@/components/ui/MotionPress'
 import { showIsland } from '@/lib/island'
 
 import { api, getApiErrorMessage } from '@/lib/api'
+import { coverProxyUrl } from '@/lib/coverProxy'
 import { VARIANTS_FADE_UP, m } from '@/lib/motion'
 import { setBackButton } from '@/lib/telegram'
 
@@ -25,10 +26,7 @@ function albumCoverUrl(
   key: string | null | undefined,
 ): string | null {
   if (!key) return null
-  return (
-    '/api/v1/tracks/cover_proxy?key=' +
-    encodeURIComponent(key)
-  )
+  return coverProxyUrl(key, { width: 480 })
 }
 
 export function AlbumView() {

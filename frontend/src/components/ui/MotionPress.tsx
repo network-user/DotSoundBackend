@@ -9,6 +9,7 @@ import {
   TWEEN_FAST,
   useReducedMotion,
 } from '@/lib/motion'
+import { isPerfLiteActive } from '@/lib/glassPerformance'
 import {
   haptic,
   hapticSelection,
@@ -77,6 +78,7 @@ export const MotionPress = forwardRef<
   ref,
 ) {
   const reduce = useReducedMotion()
+  const perfLite = isPerfLiteActive()
   const klass = [VARIANT_CLASS[variant], className]
     .filter(Boolean)
     .join(' ')
@@ -106,16 +108,16 @@ export const MotionPress = forwardRef<
       disabled={disabled}
       onClick={handleClick}
       whileTap={
-        reduce || disabled
+        reduce || perfLite || disabled
           ? undefined
           : { scale: 0.92 }
       }
       whileHover={
-        reduce || disabled
+        reduce || perfLite || disabled
           ? undefined
           : { scale: 1.02 }
       }
-      transition={reduce ? TWEEN_FAST : SPRING_PRESS}
+      transition={reduce || perfLite ? TWEEN_FAST : SPRING_PRESS}
       {...rest}
     >
       {children}

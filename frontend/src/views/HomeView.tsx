@@ -30,6 +30,11 @@ import {
   HOME_QUICK_VISIBLE_COUNT,
   MIX_SHORTCUT_TILES,
 } from '@/lib/homeShortcuts'
+import {
+  coverProxySrcSet,
+  coverProxyUrl,
+  type CoverRenderWidth,
+} from '@/lib/coverProxy'
 import type {
   FollowedArtistItem,
   GenreMixItem,
@@ -43,9 +48,12 @@ interface HomeSection {
   tracks: Track[]
 }
 
-function coverUrl(key: string | null): string | null {
+function coverUrl(
+  key: string | null,
+  width: CoverRenderWidth = 240,
+): string | null {
   if (!key) return null
-  return `/api/v1/tracks/cover_proxy?key=${encodeURIComponent(key)}`
+  return coverProxyUrl(key, { width })
 }
 
 function chunk<T>(items: readonly T[], size: number): T[][] {
@@ -723,8 +731,11 @@ export function HomeView({ onOpenArtist }: HomeViewProps) {
     fallbackTracks === null &&
     recentlyPlayed === null
   const heroCoverSrc = featuredTrack
-    ? coverUrl(featuredTrack.cover_key)
+    ? coverUrl(featuredTrack.cover_key, 480)
     : null
+  const heroCoverSrcSet = featuredTrack?.cover_key
+    ? coverProxySrcSet(featuredTrack.cover_key)
+    : undefined
 
   const genreTrackCount = (n: number) =>
     t('artist.catalog_release_card_tracks_other', {
@@ -860,7 +871,11 @@ export function HomeView({ onOpenArtist }: HomeViewProps) {
                 </div>
                 <div className="rh-home-hero__cover">
                   {heroCoverSrc ? (
-                    <KenBurnsCover src={heroCoverSrc} alt="" />
+                    <KenBurnsCover
+                      src={heroCoverSrc}
+                      srcSet={heroCoverSrcSet}
+                      alt=""
+                    />
                   ) : (
                     <div className="rh-home-tile__ph">
                       <Icon name="music" size={36} />

@@ -9,6 +9,7 @@ import { Sheet } from '@/components/ui/Sheet'
 import { Icon } from '@/components/Icon/Icon'
 import { MotionPress } from '@/components/ui/MotionPress'
 import { api } from '@/lib/api'
+import { coverProxyUrl } from '@/lib/coverProxy'
 import { getUserId } from '@/lib/telegram'
 import type { SearchSuggestItem, LikedTrack } from '@/types/api'
 
@@ -208,9 +209,7 @@ export function TrackPickerSheet({
           )}
           {visible.map((it) => {
             const coverSrc = it.cover_key
-              ? `/api/v1/tracks/cover_proxy?key=${encodeURIComponent(
-                  it.cover_key,
-                )}`
+              ? coverProxyUrl(it.cover_key, { width: 120 })
               : null
             const isAdding = addingId === it.id
             return (
@@ -226,6 +225,7 @@ export function TrackPickerSheet({
                       alt=""
                       className="tp-sheet__row-cover-img"
                       loading="lazy"
+                      decoding="async"
                     />
                   ) : (
                     <div className="tp-sheet__row-cover-fallback">

@@ -1,5 +1,16 @@
-import { useEffect, useState, type CSSProperties } from 'react'
+import {
+  useEffect,
+  useState,
+  type CSSProperties,
+  type ImgHTMLAttributes,
+} from 'react'
 import { Icon } from '@/components/Icon/Icon'
+import {
+  coverProxySizes,
+  coverProxySrcSet,
+  coverProxyUrl,
+  pickCoverRenderWidth,
+} from '@/lib/coverProxy'
 
 interface Props {
   coverKey: string | null
@@ -7,26 +18,7 @@ interface Props {
   size?: number
   className?: string
   style?: CSSProperties
-}
-
-const COVER_RENDER_WIDTHS = [120, 240, 480] as const
-
-function buildProxyUrl(
-  key: string,
-  width?: number,
-): string {
-  const base = `/api/v1/tracks/cover_proxy?key=${encodeURIComponent(key)}`
-  return width ? `${base}&w=${width}` : base
-}
-
-function buildSrcSet(key: string): string {
-  return COVER_RENDER_WIDTHS.map(
-    (w) => `${buildProxyUrl(key, w)} ${w}w`,
-  ).join(', ')
-}
-
-function pickSizesAttr(displaySize: number): string {
-  return `${displaySize}px`
+  loading?: ImgHTMLAttributes<HTMLImageElement>['loading']
 }
 
 export function CoverImage({
@@ -35,6 +27,7 @@ export function CoverImage({
   size = 56,
   className,
   style,
+  loading = 'lazy',
 }: Props) {
   const [failed, setFailed] = useState(false)
   const [loaded, setLoaded] = useState(false)
@@ -45,9 +38,12 @@ export function CoverImage({
     ? { ...sizeStyle, ...style }
     : sizeStyle
 
-  const proxySrc = coverKey ? buildProxyUrl(coverKey) : null
-  const srcSet = coverKey ? buildSrcSet(coverKey) : undefined
-  const sizesAttr = coverKey ? pickSizesAttr(size) : undefined
+  const renderWidth = pickCoverRenderWidth(size)
+  const proxySrc = coverKey
+    ? coverProxyUrl(coverKey, { width: renderWidth })
+    : null
+  const srcSet = coverKey ? coverProxySrcSet(coverKey) : undefined
+  const sizesAttr = coverKey ? coverProxySizes(size) : undefined
   const src = proxySrc ?? externalUrl ?? null
 
   useEffect(() => {
@@ -68,7 +64,7 @@ export function CoverImage({
           alt=""
           width={size}
           height={size}
-          loading="eager"
+          loading={loading}
           decoding="async"
           onError={() => setFailed(true)}
           onLoad={() => setLoaded(true)}

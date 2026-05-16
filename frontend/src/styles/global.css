@@ -1,6 +1,3 @@
-/* ?????? Google Fonts ?????? */
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
-
 /* ?????? Reset & tokens ?????? */
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
@@ -267,6 +264,25 @@ body.monochrome #app {
     filter: blur(0) saturate(100%);
     transform: scale(1);
   }
+}
+
+body.ds-perf-lite .view {
+  animation: none;
+}
+
+body.ds-perf-lite .track-card {
+  will-change: auto;
+}
+
+body.ds-perf-lite .track-card-cover img {
+  animation: none;
+  filter: none;
+  transform: none;
+}
+
+body.ds-perf-lite .playing-indicator span {
+  animation: none;
+  transform: scaleY(0.72);
 }
 .track-card-cover.loaded img {
   opacity: 1;

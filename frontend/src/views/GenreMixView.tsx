@@ -11,6 +11,7 @@ import { MorphIcon } from '@/components/ui/MorphIcon'
 import { showIsland } from '@/lib/island'
 import { useSound } from '@/store/SoundContext'
 import { api, getApiErrorMessage } from '@/lib/api'
+import { coverProxyUrl } from '@/lib/coverProxy'
 import { getIsAdmin } from '@/lib/telegram'
 import { VARIANTS_FADE_UP, m } from '@/lib/motion'
 import {
@@ -64,7 +65,7 @@ export function GenreMixView() {
 
   function mixCoverUrl(key: string | null): string | null {
     if (!key) return null
-    return `/api/v1/tracks/cover_proxy?key=${encodeURIComponent(key)}`
+    return coverProxyUrl(key, { width: 480 })
   }
 
   useEffect(() => {

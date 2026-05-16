@@ -35,6 +35,11 @@ import { usePrefetchTracks } from '@/store/PrefetchContext'
 import { useDesktopFinePointer } from '@/hooks/useDesktopFinePointer'
 import { useNavigateToArtistByName } from '@/hooks/useNavigateToArtistByName'
 import { useSwipeX } from '@/hooks/useSwipeX'
+import {
+  coverProxySizes,
+  coverProxySrcSet,
+  coverProxyUrl,
+} from '@/lib/coverProxy'
 
 const SWIPE_DOWN_THRESHOLD = 120
 const SWIPE_COVER_THRESHOLD = 72
@@ -131,10 +136,11 @@ export function NowPlayingView() {
 
   const liked = isLiked(track.id)
   const coverSrc = track.cover_key
-    ? `/api/v1/tracks/cover_proxy?key=${encodeURIComponent(
-        track.cover_key,
-      )}`
+    ? coverProxyUrl(track.cover_key, { width: 480 })
     : null
+  const coverSrcSet = track.cover_key
+    ? coverProxySrcSet(track.cover_key)
+    : undefined
 
   const pct =
     Number.isFinite(duration) &&
@@ -285,6 +291,7 @@ export function NowPlayingView() {
           {coverSrc && (
             <KenBurnsCover
               src={coverSrc}
+              srcSet={coverSrcSet}
               alt=""
               duration={22}
               className="rp-now__bg-kb"
@@ -368,6 +375,8 @@ export function NowPlayingView() {
                   <SharedCover
                     trackId={track.id}
                     src={coverSrc}
+                    srcSet={coverSrcSet}
+                    sizes={coverProxySizes(360)}
                     alt={track.title}
                   />
                 ) : (
@@ -399,6 +408,8 @@ export function NowPlayingView() {
                     <SharedCover
                       trackId={track.id}
                       src={coverSrc}
+                      srcSet={coverSrcSet}
+                      sizes={coverProxySizes(360)}
                       alt={track.title}
                     />
                   ) : (

@@ -173,7 +173,7 @@
  * redesign-player.css `.rp-player-bar--touch` --player-h. */
 @media (pointer: coarse) {
   :root {
-    --layout-player-h: 106px;
+    --layout-player-h: 118px;
   }
 }
 
@@ -189,7 +189,7 @@
 
 @media (max-width: 360px) and (pointer: coarse) {
   :root {
-    --layout-player-h: 100px;
+    --layout-player-h: 110px;
   }
 }
 
@@ -206,7 +206,7 @@
 
 @media (orientation: landscape) and (max-height: 500px) and (pointer: coarse) {
   :root {
-    --layout-player-h: 86px;
+    --layout-player-h: 82px;
   }
 }
 
@@ -218,6 +218,7 @@
   }
 }
 
+html.ds-perf-lite,
 body.ds-perf-lite {
   --glass-blur-soft: blur(4px);
   --glass-blur-medium: blur(8px);

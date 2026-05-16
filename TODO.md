@@ -1,5 +1,48 @@
 # DotSound - TODO Tracker
 
+- [x] **Mobile mini-player redesign (2026-05-16)**
+  - Reworked the touch `MiniPlayerBar` into a floating mobile player
+    above the bottom navigation and track sheet layer.
+  - Added cover/palette-backed background fill, waveform-style progress,
+    and a tighter transport group with play/next plus visible like/menu.
+  - Synced touch player layout height tokens for normal, narrow, and
+    landscape mobile viewports.
+  - Reviewed `LEGAL.md` and `docs/legal/` for playback-touching changes;
+    UI-only update, no legal/product text or media access model changed.
+  - Verified `frontend` production build with `npm run build` and
+    Playwright mobile geometry checks at 390px and 360px.
+
+- [x] **Mini App mobile performance pass (2026-05-16)**
+  - `ds-perf-lite` now applies before React render on coarse-pointer,
+    low-memory/low-core, save-data, and slow-network devices.
+  - Mobile profile disables or simplifies expensive ambient blur,
+    Ken Burns, AudioRipple canvas rings, beat scaling, cover reveal
+    filters, and high-frequency progress/spectrum updates.
+  - Track cards, queue rows, player covers, Home, mix/radio/artist,
+    album/playlist, and Now Playing screens now request resized cover
+    variants (`w=120/240/480`) with `srcset`/`sizes` where useful.
+  - Secondary cover images default to lazy async decoding; the blocking
+    Google Fonts import was removed and the Telegram bridge script no
+    longer blocks initial HTML parsing.
+  - Verified `frontend` production build with `npm run build`; Vite dev
+    server is running locally at `http://127.0.0.1:5173/mini_app/`.
+
+- [x] **PWA icon refresh and mobile recommendation reset fix (2026-05-16)**
+  - Replaced the install/fav icon source with a minimal monochrome
+    `.звук` wordmark and regenerated the PNG PWA assets.
+  - Added versioned `icon-v2-*` PWA asset names and switched
+    `index.html` + manifest links to them so installed browsers do not
+    keep stale icon URLs forever.
+  - Recommendation reset no longer hard-reloads the Mini App; after
+    successful replay it closes settings and immediately re-enters
+    onboarding through an app-level event.
+  - App startup now re-checks onboarding status after cookie-session
+    restoration, fixing the mobile reload race where reset appeared to
+    do nothing.
+  - Reviewed `LEGAL.md` and `docs/legal/` for recommendation-touching
+    changes; no legal/product text or media access model changed.
+  - Verified `frontend` production build with `npm run build`.
+
 - [x] **Admin playback filters and radio skip counters (2026-05-16)**
   - Admin Tracks playback-issues list and filtered ID endpoint now accept
     `playback_error`, matching the latest structured failure detail

@@ -1,5 +1,11 @@
-import { type ReactNode, useEffect, useRef } from 'react'
+import {
+  type CSSProperties,
+  type ReactNode,
+  useEffect,
+  useRef,
+} from 'react'
 import { useReducedMotion } from '@/lib/motion'
+import { isPerfLiteActive } from '@/lib/glassPerformance'
 
 interface RippleRing {
   born: number
@@ -44,6 +50,7 @@ export function AudioRipple({
   children,
 }: AudioRippleProps) {
   const reduce = useReducedMotion()
+  const perfLite = isPerfLiteActive()
   const spanRef = useRef<HTMLSpanElement | null>(null)
   const canvasRef = useRef<HTMLCanvasElement | null>(null)
   const ringsRef = useRef<RippleRing[]>([])
@@ -63,7 +70,7 @@ export function AudioRipple({
     const span = spanRef.current
     if (!span) return
 
-    if (reduce || !active) {
+    if (reduce || perfLite || !active) {
       span.style.setProperty('--bp-phase', '0')
       return
     }
@@ -194,7 +201,7 @@ export function AudioRipple({
       lastIdleRippleRef.current = 0
       span.style.setProperty('--bp-phase', '0')
     }
-  }, [bpm, active, getAnalyser, ringColor, reduce])
+  }, [bpm, active, getAnalyser, ringColor, reduce, perfLite])
 
   // Deps MUST include [active, reduce]: the <canvas> is conditionally
   // rendered (`active && !reduce` below), so each time `active` toggles
@@ -207,7 +214,7 @@ export function AudioRipple({
   useEffect(() => {
     const span = spanRef.current
     const canvas = canvasRef.current
-    if (!span || !canvas) return
+    if (!span || !canvas || perfLite) return
     const sync = () => {
       const w = Math.max(1, span.offsetWidth)
       const h = Math.max(1, span.offsetHeight)
@@ -222,23 +229,23 @@ export function AudioRipple({
     obs.observe(span)
     sync()
     return () => obs.disconnect()
-  }, [active, reduce])
+  }, [active, reduce, perfLite])
 
   return (
     <span
       ref={spanRef}
-      data-beat-active={active && !reduce ? 'true' : 'false'}
+      data-beat-active={active && !reduce && !perfLite ? 'true' : 'false'}
       className={['beat-pulse-target', className].filter(Boolean).join(' ')}
       style={
         {
           position: 'relative',
           zIndex: 0,
           ['--bp-phase' as string]: '0',
-        } as React.CSSProperties
+        } as CSSProperties
       }
     >
       {children}
-      {active && !reduce && (
+      {active && !reduce && !perfLite && (
         <canvas
           ref={canvasRef}
           aria-hidden

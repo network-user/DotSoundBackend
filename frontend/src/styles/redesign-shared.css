@@ -241,6 +241,17 @@
   opacity: 0.95;
 }
 
+body.ds-perf-lite .ambient-stage__layers {
+  filter: brightness(0.78);
+  opacity: 0.72;
+}
+
+body.ds-perf-lite .ambient-layer {
+  inset: 0;
+  filter: none;
+  opacity: 0.42;
+}
+
 .ambient-stage__content {
   position: relative;
   z-index: 1;
@@ -277,6 +288,10 @@
   will-change: auto;
 }
 
+body.ds-perf-lite .kenburns-cover img {
+  will-change: auto;
+}
+
 /* BeatPulse target */
 .beat-pulse-target {
   display: inline-flex;
@@ -284,6 +299,11 @@
   justify-content: center;
   transform: scale(calc(1 + var(--bp-phase, 0) * 0.04));
   will-change: transform;
+}
+
+body.ds-perf-lite .beat-pulse-target {
+  transform: none;
+  will-change: auto;
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -405,6 +425,10 @@
   display: block;
   opacity: 0;
   transition: opacity var(--dur-med) var(--ease-standard);
+}
+
+body.ds-perf-lite .shared-cover-frame__img {
+  transition-duration: var(--dur-fast);
 }
 
 .shared-cover-frame--loaded .shared-cover-frame__img {

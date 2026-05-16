@@ -11,6 +11,7 @@ import { MotionPress } from '@/components/ui/MotionPress'
 import { showIsland } from '@/lib/island'
 
 import { api, getApiErrorMessage } from '@/lib/api'
+import { coverProxyUrl } from '@/lib/coverProxy'
 import { VARIANTS_FADE_UP, m } from '@/lib/motion'
 import { setBackButton } from '@/lib/telegram'
 
@@ -24,12 +25,10 @@ import type { PlaylistWithTracks, Track } from '@/types/api'
 
 function trackCoverUrl(
   key: string | null | undefined,
+  width: 120 | 240 | 480 = 240,
 ): string | null {
   if (!key) return null
-  return (
-    '/api/v1/tracks/cover_proxy?key=' +
-    encodeURIComponent(key)
-  )
+  return coverProxyUrl(key, { width })
 }
 
 function pickCollageCovers(tracks: Track[]): (string | null)[] {

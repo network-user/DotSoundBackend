@@ -2,6 +2,7 @@ import {
   m,
   useReducedMotion,
 } from '@/lib/motion'
+import { isPerfLiteActive } from '@/lib/glassPerformance'
 
 export type KenBurnsMotion = 'pan' | 'breathe'
 
@@ -25,8 +26,9 @@ export function KenBurnsCover({
   motion = 'pan',
 }: KenBurnsCoverProps) {
   const reduce = useReducedMotion()
+  const perfLite = isPerfLiteActive()
 
-  if (reduce || !active) {
+  if (reduce || perfLite || !active) {
     return (
       <div
         className={[
@@ -44,6 +46,7 @@ export function KenBurnsCover({
           alt={alt}
           loading="eager"
           fetchPriority="high"
+          decoding="async"
           draggable={false}
         />
       </div>
@@ -72,6 +75,7 @@ export function KenBurnsCover({
           alt={alt}
           loading="eager"
           fetchPriority="high"
+          decoding="async"
           draggable={false}
           animate={{
             scale: [1, 1.038, 1.014, 1.042, 1],
@@ -99,6 +103,7 @@ export function KenBurnsCover({
         alt={alt}
         loading="eager"
         fetchPriority="high"
+        decoding="async"
         draggable={false}
         animate={{
           scale: [1, 1.06, 1.02, 1.08, 1],

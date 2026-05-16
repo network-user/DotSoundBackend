@@ -83,14 +83,20 @@
 }
 
 .rp-player-bar--touch {
-  --mp-seek-h: 20px;
-  --mp-bottom-fill: 14px;
-  --player-h: 106px;
+  --mp-seek-h: 34px;
+  --mp-bottom-fill: 0px;
+  --player-h: 118px;
 }
 
 #player-bar.rp-player-bar--touch {
   display: flex;
   flex-direction: column;
+  left: 8px;
+  right: 8px;
+  bottom: calc(var(--nav-h) + var(--safe-bottom) + 8px);
+  z-index: 175;
+  background: transparent;
+  box-shadow: none;
   border-top: none;
 }
 
@@ -902,18 +908,84 @@
   padding-top: 0;
 }
 
+.mp-shell {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  min-height: var(--player-h);
+  border: 1px solid rgba(255, 255, 255, 0.11);
+  border-radius: 10px;
+  background:
+    linear-gradient(
+      180deg,
+      rgba(22, 22, 22, 0.78) 0%,
+      rgba(10, 10, 10, 0.94) 100%
+    );
+  box-shadow:
+    0 18px 42px rgba(0, 0, 0, 0.42),
+    inset 0 1px 0 rgba(255, 255, 255, 0.10);
+  isolation: isolate;
+  overflow: visible;
+  backdrop-filter: blur(20px) saturate(140%);
+  -webkit-backdrop-filter: blur(20px) saturate(140%);
+}
+
+.mp-shell::before,
+.mp-shell::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  pointer-events: none;
+}
+
+.mp-shell::before {
+  z-index: 0;
+  background-image: var(--mp-cover-image);
+  background-position: center;
+  background-size: cover;
+  filter: blur(22px) saturate(1.05);
+  opacity: 0.20;
+  transform: scale(1.04);
+}
+
+.mp-shell::after {
+  z-index: 1;
+  background:
+    radial-gradient(
+      90% 150% at 0% 0%,
+      color-mix(in srgb, var(--mp-tone-a) 34%, transparent) 0%,
+      transparent 60%
+    ),
+    radial-gradient(
+      92% 130% at 100% 0%,
+      color-mix(in srgb, var(--mp-tone-b) 28%, transparent) 0%,
+      transparent 64%
+    ),
+    linear-gradient(
+      180deg,
+      rgba(255, 255, 255, 0.08) 0%,
+      color-mix(in srgb, var(--mp-tone-c) 20%, transparent) 100%
+    );
+}
+
+.mp-shell > * {
+  position: relative;
+  z-index: 2;
+}
+
 .mp-zone {
   position: relative;
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 2px 6px 2px 10px;
+  padding: 4px 8px 8px 10px;
   height: calc(
     var(--player-h)
       - var(--mp-seek-h, 20px)
       - var(--mp-bottom-fill, 0px)
   );
-  overflow: hidden;
+  overflow: visible;
   touch-action: pan-y;
   -webkit-tap-highlight-color: transparent;
   user-select: none;
@@ -928,13 +1000,16 @@
   inset: 0;
   pointer-events: none;
   z-index: 0;
-  background: linear-gradient(
-    to right,
-    rgba(255, 255, 255, 0.14) 0%,
-    rgba(255, 255, 255, 0.14) var(--progress, 0%),
-    transparent var(--progress, 0%),
-    transparent 100%
-  );
+  border-radius: 0 0 9px 9px;
+  background:
+    linear-gradient(
+      to right,
+      color-mix(in srgb, var(--mp-tone-a) 24%, transparent) 0%,
+      rgba(255, 255, 255, 0.11) var(--progress, 0%),
+      transparent var(--progress, 0%),
+      transparent 100%
+    );
+  opacity: 0.82;
 }
 
 .rp-player-bar--touch .mp-zone > * {
@@ -945,6 +1020,7 @@
 .mp-touch-bottom-fill {
   flex-shrink: 0;
   height: var(--mp-bottom-fill);
+  display: none;
   pointer-events: none;
   /* Same tint-fill as mp-zone so the progress colour extends to the very
      bottom of the bar. --progress cascades from #player-bar (set by
@@ -970,33 +1046,53 @@
 
 /* ── Seek bar — TOP, div-based progress (bypasses WebKit bug) ─ */
 #player-bar.rp-player-bar--touch .mp-seek-wrap {
-  background: inherit;
+  background: transparent;
 }
 
 .mp-seek-wrap {
   position: relative;
   height: var(--mp-seek-h, 20px);
+  padding: 7px 12px 3px;
   touch-action: none;
   box-sizing: border-box;
   overflow: hidden;
 }
 
 /* White played segment — top 10px bright indicator */
-.mp-seek-track {
+.mp-wave-track {
   position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
-  height: 10px;
-  border-radius: 0;
+  inset: 7px 12px 3px;
   pointer-events: none;
-  background: linear-gradient(
-    to right,
-    #fff 0%,
-    #fff var(--progress, 0%),
-    transparent var(--progress, 0%),
-    transparent 100%
-  );
+}
+
+.mp-wave-bars {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  width: 100%;
+  height: 100%;
+}
+
+.mp-wave-bars > span {
+  flex: 1 1 0;
+  min-width: 2px;
+  height: var(--mp-wave-h, 50%);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.18);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08);
+}
+
+.mp-wave-fill {
+  position: absolute;
+  inset: 0;
+  clip-path: inset(0 calc(100% - var(--progress, 0%)) 0 0);
+}
+
+.mp-wave-fill .mp-wave-bars > span {
+  background: #fff;
+  box-shadow:
+    0 0 10px rgba(255, 255, 255, 0.28),
+    inset 0 1px 0 rgba(255, 255, 255, 0.42);
 }
 
 /* Bottom half of seek-wrap (the 10px gap below the bright line):
@@ -1005,18 +1101,19 @@
 #player-bar.rp-player-bar--touch .mp-seek-wrap::after {
   content: '';
   position: absolute;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  height: 10px;
+  left: 12px;
+  right: 12px;
+  bottom: 2px;
+  height: 1px;
   pointer-events: none;
   background: linear-gradient(
     to right,
-    rgba(255, 255, 255, 0.14) 0%,
-    rgba(255, 255, 255, 0.14) var(--progress, 0%),
+    rgba(255, 255, 255, 0.24) 0%,
+    rgba(255, 255, 255, 0.24) var(--progress, 0%),
     transparent var(--progress, 0%),
     transparent 100%
   );
+  opacity: 0.75;
 }
 
 /* Input covers full touch area, visually transparent */
@@ -1025,7 +1122,7 @@
   top: 0;
   left: 0;
   width: 100%;
-  height: var(--mp-seek-h, 20px);
+  height: 100%;
   -webkit-appearance: none;
   appearance: none;
   background: transparent;
@@ -1037,26 +1134,26 @@
 }
 
 .mp-seek::-webkit-slider-runnable-track {
-  height: 10px;
+  height: 100%;
   background: transparent;
 }
 
 .mp-seek::-moz-range-track {
-  height: 10px;
+  height: 100%;
   background: transparent;
 }
 
 .mp-seek::-moz-range-progress {
-  height: 10px;
+  height: 100%;
   background: transparent;
 }
 
 /* Thumb: visible only while dragging */
 .mp-seek::-webkit-slider-thumb {
   -webkit-appearance: none;
-  width: 18px;
-  height: 18px;
-  margin-top: -4px;
+  width: 16px;
+  height: 16px;
+  margin-top: 0;
   border-radius: 50%;
   background: #fff;
   cursor: pointer;
@@ -1066,8 +1163,8 @@
 }
 
 .mp-seek::-moz-range-thumb {
-  width: 18px;
-  height: 18px;
+  width: 16px;
+  height: 16px;
   border-radius: 50%;
   background: #fff;
   border: none;
@@ -1090,14 +1187,17 @@
 /* Album cover */
 .mp-cover {
   position: relative;
-  width: 50px;
-  height: 50px;
-  border-radius: var(--r-md);
+  width: 52px;
+  height: 52px;
+  border-radius: 8px;
   flex-shrink: 0;
   overflow: hidden;
   background: var(--surface-2, #1e1e1e);
   cursor: pointer;
   contain: paint;
+  box-shadow:
+    0 8px 18px rgba(0, 0, 0, 0.35),
+    0 0 0 1px rgba(255, 255, 255, 0.09);
   transition: transform 120ms var(--ease-out, ease-out);
 }
 
@@ -1115,7 +1215,7 @@
   width: 100%;
   height: 100%;
   object-fit: cover;
-  border-radius: var(--r-md);
+  border-radius: 8px;
   display: block;
 }
 
@@ -1179,8 +1279,25 @@
 .mp-actions {
   display: flex;
   align-items: center;
-  gap: 0;
+  gap: 4px;
   flex-shrink: 0;
+}
+
+.mp-transport {
+  display: inline-flex;
+  align-items: center;
+  gap: 0;
+  padding: 2px;
+  border: 1px solid rgba(255, 255, 255, 0.09);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.045);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.07),
+    0 6px 16px rgba(0, 0, 0, 0.20);
+}
+
+.mp-transport .mp-btn--skip:first-child {
+  display: none;
 }
 
 /* ---- Mini-player icon buttons ---- */
@@ -1188,8 +1305,8 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 36px;
-  height: 36px;
+  width: 34px;
+  height: 34px;
   border: 1px solid transparent;
   background: transparent;
   color: var(--text);
@@ -1235,7 +1352,19 @@
 }
 
 .mp-btn--liked {
-  color: var(--accent, #fff);
+  color: #fff;
+  background: color-mix(
+    in srgb,
+    var(--mp-tone-a) 38%,
+    rgba(255, 255, 255, 0.08)
+  );
+  border-color: rgba(255, 255, 255, 0.18);
+}
+
+.mp-btn--like,
+.mp-btn--more {
+  border-color: rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.035);
 }
 
 .mp-btn--burst {
@@ -1327,13 +1456,13 @@ body.ds-perf-lite .mp-btn--playing {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 30px;
-  height: 30px;
+  width: 34px;
+  height: 34px;
   padding: 0;
   margin: 0;
   border: 1px solid transparent;
-  border-radius: var(--r-sm);
-  background: transparent;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.04);
   cursor: pointer;
   -webkit-tap-highlight-color: transparent;
   color: var(--accent, #ff5f57);
@@ -1436,18 +1565,25 @@ body.ds-perf-lite .mp-btn--playing {
 
 @media (max-width: 360px) {
   .rp-player-bar--touch {
-    --player-h: 100px;
-    --mp-seek-h: 18px;
-    --mp-bottom-fill: 12px;
+    --player-h: 110px;
+    --mp-seek-h: 30px;
+    --mp-bottom-fill: 0px;
+  }
+
+  #player-bar.rp-player-bar--touch {
+    left: 6px;
+    right: 6px;
+    bottom: calc(var(--nav-h) + var(--safe-bottom) + 6px);
   }
 
   .mp-cover {
-    width: 44px;
-    height: 44px;
+    width: 46px;
+    height: 46px;
   }
 
   .mp-btn {
     width: 32px;
+    height: 32px;
   }
 
   .mp-btn--play {
@@ -1455,23 +1591,28 @@ body.ds-perf-lite .mp-btn--playing {
     height: 38px;
   }
 
-  .mp-seek-track,
+  .mp-wave-track,
   .mp-seek::-webkit-slider-runnable-track,
   .mp-seek::-moz-range-track,
   .mp-seek::-moz-range-progress {
-    height: 8px;
+    height: auto;
   }
 
   .mp-seek::-webkit-slider-thumb {
-    margin-top: -5px;
+    margin-top: 0;
   }
+
 }
 
 @media (orientation: landscape) and (max-height: 500px) {
   .rp-player-bar--touch {
-    --player-h: 86px;
-    --mp-seek-h: 16px;
-    --mp-bottom-fill: 8px;
+    --player-h: 82px;
+    --mp-seek-h: 22px;
+    --mp-bottom-fill: 0px;
+  }
+
+  #player-bar.rp-player-bar--touch {
+    bottom: calc(var(--nav-h) + var(--safe-bottom) + 5px);
   }
 
   .mp-cover {
@@ -1484,14 +1625,14 @@ body.ds-perf-lite .mp-btn--playing {
     height: 36px;
   }
 
-  .mp-seek-track,
+  .mp-wave-track,
   .mp-seek::-webkit-slider-runnable-track,
   .mp-seek::-moz-range-track,
   .mp-seek::-moz-range-progress {
-    height: 8px;
+    height: auto;
   }
 
   .mp-seek::-webkit-slider-thumb {
-    margin-top: -5px;
+    margin-top: 0;
   }
 }

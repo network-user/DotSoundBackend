@@ -17,6 +17,7 @@ import { api } from '@/lib/api'
 import { showIsland } from '@/lib/island'
 import { tg } from '@/lib/telegram'
 import { createSharePoster, downloadBlob } from '@/lib/shareCard'
+import { coverProxyUrl } from '@/lib/coverProxy'
 
 const PERIODS: { id: 7 | 30 | 365; labelKey: string; defaultLabel: string }[] =
   [
@@ -46,7 +47,7 @@ function formatMinutes(min: number): string {
 
 function trackCoverUrl(key: string | null): string {
   if (!key) return ''
-  return `/api/v1/tracks/cover_proxy?key=${encodeURIComponent(key)}`
+  return coverProxyUrl(key, { width: 240 })
 }
 
 interface ListeningStats {

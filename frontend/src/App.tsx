@@ -76,6 +76,7 @@ import {
   Navigate,
 } from 'react-router-dom'
 import { api } from '@/lib/api'
+import { shouldUseLiteProfile } from '@/lib/glassPerformance'
 import {
   markAuthSuccess,
   trackActivationEvent,
@@ -566,38 +567,69 @@ export function App() {
   }, [])
 
   useEffect(() => {
-    const nav = navigator as Navigator & {
-      deviceMemory?: number
-    }
-    const cores = nav.hardwareConcurrency ?? 8
-    const memoryGb = nav.deviceMemory ?? 8
-    const isCoarsePointer =
-      window.matchMedia?.('(pointer: coarse)')
-        .matches ?? false
-    const shouldUseLiteProfile =
-      isCoarsePointer || cores <= 6 || memoryGb <= 4
     document.body.classList.toggle(
       'ds-perf-lite',
-      shouldUseLiteProfile,
+      shouldUseLiteProfile(),
     )
   }, [])
 
   useEffect(() => {
-    if (needsAuth) return
-    const token = api.getToken()
-    if (token) {
+    if (!isInitialized || needsAuth) return
+    let cancelled = false
+    const applyOnboardingStatus = async () => {
+      let token = api.getToken()
+      if (!token) {
+        const restored = await api.restoreSession()
+        token = restored?.token ?? api.getToken()
+      }
+      if (!token || cancelled) return
       connectWS(token)
-      api.getOnboardingStatus()
-        .then(s => {
-          if (!s.onboarding_completed) {
-            setNeedsOnboarding(true)
-          } else if (!s.tutorial_seen) {
-            setNeedsTutorial(true)
-          }
-        })
-        .catch(() => {})
+      try {
+        const status = await api.getOnboardingStatus()
+        if (cancelled) return
+        if (!status.onboarding_completed) {
+          setNeedsTutorial(false)
+          setNeedsOnboarding(true)
+        } else if (!status.tutorial_seen) {
+          setNeedsOnboarding(false)
+          setNeedsTutorial(true)
+        } else {
+          setNeedsOnboarding(false)
+          setNeedsTutorial(false)
+        }
+      } catch {
+        /* ignore */
+      }
     }
-  }, [needsAuth])
+    void applyOnboardingStatus()
+    return () => {
+      cancelled = true
+    }
+  }, [isInitialized, needsAuth])
+
+  useEffect(() => {
+    const handleRecommendationsReset = () => {
+      try {
+        window.localStorage.removeItem('ds_pending_import_open')
+        window.localStorage.removeItem('ds_pending_tutorial')
+      } catch {
+        /* ignore */
+      }
+      setNeedsTutorial(false)
+      setNeedsOnboarding(true)
+      navigate('/', { replace: true })
+    }
+    window.addEventListener(
+      'ds-recommendations-reset',
+      handleRecommendationsReset,
+    )
+    return () => {
+      window.removeEventListener(
+        'ds-recommendations-reset',
+        handleRecommendationsReset,
+      )
+    }
+  }, [navigate])
 
   useEffect(() => {
     setAuthorId(null)

@@ -81,6 +81,7 @@ export function SharedCover({
         src={src}
         alt={alt}
         loading="lazy"
+        decoding="async"
         className="shared-cover-frame__img"
         transition={reduce ? { duration: 0 } : SPRING_LAYOUT}
         onLoad={() => setLoaded(true)}

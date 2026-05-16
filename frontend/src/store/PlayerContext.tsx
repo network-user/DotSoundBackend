@@ -27,6 +27,7 @@ import {
 } from '@/lib/streamDebugOverride'
 import { isBenignPlayError, safePlay } from '@/lib/safePlay'
 import { getPrefetchManager } from '@/lib/prefetch/PrefetchManager'
+import { coverProxyUrl } from '@/lib/coverProxy'
 import type { Track } from '@/types/api'
 
 const EQ_FREQUENCIES = [
@@ -498,7 +499,7 @@ function _updateMediaSession(
   if (!('mediaSession' in navigator)) return
   try {
     const coverPath = track.cover_key
-      ? `/api/v1/tracks/cover_proxy?key=${encodeURIComponent(track.cover_key)}`
+      ? coverProxyUrl(track.cover_key, { width: 480 })
       : null
     const coverAbsolute = coverPath
       ? new URL(coverPath, window.location.origin).href

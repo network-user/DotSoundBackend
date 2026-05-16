@@ -8,6 +8,7 @@ import { KenBurnsCover } from '@/components/ui/KenBurnsCover'
 import { MotionPress } from '@/components/ui/MotionPress'
 import { showIsland } from '@/lib/island'
 import { api, getApiErrorMessage } from '@/lib/api'
+import { coverProxyUrl } from '@/lib/coverProxy'
 import { VARIANTS_FADE_UP, m } from '@/lib/motion'
 import {
   usePlayerActions,
@@ -21,7 +22,7 @@ import type {
 
 function mixCoverUrl(key: string | null): string | null {
   if (!key) return null
-  return `/api/v1/tracks/cover_proxy?key=${encodeURIComponent(key)}`
+  return coverProxyUrl(key, { width: 480 })
 }
 
 export function WeeklyTopView() {

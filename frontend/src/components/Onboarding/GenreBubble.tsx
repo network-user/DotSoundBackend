@@ -1,6 +1,7 @@
 import { useMemo } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Icon } from '@/components/Icon/Icon'
+import { coverProxyUrl } from '@/lib/coverProxy'
 import type { OnboardingGenreBubble } from '@/types/api'
 
 interface Props {
@@ -13,7 +14,7 @@ interface Props {
 }
 
 function coverUrl(key: string): string {
-  return `/api/v1/tracks/cover_proxy?key=${encodeURIComponent(key)}`
+  return coverProxyUrl(key, { width: 120 })
 }
 
 export function GenreBubble({

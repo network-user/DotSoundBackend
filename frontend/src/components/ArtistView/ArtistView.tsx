@@ -17,6 +17,7 @@ import {
   hapticNotification,
 } from '@/lib/telegram'
 import { showIsland } from '@/lib/island'
+import { coverProxyUrl } from '@/lib/coverProxy'
 import { queueMutation } from '@/lib/pendingEvents'
 import { usePrefetchTracks } from '@/store/PrefetchContext'
 
@@ -261,7 +262,7 @@ function cleanWikiText(s: string | null): string | null {
 
 function artistImageUrl(imageKey: string | null): string | null {
   if (!imageKey) return null
-  return `/api/v1/tracks/cover_proxy?key=${encodeURIComponent(imageKey)}`
+  return coverProxyUrl(imageKey, { width: 480 })
 }
 
 const stageProgress: Record<string, number> = {
@@ -776,9 +777,7 @@ export function ArtistProfileStandalone({
   const avatarViewerSrc =
     avatarSrc ||
     (avatarCoverKey
-      ? `/api/v1/tracks/cover_proxy?key=${encodeURIComponent(
-          avatarCoverKey,
-        )}`
+      ? coverProxyUrl(avatarCoverKey, { width: 480 })
       : null)
   const sourceName =
     view.source_name ??

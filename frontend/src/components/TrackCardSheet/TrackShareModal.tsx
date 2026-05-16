@@ -12,6 +12,7 @@ import {
 } from '@/lib/platform'
 import { showIsland } from '@/lib/island'
 import { extractCoverPalette, type CoverPalette } from '@/lib/coverPalette'
+import { coverProxyUrl as buildCoverProxyUrl } from '@/lib/coverProxy'
 import { useFocusTrap } from '@/hooks/useFocusTrap'
 
 function hexToRgba(hex: string, alpha: number): string {
@@ -40,7 +41,7 @@ interface Props {
 
 function coverProxyUrl(key: string | null | undefined): string | null {
   if (!key) return null
-  return `/api/v1/tracks/cover_proxy?key=${encodeURIComponent(key)}`
+  return buildCoverProxyUrl(key, { width: 480 })
 }
 
 function buildShareUrl(payload: TrackSharePayload, trackUrl: string): string {

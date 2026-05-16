@@ -14,6 +14,11 @@ import { MorphIcon } from '@/components/ui/MorphIcon'
 import { MotionPress } from '@/components/ui/MotionPress'
 import { useDesktopFinePointer } from '@/hooks/useDesktopFinePointer'
 import { useNavigateToArtistByName } from '@/hooks/useNavigateToArtistByName'
+import {
+  coverProxySizes,
+  coverProxySrcSet,
+  coverProxyUrl,
+} from '@/lib/coverProxy'
 
 export type QueuePanelContentProps = {
   inline?: boolean
@@ -271,8 +276,11 @@ function QueueRow({
   const desktopFineNav = useDesktopFinePointer()
   const goArtistByName = useNavigateToArtistByName()
   const cover = track.cover_key
-    ? `/api/v1/tracks/cover_proxy?key=${encodeURIComponent(track.cover_key)}`
+    ? coverProxyUrl(track.cover_key, { width: 120 })
     : null
+  const coverSrcSet = track.cover_key
+    ? coverProxySrcSet(track.cover_key)
+    : undefined
 
   return (
     <div
@@ -294,7 +302,14 @@ function QueueRow({
       >
         <span className="queue-cover">
           {cover ? (
-            <img src={cover} alt="" />
+            <img
+              src={cover}
+              srcSet={coverSrcSet}
+              sizes={coverProxySizes(48)}
+              alt=""
+              loading="lazy"
+              decoding="async"
+            />
           ) : (
             <Icon name="music" size={16} />
           )}

@@ -30,13 +30,9 @@ export function ResetRecommendationsSection({ onClose }: Props) {
       })
       setConfirmOpen(false)
       onClose()
-      window.setTimeout(() => {
-        try {
-          window.location.reload()
-        } catch {
-          /* ignore */
-        }
-      }, 300)
+      window.dispatchEvent(
+        new Event('ds-recommendations-reset'),
+      )
     } catch {
       showIsland({
         kind: 'error',

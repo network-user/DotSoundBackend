@@ -1,7 +1,9 @@
 import {
   useEffect,
+  useMemo,
   useRef,
   useState,
+  type CSSProperties,
 } from 'react'
 import { AnimatePresence } from 'framer-motion'
 import { useNavigate } from 'react-router-dom'
@@ -21,6 +23,16 @@ import { SharedCover } from '@/components/ui/SharedCover'
 import { SpectrumMicroBars } from '@/components/ui/SpectrumMicroBars'
 import { AddToPlaylistSheet } from '@/components/AddToPlaylistSheet/AddToPlaylistSheet'
 import { useSwipeX } from '@/hooks/useSwipeX'
+import {
+  coverProxySizes,
+  coverProxySrcSet,
+  coverProxyUrl,
+} from '@/lib/coverProxy'
+import { isPerfLiteActive } from '@/lib/glassPerformance'
+import {
+  extractCoverPalette,
+  type CoverPalette,
+} from '@/lib/coverPalette'
 
 const COVER_SPRING = {
   type: 'spring' as const,
@@ -38,6 +50,35 @@ const INFO_EASE = {
   ],
 }
 const SWIPE_THRESHOLD = 52
+const MINI_WAVE_BARS = 34
+const FALLBACK_WAVE_BARS = [
+  30, 46, 26, 58, 38, 72, 44, 64, 34, 82, 48, 66,
+  40, 76, 54, 62, 36, 70, 50, 84, 42, 60, 32, 74,
+  46, 68, 28, 56, 40, 78, 52, 64, 36, 50,
+]
+
+function buildMiniWaveBars(
+  data: number[] | null | undefined,
+): number[] {
+  if (!data || data.length === 0) {
+    return FALLBACK_WAVE_BARS
+  }
+  const bars: number[] = []
+  const step = data.length / MINI_WAVE_BARS
+  for (let i = 0; i < MINI_WAVE_BARS; i += 1) {
+    const start = Math.floor(i * step)
+    const end = Math.max(
+      start + 1,
+      Math.floor((i + 1) * step),
+    )
+    const slice = data.slice(start, end)
+    const avg =
+      slice.reduce((sum, amp) => sum + Math.abs(amp), 0) /
+      slice.length
+    bars.push(Math.round(24 + Math.min(1, avg) * 62))
+  }
+  return bars
+}
 
 export function MiniPlayerBar() {
   const { t } = useTranslation()
@@ -72,7 +113,10 @@ export function MiniPlayerBar() {
   const [overflowOpen, setOverflowOpen] = useState(false)
   const [addToPlOpen, setAddToPlOpen] = useState(false)
   const [swipeDx, setSwipeDx] = useState(0)
+  const [palette, setPalette] =
+    useState<CoverPalette | null>(null)
   const overflowRef = useRef<HTMLDivElement>(null)
+  const shellRef = useRef<HTMLDivElement>(null)
   const seekInputRef = useRef<HTMLInputElement>(null)
   const seekWrapRef = useRef<HTMLDivElement>(null)
   const seekDraggingRef = useRef(false)
@@ -89,13 +133,22 @@ export function MiniPlayerBar() {
       if (!seekDraggingRef.current) {
         el.value = String(pct)
       }
+      shellRef.current?.style.setProperty(
+        '--progress',
+        `${pct}%`,
+      )
       wrap.style.setProperty('--progress', `${pct}%`)
     }
     write()
     if (!isPlaying) return
     let rafId = 0
-    const frame = () => {
-      write()
+    let lastPaint = 0
+    const frameMs = isPerfLiteActive() ? 1000 / 30 : 1000 / 60
+    const frame = (now: number) => {
+      if (now - lastPaint >= frameMs) {
+        lastPaint = now
+        write()
+      }
       rafId = requestAnimationFrame(frame)
     }
     rafId = requestAnimationFrame(frame)
@@ -139,15 +192,45 @@ export function MiniPlayerBar() {
       )
   }, [overflowOpen])
 
+  const coverSrc = track?.cover_key
+    ? coverProxyUrl(track.cover_key, { width: 120 })
+    : null
+  const waveBars = useMemo(
+    () => buildMiniWaveBars(track?.waveform_data),
+    [track?.id, track?.waveform_data],
+  )
+
+  useEffect(() => {
+    let cancelled = false
+    if (!coverSrc) {
+      setPalette(null)
+      return
+    }
+    void extractCoverPalette(coverSrc).then((p) => {
+      if (!cancelled) {
+        setPalette(p)
+      }
+    })
+    return () => {
+      cancelled = true
+    }
+  }, [coverSrc])
+
   if (!track) return null
 
   const liked = isLiked(track.id)
-  const coverSrc = track.cover_key
-    ? `/api/v1/tracks/cover_proxy?key=${encodeURIComponent(track.cover_key)}`
-    : null
+  const coverSrcSet = track.cover_key
+    ? coverProxySrcSet(track.cover_key)
+    : undefined
   const bpm = (track as unknown as { bpm?: number }).bpm
   const tapBpm = typeof bpm === 'number' ? bpm : 120
   const animKey = `${track.id}-${trackChangeSlide.bump}`
+  const shellStyle = {
+    '--mp-cover-image': coverSrc ? `url("${coverSrc}")` : 'none',
+    '--mp-tone-a': palette?.tones[0] ?? 'rgba(255,255,255,0.18)',
+    '--mp-tone-b': palette?.tones[1] ?? 'rgba(255,255,255,0.10)',
+    '--mp-tone-c': palette?.tones[2] ?? 'rgba(0,0,0,0.44)',
+  } as CSSProperties
 
   const handleLikeClick = async () => {
     if (!liked) {
@@ -160,17 +243,45 @@ export function MiniPlayerBar() {
 
   return (
     <>
+      <div
+        ref={shellRef}
+        className="mp-shell"
+        style={shellStyle}
+      >
       {/* Seek bar — top of player bar, full width */}
       <div
         ref={seekWrapRef}
         className="mp-seek-wrap"
         onPointerDown={(e) => e.stopPropagation()}
       >
-        {/* div-overlay: avoids WebKit pseudo-element CSS var bug */}
-        <div
-          className="mp-seek-track"
-          aria-hidden="true"
-        />
+        <div className="mp-wave-track" aria-hidden="true">
+          <div className="mp-wave-bars">
+            {waveBars.map((height, index) => (
+              <span
+                key={`idle-${index}`}
+                style={
+                  {
+                    '--mp-wave-h': `${height}%`,
+                  } as CSSProperties
+                }
+              />
+            ))}
+          </div>
+          <div className="mp-wave-fill">
+            <div className="mp-wave-bars">
+              {waveBars.map((height, index) => (
+                <span
+                  key={`fill-${index}`}
+                  style={
+                    {
+                      '--mp-wave-h': `${height}%`,
+                    } as CSSProperties
+                  }
+                />
+              ))}
+            </div>
+          </div>
+        </div>
         <input
           ref={seekInputRef}
           type="range"
@@ -246,6 +357,8 @@ export function MiniPlayerBar() {
                   <SharedCover
                     trackId={track.id}
                     src={coverSrc}
+                    srcSet={coverSrcSet}
+                    sizes={coverProxySizes(56)}
                     alt=""
                     className="mp-cover-img"
                   />
@@ -320,6 +433,7 @@ export function MiniPlayerBar() {
             </button>
           )}
 
+          <div className="mp-transport">
           <button
             className="mp-btn mp-btn--skip"
             onClick={() => {
@@ -362,9 +476,10 @@ export function MiniPlayerBar() {
           >
             <Icon name="skip-forward" size={16} />
           </button>
+          </div>
 
           <button
-            className={`mp-btn${
+            className={`mp-btn mp-btn--like${
               liked ? ' mp-btn--liked' : ''
             }${likeBurst ? ' mp-btn--burst' : ''}`}
             onClick={async () => {
@@ -387,7 +502,7 @@ export function MiniPlayerBar() {
             ref={overflowRef}
           >
             <button
-              className="mp-btn"
+              className="mp-btn mp-btn--more"
               onClick={() =>
                 setOverflowOpen((v) => !v)
               }
@@ -513,6 +628,7 @@ export function MiniPlayerBar() {
         className="mp-touch-bottom-fill"
         aria-hidden
       />
+      </div>
 
       {telegramUserId ? (
         <AddToPlaylistSheet

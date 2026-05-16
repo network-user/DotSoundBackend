@@ -30,6 +30,11 @@ import type { Track } from '@/types/api'
 import { buildTrackCardSummaryLine } from '@/lib/trackCardFormat'
 import { useDesktopFinePointer } from '@/hooks/useDesktopFinePointer'
 import { useNavigateToArtistByName } from '@/hooks/useNavigateToArtistByName'
+import {
+  coverProxySizes,
+  coverProxySrcSet,
+  coverProxyUrl,
+} from '@/lib/coverProxy'
 
 interface Props {
   track: Track
@@ -85,8 +90,11 @@ export function TrackCard({
     internalId !== null &&
     track.uploaded_by_id === internalId
   const coverSrc = track.cover_key
-    ? `/api/v1/tracks/cover_proxy?key=${encodeURIComponent(track.cover_key)}`
+    ? coverProxyUrl(track.cover_key, { width: 120 })
     : null
+  const coverSrcSet = track.cover_key
+    ? coverProxySrcSet(track.cover_key)
+    : undefined
   const trackBpm = (
     track as unknown as { bpm?: number }
   ).bpm
@@ -262,6 +270,8 @@ export function TrackCard({
                 <SharedCover
                   trackId={isCurrentTrack ? null : track.id}
                   src={coverSrc}
+                  srcSet={coverSrcSet}
+                  sizes={coverProxySizes(58)}
                   alt=""
                   className="re-tc-cover"
                 />

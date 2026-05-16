@@ -65,6 +65,11 @@ import { buildTrackCardSummaryLine } from '@/lib/trackCardFormat'
 import { useDesktopFinePointer } from '@/hooks/useDesktopFinePointer'
 import { useSwipeX } from '@/hooks/useSwipeX'
 import { useTrackSlidePresence } from '@/hooks/useTrackSlidePresence'
+import { isPerfLiteActive } from '@/lib/glassPerformance'
+import {
+  coverProxySrcSet as buildCoverProxySrcSet,
+  coverProxyUrl as buildCoverProxyUrl,
+} from '@/lib/coverProxy'
 
 const TCS_DRAG_CLOSE_THRESHOLD = 100
 
@@ -113,14 +118,14 @@ function fmtListenWhen(iso: string) {
 }
 
 function coverUrl(k: string, v: number, w?: number) {
-  const base = `/api/v1/tracks/cover_proxy?key=${encodeURIComponent(k)}&v=${v}`
-  return w ? `${base}&w=${w}` : base
+  return buildCoverProxyUrl(k, {
+    version: v,
+    width: w === 120 || w === 240 || w === 480 ? w : 480,
+  })
 }
 
 function coverSrcSet(k: string, v: number): string {
-  return [120, 240, 480]
-    .map((w) => `${coverUrl(k, v, w)} ${w}w`)
-    .join(', ')
+  return buildCoverProxySrcSet(k, v)
 }
 
 export function TrackCardSheet({
@@ -995,8 +1000,13 @@ export function TrackCardSheet({
       return
     }
     let rafId = 0
-    const frame = () => {
-      setSmoothCurrentTime(getPreciseTime())
+    let lastPaint = 0
+    const frameMs = isPerfLiteActive() ? 1000 / 30 : 1000 / 60
+    const frame = (now: number) => {
+      if (now - lastPaint >= frameMs) {
+        lastPaint = now
+        setSmoothCurrentTime(getPreciseTime())
+      }
       rafId = window.requestAnimationFrame(frame)
     }
     rafId = window.requestAnimationFrame(frame)

@@ -23,6 +23,7 @@ import { MotionPress } from '@/components/ui/MotionPress'
 import { showIsland } from '@/lib/island'
 
 import { api, getApiErrorMessage } from '@/lib/api'
+import { coverProxyUrl } from '@/lib/coverProxy'
 import { VARIANTS_FADE_UP, m } from '@/lib/motion'
 import {
   getIsAdmin,
@@ -65,20 +66,14 @@ function artistImageUrl(
   if (!detail) return null
   if (detail.image_url) return detail.image_url
   if (detail.image_key) {
-    return (
-      '/api/v1/tracks/cover_proxy?key=' +
-      encodeURIComponent(detail.image_key)
-    )
+    return coverProxyUrl(detail.image_key, { width: 480 })
   }
   return null
 }
 
 function similarImageUrl(item: ArtistInfo): string | null {
   if (item.image_key) {
-    return (
-      '/api/v1/tracks/cover_proxy?key=' +
-      encodeURIComponent(item.image_key)
-    )
+    return coverProxyUrl(item.image_key, { width: 120 })
   }
   return null
 }

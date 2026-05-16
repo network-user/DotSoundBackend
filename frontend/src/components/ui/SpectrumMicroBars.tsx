@@ -1,5 +1,6 @@
 import { useEffect, useRef } from 'react'
 import { useReducedMotion } from '@/lib/motion'
+import { isPerfLiteActive } from '@/lib/glassPerformance'
 
 type Props = {
   active: boolean
@@ -31,6 +32,7 @@ export function SpectrumMicroBars({
   const r2 = useRef<HTMLSpanElement>(null)
   const refs = [r0, r1, r2] as const
   const bufRef = useRef<Uint8Array<ArrayBuffer> | null>(null)
+  const lastPaintRef = useRef<number>(0)
   const smoothRef = useRef<[number, number, number]>([
     IDLE_PCT / 100,
     IDLE_PCT / 100,
@@ -65,9 +67,15 @@ export function SpectrumMicroBars({
     let stopped = false
     const attack = 0.42
     const decay = 0.22
+    const frameMs = isPerfLiteActive() ? 50 : 1000 / 30
 
-    const tick = () => {
+    const tick = (now: number) => {
       if (stopped) return
+      if (now - lastPaintRef.current < frameMs) {
+        raf = requestAnimationFrame(tick)
+        return
+      }
+      lastPaintRef.current = now
       const a = getAnalyser()
       let targets: [number, number, number] = [
         IDLE_PCT / 100,

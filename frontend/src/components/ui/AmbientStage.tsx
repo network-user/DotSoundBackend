@@ -13,6 +13,7 @@ import {
   type CoverPalette,
   extractCoverPalette,
 } from '@/lib/coverPalette'
+import { isPerfLiteActive } from '@/lib/glassPerformance'
 
 export interface AmbientStageProps {
   coverUrl?: string | null
@@ -32,12 +33,13 @@ export function AmbientStage({
   children,
 }: AmbientStageProps) {
   const reduce = useReducedMotion()
+  const perfLite = isPerfLiteActive()
   const [palette, setPalette] = useState<CoverPalette | null>(null)
   const [paletteKey, setPaletteKey] = useState<string>('fallback')
 
   useEffect(() => {
     let cancelled = false
-    if (!coverUrl) {
+    if (!coverUrl || perfLite) {
       setPalette(null)
       setPaletteKey('fallback')
       return
@@ -56,7 +58,7 @@ export function AmbientStage({
     return () => {
       cancelled = true
     }
-  }, [coverUrl])
+  }, [coverUrl, perfLite])
 
   const tones = palette?.tones ?? FALLBACK_TONES
 

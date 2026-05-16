@@ -37,6 +37,11 @@ import { useDesktopFinePointer } from '@/hooks/useDesktopFinePointer'
 import { useNavigateToArtistByName } from '@/hooks/useNavigateToArtistByName'
 import { AddToPlaylistSheet } from '@/components/AddToPlaylistSheet/AddToPlaylistSheet'
 import { useTrackSlidePresence } from '@/hooks/useTrackSlidePresence'
+import {
+  coverProxySizes,
+  coverProxySrcSet,
+  coverProxyUrl,
+} from '@/lib/coverProxy'
 
 const PLATFORM_LABELS: Record<string, string> = {
   youtube: 'YouTube',
@@ -166,8 +171,11 @@ export function PlayerBar() {
   const liked = isLiked(track.id)
 
   const coverSrc = track.cover_key
-    ? `/api/v1/tracks/cover_proxy?key=${encodeURIComponent(track.cover_key)}`
+    ? coverProxyUrl(track.cover_key, { width: 120 })
     : null
+  const coverSrcSet = track.cover_key
+    ? coverProxySrcSet(track.cover_key)
+    : undefined
 
   const handleOpenCard = (e: MouseEvent) => {
     e.stopPropagation()
@@ -253,6 +261,8 @@ export function PlayerBar() {
             <SharedCover
               trackId={track.id}
               src={coverSrc}
+              srcSet={coverSrcSet}
+              sizes={coverProxySizes(56)}
               alt=""
               className="pb-cover-vt"
             />
