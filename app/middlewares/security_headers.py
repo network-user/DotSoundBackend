@@ -60,7 +60,8 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
                 "media-src 'self' blob: https:; "
                 "connect-src 'self' ws: wss: https:; "
                 "worker-src 'self' blob:; "
-                "frame-src 'self' https://telegram.org; "
+                "frame-src 'self' https://telegram.org "
+                "https://w.soundcloud.com; "
                 "frame-ancestors 'self' https://web.telegram.org; "
                 "base-uri 'self'; "
                 "form-action 'self'",

@@ -82,10 +82,27 @@ async def test_soundcloud_import_uses_current_user(
         "uri": "sc:owned-track",
     }
 
-    with patch(
-        "app.services.soundcloud_service"
-        ".SoundCloudService.resolve_url",
-        new=AsyncMock(return_value=sc_data),
+    with (
+        patch(
+            "app.services.soundcloud_service"
+            ".SoundCloudService.resolve_url",
+            new=AsyncMock(return_value=sc_data),
+        ),
+        patch(
+            "app.services.soundcloud_service"
+            ".SoundCloudService._verify_imported_track_playback",
+            new=AsyncMock(return_value=True),
+        ),
+        patch(
+            "app.services.track_ingest_schedule_service"
+            ".schedule_new_track_background_jobs",
+            new=AsyncMock(),
+        ),
+        patch(
+            "app.services.soundcloud_service"
+            "._maybe_enqueue_audio_cache",
+            new=AsyncMock(),
+        ),
     ):
         response = await client.post(
             "/api/v1/soundcloud/import",

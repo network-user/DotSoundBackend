@@ -14,6 +14,7 @@ import { api, getApiErrorMessage, getApiErrorTelemetry } from '@/lib/api'
 import { getInternalUserId } from '@/lib/telegram'
 import { dismissIsland, showIsland, updateIsland } from '@/lib/island'
 import i18n from '@/lib/i18n'
+import { Icon } from '@/components/Icon/Icon'
 import {
   getCachedAudioUrl,
   getCachedIdsSync,
@@ -125,6 +126,53 @@ function _hlsErrorTelemetry(data: HlsErrorData) {
 }
 
 type HlsErrorTelemetry = ReturnType<typeof _hlsErrorTelemetry>
+
+type SoundCloudEmbedState = {
+  track: Track
+  url: string
+}
+
+function _trackSoundCloudPageUrl(track: Track) {
+  return track.source_url || track.canonical_source_url || track.sc_url
+}
+
+function _soundCloudWidgetUrl(raw: string | null | undefined) {
+  if (!raw) return null
+  let parsed: URL
+  try {
+    parsed = new URL(raw)
+  } catch {
+    return null
+  }
+  const host = parsed.hostname.toLowerCase()
+  const isSoundCloud =
+    host === 'soundcloud.com' || host.endsWith('.soundcloud.com')
+  if (!isSoundCloud) return null
+  if (parsed.protocol !== 'https:' && parsed.protocol !== 'http:') {
+    return null
+  }
+  parsed.protocol = 'https:'
+  const params = new URLSearchParams({
+    url: parsed.toString(),
+    auto_play: 'true',
+    hide_related: 'true',
+    show_comments: 'false',
+    show_user: 'true',
+    show_reposts: 'false',
+    show_teaser: 'false',
+    visual: 'false',
+  })
+  return `https://w.soundcloud.com/player/?${params.toString()}`
+}
+
+function _isEncryptedHlsUnsupported(
+  telemetry: ReturnType<typeof getApiErrorTelemetry>,
+) {
+  return (
+    telemetry.errorReason === 'encrypted_hls_unsupported' ||
+    telemetry.errorCode === 'soundcloud_encrypted_hls_unsupported'
+  )
+}
 
 function _hlsErrorMessage(data: HlsErrorData) {
   const telemetry = _hlsErrorTelemetry(data)
@@ -785,6 +833,8 @@ export function PlayerProvider({
     () => localStorage.getItem('player-shuffle') === 'true',
   )
   const [hlsError, setHlsError] = useState<string | null>(null)
+  const [soundCloudEmbed, setSoundCloudEmbed] =
+    useState<SoundCloudEmbedState | null>(null)
   const [isPlayingFromCache, setIsPlayingFromCache] = useState(false)
   const [sleepMode, setSleepMode] = useState<
     'off' | 'minutes' | 'end-of-track'
@@ -1091,11 +1141,34 @@ export function PlayerProvider({
           // плеер с восстановленным треком, но без src.
           return
         }
-        if (!restoredTrack.is_public) {
+        if (
+          restoredTrack.access_mode === 'official_embed' ||
+          restoredTrack.access_mode === 'external_link'
+        ) {
+          return
+        }
+        if (
+          restoredTrack.access_mode === 'third_party_stream' ||
+          !restoredTrack.is_public
+        ) {
           api.getStream(restoredTrack.id)
-            .then((stream) => {
+            .then(async (stream) => {
               srcAssignedAtRef.current = Date.now()
-              audio.src = stream.url
+              const HlsMod = await loadHlsClass()
+              if (
+                stream.stream_type === 'hls' &&
+                HlsMod.isSupported()
+              ) {
+                await startHlsPlayback(
+                  audio,
+                  stream.url,
+                  undefined,
+                  false,
+                  restoredTrack.id,
+                )
+              } else {
+                audio.src = stream.url
+              }
               seekAfterLoad()
             })
             .catch(() => {})
@@ -2096,6 +2169,7 @@ export function PlayerProvider({
     lastTrackIdRef.current = newTrack.id
     streamLoadFailedTrackIdRef.current = null
     setHlsError(null)
+    setSoundCloudEmbed(null)
     void loadEqSettings()
     if (bail()) return
     _initAudioCtx()
@@ -2117,11 +2191,33 @@ export function PlayerProvider({
     setIsPlaying(false)
     setIsPlayingFromCache(false)
     setCurrentTime(0)
-    setDuration(0)
+    setDuration(newTrack.duration_seconds ?? 0)
     _saveState(newTrack, 0)
     if (audio) {
       audio.playbackRate = playbackRate
       _applyPitchPreservation(audio)
+    }
+
+    if (newTrack.access_mode === 'official_embed') {
+      const widgetUrl = _soundCloudWidgetUrl(
+        _trackSoundCloudPageUrl(newTrack),
+      )
+      if (!widgetUrl) {
+        streamLoadFailedTrackIdRef.current =
+          newTrack.id
+        showIsland({
+          kind: 'error',
+          title: i18n.t('redesign.playerErrors.playback'),
+          durationMs: 4000,
+        })
+        return
+      }
+      setSoundCloudEmbed({ track: newTrack, url: widgetUrl })
+      setIsPlaying(true)
+      if ('mediaSession' in navigator) {
+        navigator.mediaSession.playbackState = 'playing'
+      }
+      return
     }
 
     const resumeRaw = newTrack.resume_position_seconds
@@ -2314,6 +2410,34 @@ export function PlayerProvider({
         e,
         i18n.t('redesign.playerErrors.playback'),
       )
+      const telemetry = getApiErrorTelemetry(e)
+      if (
+        isSoundCloudUnavailableTrack(newTrack) &&
+        _isEncryptedHlsUnsupported(telemetry)
+      ) {
+        const widgetUrl = _soundCloudWidgetUrl(
+          _trackSoundCloudPageUrl(newTrack),
+        )
+        if (widgetUrl) {
+          const embeddedTrack: Track = {
+            ...newTrack,
+            access_mode: 'official_embed',
+          }
+          setTrack(embeddedTrack)
+          _saveState(embeddedTrack, 0)
+          setSoundCloudEmbed({
+            track: embeddedTrack,
+            url: widgetUrl,
+          })
+          setHlsError(null)
+          setIsPlaying(true)
+          streamLoadFailedTrackIdRef.current = null
+          if ('mediaSession' in navigator) {
+            navigator.mediaSession.playbackState = 'playing'
+          }
+          return
+        }
+      }
       const scUnavailable =
         isSoundCloudUnavailableTrack(newTrack) &&
         isSoundCloudUnavailableError(message)
@@ -2322,7 +2446,7 @@ export function PlayerProvider({
       }
       await skipUnavailableTrack(
         newTrack.id,
-        getApiErrorTelemetry(e),
+        telemetry,
       )
     }
   }
@@ -2616,6 +2740,12 @@ export function PlayerProvider({
         prefetchAudioRef.current = null
       }
       teardownPreloadHls()
+      if (
+        next.access_mode === 'official_embed' ||
+        next.access_mode === 'external_link'
+      ) {
+        return
+      }
 
       const pa = new Audio()
       pa.preload = 'auto'
@@ -2633,7 +2763,7 @@ export function PlayerProvider({
         if (cancelled) return
         const canHls =
           next.is_public &&
-          next.access_mode !== 'third_party_stream' &&
+          next.access_mode === 'internal_stream' &&
           HlsMod.isSupported()
         if (!canHls) return
 
@@ -2791,9 +2921,25 @@ export function PlayerProvider({
     }
   }
 
+  const closeSoundCloudEmbed = useCallback(() => {
+    setSoundCloudEmbed(null)
+    setIsPlaying(false)
+    if ('mediaSession' in navigator) {
+      navigator.mediaSession.playbackState = 'none'
+    }
+  }, [])
+
   const togglePlay = () => {
     const a = audioRef.current
     if (!a || !track) return
+    if (track.access_mode === 'official_embed') {
+      if (soundCloudEmbed?.track.id === track.id) {
+        closeSoundCloudEmbed()
+        return
+      }
+      void playTrack(track)
+      return
+    }
     void loadEqSettings()
     _initAudioCtx()
     if (a.paused) {
@@ -2849,6 +2995,7 @@ export function PlayerProvider({
       hlsRef.current = null
     }
     streamLoadFailedTrackIdRef.current = null
+    setSoundCloudEmbed(null)
     if ('mediaSession' in navigator) {
       navigator.mediaSession.metadata = null
       navigator.mediaSession.playbackState = 'none'
@@ -3222,6 +3369,33 @@ export function PlayerProvider({
               <PlayerMetaCtx.Provider value={metaValue}>
                 <audio ref={audioRef} preload="none" />
                 {children}
+                {soundCloudEmbed && (
+                  <div
+                    className="sc-embed-player"
+                    role="dialog"
+                    aria-label="SoundCloud player"
+                  >
+                    <div className="sc-embed-player__bar">
+                      <span className="sc-embed-player__title">
+                        {soundCloudEmbed.track.title}
+                      </span>
+                      <button
+                        type="button"
+                        className="sc-embed-player__close press press--icon"
+                        aria-label="Close SoundCloud player"
+                        onClick={closeSoundCloudEmbed}
+                      >
+                        <Icon name="x" size={18} />
+                      </button>
+                    </div>
+                    <iframe
+                      title={`SoundCloud: ${soundCloudEmbed.track.title}`}
+                      src={soundCloudEmbed.url}
+                      allow="autoplay; encrypted-media"
+                      loading="eager"
+                    />
+                  </div>
+                )}
               </PlayerMetaCtx.Provider>
             </PlayerActionsCtx.Provider>
           </PlayerTimeCtx.Provider>

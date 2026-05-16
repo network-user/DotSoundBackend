@@ -22,3 +22,13 @@ async def test_no_csp_on_json_response(
     assert (
         "content-security-policy" not in r.headers
     )
+
+
+async def test_html_csp_allows_soundcloud_widget_frame(
+    client: AsyncClient,
+) -> None:
+    r = await client.get("/mini_app/")
+    assert r.status_code == 200
+    csp = r.headers["content-security-policy"]
+    assert "frame-src" in csp
+    assert "https://w.soundcloud.com" in csp

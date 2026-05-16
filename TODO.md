@@ -1,5 +1,28 @@
 # DotSound - TODO Tracker
 
+- [x] **SoundCloud encrypted-only official embed fallback (2026-05-16)**
+  - Git history check found that the old working playback path handled
+    plain SoundCloud `hls` / `progressive`; the regression was the
+    May 16 attempt to normalize `cbc-encrypted-hls` /
+    `ctr-encrypted-hls` as ordinary HLS.
+  - Backend now treats PrivateCore
+    `encrypted_hls_unsupported` as an importable metadata row with
+    `access_mode="official_embed"` instead of rejecting the track or
+    sending encrypted HLS into the DotSound player.
+  - Previously suppressed encrypted-only SoundCloud rows are promoted
+    to `official_embed` on re-import when their `deleted_reason` is
+    `encrypted_hls_unsupported`.
+  - Frontend `PlayerContext` opens `official_embed` SoundCloud tracks
+    through the official `w.soundcloud.com/player` iframe and skips the
+    `/stream` + `hls.js` path for them.
+  - Existing imported rows that still return
+    `encrypted_hls_unsupported` from `/stream` are handled client-side
+    too: the player converts the session track to `official_embed` and
+    opens the SoundCloud widget without requiring a re-import.
+  - Frontend CSP now allows `https://w.soundcloud.com` in `frame-src`;
+    preload/restore paths skip official embeds so they do not request
+    local HLS/audio endpoints.
+
 - [x] **Admin Network runtime mode fix (2026-05-16)**
   - Admin `GET /api/v1/admin/system/outbound-status` now overlays the
     PrivateCore metrics snapshot with Backend runtime transport config:

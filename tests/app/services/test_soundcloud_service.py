@@ -1554,6 +1554,124 @@ async def test_fetch_expanded_artist_station_playlist(
 
 
 class TestImportOrGetTrackPolicyRejection:
+    @patch(
+        "app.services.track_ingest_schedule_service"
+        ".schedule_new_track_background_jobs",
+        new_callable=AsyncMock,
+    )
+    async def test_encrypted_hls_import_uses_official_embed(
+        self,
+        _sched: object,
+        session: AsyncSession,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        enqueue_audio_cache = AsyncMock()
+        monkeypatch.setattr(
+            "app.services.soundcloud_service._maybe_enqueue_audio_cache",
+            enqueue_audio_cache,
+        )
+
+        svc = SoundCloudService("test_id", session)
+        sc_url = "https://soundcloud.com/encrypted/track"
+        track = await svc.import_or_get_track(
+            {
+                "permalink_url": sc_url,
+                "title": "Encrypted HLS",
+                "user": {"username": "Artist"},
+                "duration": 100000,
+                "uri": "sc:encrypted",
+                "kind": "track",
+                "media": {
+                    "transcodings": [
+                        {
+                            "url": "https://api/encrypted",
+                            "snipped": False,
+                            "format": {
+                                "protocol": "cbc-encrypted-hls",
+                            },
+                        },
+                    ],
+                },
+            },
+            uploader_id=1,
+        )
+
+        assert track.access_mode == "official_embed"
+        assert track.catalog_type == "external_reference"
+        assert track.source_platform == "soundcloud"
+        assert track.sc_url == sc_url
+        assert track.source_url == sc_url
+        assert track.canonical_source_url == sc_url
+        assert track.is_active is True
+        enqueue_audio_cache.assert_not_awaited()
+
+    async def test_encrypted_hls_import_restores_suppressed_existing(
+        self,
+        session: AsyncSession,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        from app.models.track import Track as _Track
+
+        async def _noop_reindex(*_args: object, **_kwargs: object) -> None:
+            return None
+
+        monkeypatch.setattr(
+            "app.services.search_index_notify.schedule_reindex_track",
+            _noop_reindex,
+        )
+
+        sc_url = "https://soundcloud.com/encrypted/existing"
+        existing = _Track(
+            title="Suppressed",
+            artist="Artist",
+            source="soundcloud",
+            imported_from="soundcloud",
+            catalog_type="external_reference",
+            access_mode="third_party_stream",
+            source_platform="soundcloud",
+            sc_url=sc_url,
+            source_url=sc_url,
+            canonical_source_url=sc_url,
+            source_name="SoundCloud",
+            uploaded_by_id=1,
+            is_public=False,
+            is_active=False,
+            deleted_reason="encrypted_hls_unsupported",
+        )
+        session.add(existing)
+        await session.commit()
+        await session.refresh(existing)
+
+        svc = SoundCloudService("test_id", session)
+        result = await svc.import_or_get_track(
+            {
+                "permalink_url": sc_url,
+                "title": "Encrypted HLS",
+                "user": {"username": "Artist"},
+                "duration": 100000,
+                "uri": "sc:encrypted-existing",
+                "kind": "track",
+                "media": {
+                    "transcodings": [
+                        {
+                            "url": "https://api/encrypted",
+                            "snipped": False,
+                            "format": {
+                                "protocol": "ctr-encrypted-hls",
+                            },
+                        },
+                    ],
+                },
+            },
+            uploader_id=2,
+        )
+
+        assert result.id == existing.id
+        assert result.access_mode == "official_embed"
+        assert result.is_active is True
+        assert result.is_public is True
+        assert result.deleted_reason is None
+
     async def test_blocked_policy_rejects_import_without_db_write(
         self,
         session: AsyncSession,
