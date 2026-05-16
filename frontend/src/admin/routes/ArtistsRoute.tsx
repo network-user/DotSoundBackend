@@ -63,6 +63,10 @@ type BulkQueueResult = {
   errors: Array<{ artist_id: number; detail: string }>
 }
 
+type StationProbeResult = Awaited<
+  ReturnType<typeof adminApi.catalogStationProbe>
+>
+
 async function fetchArtists(
   q: string,
   enrichment: string,
@@ -160,6 +164,10 @@ export function ArtistsRoute() {
     job_id?: string | null
   } | null>(null)
   const [scImportPending, setScImportPending] = useState(false)
+  const [stationProbeResult, setStationProbeResult] =
+    useState<StationProbeResult | null>(null)
+  const [stationProbeBusyId, setStationProbeBusyId] =
+    useState<number | null>(null)
 
   const list = useQuery({
     queryKey: [
@@ -251,6 +259,15 @@ export function ArtistsRoute() {
     },
   })
 
+  const stationProbeMutation = useMutation<
+    StationProbeResult,
+    Error,
+    number
+  >({
+    mutationFn: (id: number) => adminApi.catalogStationProbe(id),
+    onSettled: () => setStationProbeBusyId(null),
+  })
+
   function handleEnrich(id: number) {
     setBusyId(id)
     enrichMutation.mutate(id)
@@ -270,6 +287,17 @@ export function ArtistsRoute() {
     if (!ok) return
     setBusyId(id)
     deleteMutation.mutate(id)
+  }
+
+  async function handleStationProbe(id: number) {
+    if (stationProbeMutation.isPending) return
+    setStationProbeBusyId(id)
+    try {
+      const res = await stationProbeMutation.mutateAsync(id)
+      setStationProbeResult(res)
+    } catch (err) {
+      await showAlert((err as Error).message)
+    }
   }
 
   function handleOpenArtist(id: number) {
@@ -616,6 +644,15 @@ export function ArtistsRoute() {
               }
             >
               {t('admin.artists.catalog.open')}
+            </MotionPress>
+            <MotionPress
+              variant="ghost"
+              disabled={busy || stationProbeMutation.isPending}
+              onClick={() => handleStationProbe(id)}
+            >
+              {stationProbeBusyId === id
+                ? t('admin.artists.stationProbeLoading')
+                : t('admin.artists.stationProbe')}
             </MotionPress>
             <MotionPress
               variant="ghost"
@@ -1149,6 +1186,100 @@ export function ArtistsRoute() {
                       {e.artist_id}
                     </span>
                     : {e.detail}
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+        )}
+      </FormModal>
+      <FormModal
+        open={stationProbeResult !== null}
+        size="md"
+        title={t('admin.artists.stationProbeTitle')}
+        onClose={() => setStationProbeResult(null)}
+        footer={
+          <MotionPress
+            variant="primary"
+            onClick={() => setStationProbeResult(null)}
+          >
+            {t('admin.common.ok')}
+          </MotionPress>
+        }
+      >
+        {stationProbeResult && (
+          <div
+            className="admin-catalog-station-probe"
+            data-state={stationProbeResult.station_status}
+          >
+            <div className="admin-catalog-station-probe__head">
+              <span>
+                {t(
+                  `admin.artists.catalog.stationProbeStatus.${stationProbeResult.station_status}`,
+                )}
+              </span>
+              <span className="admin-mono">
+                {stationProbeResult.artist_id}
+              </span>
+            </div>
+            <div className="admin-auth-hint">
+              {stationProbeResult.artist_name}
+              {stationProbeResult.soundcloud_user_id
+                ? ` · SC ${stationProbeResult.soundcloud_user_id}`
+                : ''}
+            </div>
+            <div className="admin-auth-hint">
+              {t('admin.artists.catalog.stationProbeCounts', {
+                fetched: stationProbeResult.fetched_track_count,
+                importable:
+                  stationProbeResult.importable_track_count,
+                stored:
+                  stationProbeResult.existing_release_track_count ??
+                  0,
+              })}
+            </div>
+            {stationProbeResult.reason && (
+              <div className="admin-auth-hint">
+                {t('admin.artists.catalog.stationProbeReason', {
+                  reason: stationProbeResult.reason,
+                })}
+              </div>
+            )}
+            {stationProbeResult.tracks.length === 0 ? (
+              <div className="admin-auth-hint">
+                {t('admin.artists.catalog.stationProbeEmpty')}
+              </div>
+            ) : (
+              <ul className="admin-catalog-station-probe__tracks">
+                {stationProbeResult.tracks.map((tr, idx) => (
+                  <li key={`${tr.ref ?? 'track'}-${idx}`}>
+                    <span className="admin-catalog-station-probe__title">
+                      {tr.title || 'Untitled'}
+                    </span>
+                    {tr.artist && (
+                      <span className="admin-auth-hint">
+                        {tr.artist}
+                      </span>
+                    )}
+                    <span
+                      className={
+                        tr.importable
+                          ? 'admin-tag'
+                          : 'admin-tag admin-tag--warn'
+                      }
+                    >
+                      {tr.importable
+                        ? t(
+                            'admin.artists.catalog.stationProbeImportable',
+                          )
+                        : t(
+                            'admin.artists.catalog.stationProbeRejected',
+                            {
+                              reason:
+                                tr.reject_reason ?? 'unknown',
+                            },
+                          )}
+                    </span>
                   </li>
                 ))}
               </ul>
