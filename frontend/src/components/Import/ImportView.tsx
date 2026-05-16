@@ -87,8 +87,12 @@ export function ImportView({
   const [cancelling, setCancelling] = useState(false)
   const [scanSlowHint, setScanSlowHint] = useState(false)
   const pollCountRef = useRef(0)
-  const MAX_POLLS = 90
+  const importPollLimitRef = useRef(90)
+  const MAX_POLLS_SCAN = 90
   const SCAN_SLOW_POLLS = 15
+  const IMPORT_POLLS_PER_TRACK = 12
+  const IMPORT_POLLS_MIN = 120
+  const IMPORT_POLLS_MAX = 600
 
   const setError = useCallback((msg: string | null) => {
     error.current = msg
@@ -212,9 +216,21 @@ export function ImportView({
       ) {
         setScanSlowHint(true)
       }
-      if (pollCountRef.current > MAX_POLLS) {
+      const pollLimit =
+        phase === 'importing' || phase === 'queued'
+          ? importPollLimitRef.current
+          : MAX_POLLS_SCAN
+      if (pollCountRef.current > pollLimit) {
         clearInterval(interval)
-        setError(t('import.jobTimeout'))
+        setError(
+          phase === 'importing' || phase === 'queued'
+            ? t('import.importJobTimeout', {
+                defaultValue:
+                  'Import is taking longer than expected. You can wait ' +
+                  'or cancel and try fewer tracks.',
+              })
+            : t('import.jobTimeout'),
+        )
         setScanSlowHint(false)
         setPhase('pick')
         return
@@ -542,6 +558,12 @@ export function ImportView({
           ? Array.from({ length: totalTracks }, (_, i) => i)
           : Array.from(selected)
       const updated = await api.startImportJob(job.id, indices)
+      const trackCount = updated.total_tracks || indices.length
+      importPollLimitRef.current = Math.min(
+        IMPORT_POLLS_MAX,
+        Math.max(IMPORT_POLLS_MIN, trackCount * IMPORT_POLLS_PER_TRACK),
+      )
+      pollCountRef.current = 0
       setJob(updated)
       setPhase(updated.status === 'queued' ? 'queued' : 'importing')
     } catch {

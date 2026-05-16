@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import time
 from datetime import UTC, datetime
 from typing import Any
 
@@ -20,6 +21,7 @@ from app.api.v1.internal.worker_request import (
 )
 from app.config import settings
 from app.core import s3
+from app.core.redis import get_redis_client
 from app.dependencies import get_db
 from app.models.compute_job import ComputeJob
 from app.models.track import Track
@@ -37,6 +39,8 @@ from app.services.worker_job_control import (
 )
 
 log: structlog.stdlib.BoundLogger = structlog.get_logger(__name__)
+
+_CLAIM_PACE_KEY_PREFIX = "worker:compute_claim_pace:"
 
 router = APIRouter(
     prefix="/internal/compute",
@@ -62,6 +66,75 @@ async def _enforce_rate_limit(
         raise HTTPException(status_code=429) from exc
 
 
+def _claimable_job_types(job_types: list[str]) -> list[str]:
+    out: list[str] = []
+    seen: set[str] = set()
+    for raw in job_types:
+        jt = q.canonical_job_type(raw)
+        if jt in seen or jt not in q.OFFLOADABLE_JOB_TYPES:
+            continue
+        seen.add(jt)
+        if jt == q.JOB_SOUNDCLOUD_RPC:
+            if settings.sc_offload_enabled:
+                out.append(jt)
+            continue
+        if settings.compute_offload_enabled:
+            out.append(jt)
+    return out
+
+
+def _claim_pace_interval() -> float:
+    try:
+        interval = float(settings.compute_claim_min_interval_seconds)
+    except (TypeError, ValueError):
+        return 0.0
+    return max(0.0, interval)
+
+
+async def _claim_pace_allows(worker_id: str) -> bool:
+    interval = _claim_pace_interval()
+    if interval <= 0.0:
+        return True
+    redis = get_redis_client()
+    key = f"{_CLAIM_PACE_KEY_PREFIX}{worker_id}"
+    try:
+        raw = await redis.get(key)
+    except Exception as exc:
+        log.warning(
+            "compute_claim_pace_read_failed",
+            worker_id=worker_id,
+            error=str(exc)[:200],
+        )
+        return True
+    if not raw:
+        return True
+    try:
+        deadline = float(raw)
+    except (TypeError, ValueError):
+        return True
+    return deadline <= time.time()
+
+
+async def _record_claim_pace(worker_id: str) -> None:
+    interval = _claim_pace_interval()
+    if interval <= 0.0:
+        return
+    redis = get_redis_client()
+    key = f"{_CLAIM_PACE_KEY_PREFIX}{worker_id}"
+    try:
+        await redis.set(
+            key,
+            str(time.time() + interval),
+            ex=max(1, int(interval) + 1),
+        )
+    except Exception as exc:
+        log.warning(
+            "compute_claim_pace_write_failed",
+            worker_id=worker_id,
+            error=str(exc)[:200],
+        )
+
+
 @router.post("/workers/heartbeat")
 async def heartbeat(
     request: Request,
@@ -75,7 +148,7 @@ async def heartbeat(
         request,
         session,
         worker_id=worker.id,
-        action="heartbeat",
+        action="compute_heartbeat",
     )
     await cws._log_audit(
         session,
@@ -128,17 +201,23 @@ async def claim(
     if not job_types:
         await session.rollback()
         raise HTTPException(status_code=400) from None
-    job_types = [
-        jt
-        for jt in dict.fromkeys(q.canonical_job_type(t) for t in job_types)
-        if jt in q.OFFLOADABLE_JOB_TYPES
-    ]
+    job_types = _claimable_job_types(job_types)
     if not job_types:
         await cws._log_audit(
             session,
             worker_id=worker.id,
             ip=client_ip(request),
             action="compute_claim_empty",
+            status_code=204,
+        )
+        await session.commit()
+        return Response(status_code=204)
+    if not await _claim_pace_allows(worker.id):
+        await cws._log_audit(
+            session,
+            worker_id=worker.id,
+            ip=client_ip(request),
+            action="compute_claim_paced",
             status_code=204,
         )
         await session.commit()
@@ -189,6 +268,7 @@ async def claim(
         job_id=job.id,
         status_code=200,
     )
+    await _record_claim_pace(worker.id)
     await session.commit()
     return JSONResponse(
         status_code=200,
@@ -401,7 +481,7 @@ async def job_progress(
         request,
         session,
         worker_id=worker.id,
-        action="progress",
+        action="compute_progress",
     )
     j = await crr.get_compute_job_for_worker(
         session,
@@ -436,7 +516,7 @@ async def job_result(
         request,
         session,
         worker_id=worker.id,
-        action="result",
+        action="compute_result",
     )
     j = await crr.get_compute_job_for_worker(
         session,
@@ -527,7 +607,7 @@ async def job_fail(
         request,
         session,
         worker_id=worker.id,
-        action="fail",
+        action="compute_fail",
     )
     j = await crr.get_compute_job_for_worker(
         session,
@@ -586,7 +666,7 @@ async def compute_status(
         request,
         session,
         worker_id=worker.id,
-        action="status",
+        action="compute_status",
     )
     snap = await q.queue_health_snapshot(session)
     await cws._log_audit(

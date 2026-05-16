@@ -1034,6 +1034,7 @@
   },
   "import": {
     "jobTimeout": "Import is taking too long. Please try again later.",
+    "importJobTimeout": "Track import is taking longer than expected. Wait, or cancel and try fewer tracks at once.",
     "scanSlowHint": "Scanning is taking longer than usual — the provider may be slow. Keep waiting or cancel.",
     "scanTimeout": "Scan timed out. Retry or check your network.",
     "scanStalled": "Scan never finished: the Taskiq worker may be down or the API is unreachable (proxy/geo). Check server logs.",

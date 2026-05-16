@@ -158,6 +158,10 @@ class AppSettings(BaseSettings):
     # backend changes never requires a remote worker to be already
     # online; Taskiq workers keep executing local handlers.
     compute_offload_enabled: bool = False
+    # Soft server-side pacing for generic compute worker claims.
+    # Prevents one fast worker from draining thousands of tiny jobs
+    # and then tripping result/fail rate limits with retry storms.
+    compute_claim_min_interval_seconds: float = 0.5
 
     # Аварийный переключатель воспроизведения для SoundCloud-треков:
     #   "stream"    — текущая модель (наш плеер поверх stream URL);

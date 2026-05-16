@@ -27,7 +27,10 @@ from app.config import settings
 from app.core.db import AsyncSessionLocal
 from app.core.tkq import broker
 from app.models.import_job import ImportJob
-from app.services.import_service import EXTERNAL_IMPORT_SOURCES
+from app.services.import_service import (
+    EXTERNAL_IMPORT_SOURCES,
+    schedule_external_import_job,
+)
 
 
 def _supports_skip_locked(session: AsyncSession) -> bool:
@@ -67,11 +70,7 @@ async def _per_user_active(
 
 async def _kiq_for_job(job: ImportJob) -> None:
     if job.source in EXTERNAL_IMPORT_SOURCES:
-        from app.services.external_import_worker import (
-            process_external_import_job,
-        )
-
-        await process_external_import_job.kiq(job.id)
+        schedule_external_import_job(job.id)
     else:
         from app.services.import_worker import process_import_job
 

@@ -29,6 +29,11 @@
     самоблокировался при двух включённых pull-loop; временный
     rate-limit suspension теперь возвращает worker-facing 429 вместо
     401, чтобы воркер backoff-нулся, а не завершался как при bad secret.
+  - Hotfix: internal compute claim теперь уважает `COMPUTE_OFFLOAD_ENABLED`;
+    при выключенном generic offload воркеру выдаётся только `soundcloud_rpc`.
+    Добавлен `COMPUTE_CLAIM_MIN_INTERVAL_SECONDS` для мягкого pacing claim,
+    а result/fail/progress/heartbeat generic compute получили отдельные
+    rate-limit buckets.
 
 - [x] **Playback buffering / fast seek overhaul (2026-05-16)**
   - Симптом: первое воспроизведение и переключение трека «висели» 20–30 c,

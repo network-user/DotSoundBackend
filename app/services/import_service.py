@@ -27,7 +27,7 @@ _BOT_TIMEOUT = 30.0
 _SCAN_CACHE_PREFIX = "import:scan"
 _SCAN_LOCK_PREFIX = "import:scan:lock"
 _CANCEL_FLAG_PREFIX = "import:cancel"
-_background_scan_tasks: set[asyncio.Task[None]] = set()
+_background_import_tasks: set[asyncio.Task[None]] = set()
 
 
 async def _external_scan_watchdog_coroutine(job_id: int) -> None:
@@ -89,9 +89,24 @@ async def _dispatch_external_scan(
         run_external_playlist_scan(job_id, source, url),
         name=f"external_scan_{job_id}",
     )
-    _background_scan_tasks.add(task)
-    task.add_done_callback(_background_scan_tasks.discard)
+    _background_import_tasks.add(task)
+    task.add_done_callback(_background_import_tasks.discard)
     return "asyncio"
+
+
+def schedule_external_import_job(job_id: int) -> None:
+    """Run Yandex/Spotify/VK external import in the API process."""
+    from app.services.external_import_worker import (  # noqa: PLC0415
+        _process_external_import_job_local,
+    )
+
+    task = asyncio.create_task(
+        _process_external_import_job_local(job_id),
+        name=f"external_import_{job_id}",
+    )
+    _background_import_tasks.add(task)
+    task.add_done_callback(_background_import_tasks.discard)
+    logger.info("external_import_scheduled", job_id=job_id)
 
 
 def _cancel_flag_key(job_id: int) -> str:
@@ -228,11 +243,7 @@ class ImportService:
 
     async def _enqueue_started_job(self, job: ImportJob) -> None:
         if job.source in EXTERNAL_IMPORT_SOURCES:
-            from app.services.external_import_worker import (
-                process_external_import_job,
-            )
-
-            await process_external_import_job.kiq(job.id)
+            schedule_external_import_job(job.id)
             return
 
         from app.services.import_worker import process_import_job
@@ -503,6 +514,14 @@ class ImportService:
         items_key = "tracks" if is_external else "audios"
         items = (job.tracks_data or {}).get(items_key, [])
         selected = [items[i] for i in track_indices if 0 <= i < len(items)]
+        if not selected and track_indices:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=(
+                    "track list not loaded on server; "
+                    "retry scan or refresh the page"
+                ),
+            )
 
         job.tracks_data = {
             **(job.tracks_data or {}),

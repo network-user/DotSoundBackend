@@ -32,7 +32,10 @@ import { getPrefetchManager } from '@/lib/prefetch/PrefetchManager'
 import { shouldUseInternalHlsPlayback } from '@/lib/playbackSourcePolicy'
 import { readNetworkSnapshot } from '@/lib/prefetch/network'
 import { getHlsQualityPreference } from '@/lib/hlsQualityPreference'
-import { coverProxyUrl } from '@/lib/coverProxy'
+import {
+  COVER_RENDER_WIDTHS,
+  coverProxyUrl,
+} from '@/lib/coverProxy'
 import type { Track } from '@/types/api'
 
 const EQ_FREQUENCIES = [
@@ -40,6 +43,8 @@ const EQ_FREQUENCIES = [
 ]
 const EQ_DEFAULT = [0, 0, 0, 0, 0, 0, 0, 0]
 const HLS_READY_TIMEOUT_MS = 15000
+const MEDIA_SESSION_PLACEHOLDER_SIZES = [192, 512] as const
+const MEDIA_SESSION_SWITCH_HOLD_MS = 8000
 
 type HlsErrorData = {
   type?: unknown
@@ -605,6 +610,41 @@ function _clearState() {
   localStorage.removeItem(_PLAYER_SNAPSHOT_KEY)
   localStorage.removeItem(_PLAYER_LEGACY_TRACK_KEY)
   localStorage.removeItem(_PLAYER_LEGACY_TIME_KEY)
+}
+
+function _mediaSessionAssetUrl(fileName: string): string {
+  const base = import.meta.env.BASE_URL || '/'
+  const prefix = base.endsWith('/') ? base : `${base}/`
+  return new URL(`${prefix}${fileName}`, window.location.origin).href
+}
+
+function _mediaSessionArtwork(track: Track): MediaImage[] {
+  if (track.cover_key) {
+    return COVER_RENDER_WIDTHS.map((width) => ({
+      src: new URL(
+        coverProxyUrl(track.cover_key!, { width }),
+        window.location.origin,
+      ).href,
+      sizes: `${width}x${width}`,
+      type: 'image/webp',
+    }))
+  }
+  return MEDIA_SESSION_PLACEHOLDER_SIZES.map((size) => ({
+    src: _mediaSessionAssetUrl(
+      `media-session-placeholder-${size}.png`,
+    ),
+    sizes: `${size}x${size}`,
+    type: 'image/png',
+  }))
+}
+
+function _setMediaSessionActionHandler(
+  action: MediaSessionAction,
+  handler: MediaSessionActionHandler | null,
+) {
+  try {
+    navigator.mediaSession.setActionHandler(action, handler)
+  } catch {}
 }
 
 function _updateMediaSession(
