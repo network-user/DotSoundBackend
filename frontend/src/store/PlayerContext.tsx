@@ -1427,7 +1427,6 @@ export function PlayerProvider({
         const hls = new Hls({
           enableWorker: true,
           startLevel: -1,
-          emeEnabled: true,
         })
         hlsRef.current = hls
         hls.loadSource(sourceUrl)
