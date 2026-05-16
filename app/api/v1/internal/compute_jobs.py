@@ -112,7 +112,7 @@ async def claim(
         request,
         session,
         worker_id=worker.id,
-        action="claim",
+        action="compute_claim",
     )
     try:
         spec = json.loads(body or b"{}")

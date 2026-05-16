@@ -1469,7 +1469,8 @@ class SoundCloudService:
         the caller should drop to the local fallback path."""
         from app.services import sc_rpc_client
 
-        if not sc_rpc_client.offload_enabled():
+        sticky = f"sc:track:{soundcloud_track_ref}"
+        if not sc_rpc_client.should_attempt_offload(sticky):
             return None
         try:
             data = await sc_rpc_client.call_soundcloud_rpc(
@@ -1478,7 +1479,7 @@ class SoundCloudService:
                     "track_ref": soundcloud_track_ref,
                     "client_id": self._client_id,
                 },
-                sticky_key=f"sc:track:{soundcloud_track_ref}",
+                sticky_key=sticky,
             )
         except sc_rpc_client.ScRpcOffloadDisabled:
             return None

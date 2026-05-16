@@ -144,6 +144,10 @@ class AppSettings(BaseSettings):
     # unreachable the call transparently falls back to the in-process
     # anti-block stack so a worker outage never blocks the backend.
     sc_offload_enabled: bool = False
+    # Fraction of eligible SoundCloud RPC calls routed to the worker.
+    # ``1.0`` means worker-first for every eligible call; lower values
+    # keep the backend as a live share of traffic.
+    sc_offload_ratio: float = 0.5
     # Per-call timeout the backend waits for the worker's reply
     # envelope before treating the worker as unreachable and falling
     # back to local execution. Keep small enough that one bad worker

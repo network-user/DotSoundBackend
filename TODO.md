@@ -23,6 +23,12 @@
     документирует Pillow/python-magic.
   - Verify: быстрый `py_compile` по изменённым Python-файлам и Ruff по
     изменённому backend/worker коду. Pytest намеренно не запускался.
+  - Hotfix: `SC_OFFLOAD_RATIO` добавляет детерминированный гибридный
+    роутинг SoundCloud RPC; ASR claim и generic compute claim разведены
+    по отдельным worker rate-limit bucket, чтобы один воркер не
+    самоблокировался при двух включённых pull-loop; временный
+    rate-limit suspension теперь возвращает worker-facing 429 вместо
+    401, чтобы воркер backoff-нулся, а не завершался как при bad secret.
 
 - [x] **Playback buffering / fast seek overhaul (2026-05-16)**
   - Симптом: первое воспроизведение и переключение трека «висели» 20–30 c,

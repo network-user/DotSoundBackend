@@ -60,16 +60,17 @@ async def verify_worker_hmac_request(
         await session.commit()
         raise HTTPException(status_code=404) from None
     except cws.WorkerAuthError as exc:
+        status_code = 429 if str(exc) == "suspended" else 401
         await cws._log_audit(
             session,
             worker_id=request.headers.get("X-Worker-Id"),
             ip=client_ip(request),
             action="auth_fail",
-            status_code=401,
+            status_code=status_code,
             meta={"reason": str(exc)},
         )
         await session.commit()
-        raise HTTPException(status_code=401) from exc
+        raise HTTPException(status_code=status_code) from exc
 
     return worker, body
 

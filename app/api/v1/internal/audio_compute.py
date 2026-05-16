@@ -269,7 +269,7 @@ async def claim(
         request,
         session,
         worker_id=worker.id,
-        action="claim",
+        action="audio_claim",
     )
     job = await cws.claim_next_job(session, worker=worker)
     if job is None:

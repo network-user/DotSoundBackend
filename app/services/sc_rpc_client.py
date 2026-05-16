@@ -8,11 +8,14 @@ under ``sc_rpc_result:{request_id}``; this client waits for it
 with a bounded timeout and falls back to a local execution path
 when the offload framework is disabled or the worker is offline.
 
-Two flags govern routing (read from :mod:`app.config`):
+Three settings govern routing (read from :mod:`app.config`):
 
 * ``sc_offload_enabled`` -- master switch. ``False`` keeps every
   call on the synchronous local path. Default ``False`` so this
   change ships dormant; flip to ``True`` after the worker is up.
+* ``sc_offload_ratio`` -- deterministic rollout fraction for eligible
+  calls. ``0.5`` means roughly half of sticky keys go remote and half
+  stay local; ``1.0`` restores full worker-first routing.
 * ``sc_offload_wait_seconds`` -- maximum time to wait for the
   envelope before declaring the worker unreachable and falling
   back. Keep small (~30 s) so a stuck worker does not stall the
@@ -22,6 +25,7 @@ Two flags govern routing (read from :mod:`app.config`):
 from __future__ import annotations
 
 import asyncio
+import hashlib
 import json
 from typing import Any
 
@@ -38,6 +42,8 @@ from app.core.redis import get_redis_client
 from app.services import compute_queue_service as q
 
 logger: structlog.stdlib.BoundLogger = structlog.get_logger(__name__)
+
+_SAMPLING_BUCKETS = 10_000
 
 
 class ScRpcOffloadDisabled(Exception):
@@ -69,8 +75,53 @@ def offload_enabled() -> bool:
     return bool(getattr(settings, "sc_offload_enabled", False))
 
 
+def _offload_ratio() -> float:
+    try:
+        ratio = float(getattr(settings, "sc_offload_ratio", 0.5))
+    except (TypeError, ValueError):
+        return 0.5
+    return min(1.0, max(0.0, ratio))
+
+
+def _sampling_value(route_key: str) -> float:
+    digest = hashlib.sha256(route_key.encode("utf-8")).digest()
+    bucket = int.from_bytes(digest[:8], "big") % _SAMPLING_BUCKETS
+    return bucket / _SAMPLING_BUCKETS
+
+
+def should_attempt_offload(route_key: str = "") -> bool:
+    if not offload_enabled():
+        return False
+    ratio = _offload_ratio()
+    if ratio <= 0.0:
+        return False
+    if ratio >= 1.0 or not route_key:
+        return True
+    return _sampling_value(route_key) < ratio
+
+
 def _wait_timeout() -> float:
     return float(getattr(settings, "sc_offload_wait_seconds", 30.0))
+
+
+def _sampling_key(
+    method: str,
+    *,
+    args: dict[str, Any] | None,
+    sticky_key: str,
+) -> str:
+    if sticky_key:
+        return sticky_key
+    try:
+        args_key = json.dumps(
+            args or {},
+            default=str,
+            separators=(",", ":"),
+            sort_keys=True,
+        )
+    except (TypeError, ValueError):
+        args_key = str(args or {})
+    return f"{method}:{args_key}"
 
 
 async def _wait_for_envelope(
@@ -132,12 +183,22 @@ async def call_soundcloud_rpc(
             upstream error (dead track, rate limit, etc.). The
             caller decides whether to retry / fall back.
     """
-    if not offload_enabled():
-        raise ScRpcOffloadDisabled
-
     method_str = (
         method.value if isinstance(method, SoundCloudRpcMethod) else method
     )
+    route_key = _sampling_key(
+        method_str,
+        args=args,
+        sticky_key=sticky_key,
+    )
+    if not should_attempt_offload(route_key):
+        logger.info(
+            "sc_rpc_offload_sampled_local",
+            method=method_str,
+            route_key=route_key[:120],
+            ratio=_offload_ratio(),
+        )
+        raise ScRpcOffloadDisabled
 
     async with AsyncSessionLocal() as session:
         job = await q.enqueue_soundcloud_rpc(
@@ -195,4 +256,5 @@ __all__ = [
     "ScRpcUpstreamError",
     "call_soundcloud_rpc",
     "offload_enabled",
+    "should_attempt_offload",
 ]

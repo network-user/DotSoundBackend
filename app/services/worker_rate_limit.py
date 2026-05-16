@@ -27,6 +27,8 @@ logger: structlog.stdlib.BoundLogger = structlog.get_logger(
 DEFAULT_LIMITS_PER_MIN: dict[str, int] = {
     "heartbeat": 12,
     "claim": 30,
+    "audio_claim": 60,
+    "compute_claim": 120,
     "result": 30,
     "progress": 60,
     "fail": 30,
