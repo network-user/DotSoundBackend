@@ -10,7 +10,6 @@ from sqlalchemy import (
     Integer,
     String,
     Text,
-    UniqueConstraint,
 )
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -29,10 +28,6 @@ class BackgroundJob(Base, TimestampMixin):
 
     __tablename__ = "background_jobs"
     __table_args__ = (
-        UniqueConstraint(
-            "idempotency_key",
-            name="uq_background_jobs_idempotency_key",
-        ),
         Index(
             "ix_background_jobs_status_created",
             "status",

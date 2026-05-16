@@ -498,27 +498,26 @@ function _updateMediaSession(
 ) {
   if (!('mediaSession' in navigator)) return
   try {
-    const coverPath = track.cover_key
-      ? coverProxyUrl(track.cover_key, { width: 480 })
-      : null
-    const coverAbsolute = coverPath
-      ? new URL(coverPath, window.location.origin).href
-      : null
+    const artwork = track.cover_key
+      ? ([120, 240, 480] as const).map((width) => ({
+          src: new URL(
+            coverProxyUrl(track.cover_key!, { width }),
+            window.location.origin,
+          ).href,
+          sizes: `${width}x${width}`,
+          type: 'image/webp',
+        }))
+      : []
 
     navigator.mediaSession.metadata =
       new MediaMetadata({
         title: track.title,
         artist: track.artist || '',
-        artwork: coverAbsolute
-          ? [
-              {
-                src: coverAbsolute,
-                sizes: '512x512',
-                type: 'image/png',
-              },
-            ]
-          : [],
+        artwork,
       })
+    navigator.mediaSession.playbackState = audio.paused
+      ? 'paused'
+      : 'playing'
     navigator.mediaSession.setActionHandler(
       'play',
       () => {

@@ -445,6 +445,67 @@ def _assert_sc_stream_unavailable_detail(
     return detail
 
 
+@patch(f"{_MOD}.httpx.AsyncClient")
+async def test_get_stream_info_tries_next_same_protocol_transcoding(
+    mock_client_cls: AsyncMock,
+    session: AsyncSession,
+) -> None:
+    resolve_resp = _make_resp(
+        200,
+        {
+            "media": {
+                "transcodings": [
+                    {
+                        "url": "https://api/hls-old",
+                        "format": {"protocol": "hls"},
+                        "snipped": False,
+                    },
+                    {
+                        "url": "https://api/hls-fresh",
+                        "format": {"protocol": "hls"},
+                        "snipped": False,
+                    },
+                    {
+                        "url": "https://api/prog",
+                        "format": {"protocol": "progressive"},
+                        "snipped": False,
+                    },
+                ]
+            },
+            "track_authorization": "auth",
+        },
+    )
+    hls_old_404 = _make_resp(404)
+    hls_fresh_ok = _make_resp(
+        200,
+        {"url": "https://cdn/fresh.m3u8"},
+    )
+
+    mock_client = AsyncMock()
+    mock_client.get = AsyncMock(
+        side_effect=[resolve_resp, hls_old_404, hls_fresh_ok],
+    )
+    mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+    mock_client.__aexit__ = AsyncMock(return_value=False)
+    mock_client_cls.return_value = mock_client
+
+    svc = SoundCloudService("test_id", session)
+    url, protocol = await svc.get_stream_info(
+        "https://sc.com/multi-hls",
+        prefer_hls=True,
+    )
+
+    assert url == "https://cdn/fresh.m3u8"
+    assert protocol == "hls"
+    assert mock_client.get.await_count == 3
+    assert mock_client.get.await_args_list[1].args[0] == (
+        "https://api/hls-old"
+    )
+    assert mock_client.get.await_args_list[2].args[0] == (
+        "https://api/hls-fresh"
+    )
+
+
 @patch(f"{_MOD}.set_cached_stream", _noop_set_cached_stream)
 @patch(f"{_MOD}.get_cached_stream", _noop_get_cached_stream)
 @patch(f"{_MOD}.soundcloud_slot", _noop_slot)

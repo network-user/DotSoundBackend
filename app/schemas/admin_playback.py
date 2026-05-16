@@ -13,6 +13,7 @@ class AdminPlaybackRepairEnqueueResponse(BaseModel):
     queued: bool
     track_id: int
     job_id: str | None = None
+    progress_id: str | None = None
     detail: str = ""
 
 
@@ -26,4 +27,5 @@ class AdminPlaybackRepairBulkResponse(BaseModel):
     skipped: int
     missing: int
     job_ids: list[str] = Field(default_factory=list)
+    progress_ids: list[str] = Field(default_factory=list)
     detail: str = ""

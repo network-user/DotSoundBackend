@@ -279,6 +279,7 @@ class AdminService:
         if track is None:
             return None
 
+        from app.services import playback_repair_progress as progress
         from app.services.background_jobs import (
             IdempotencySkipped,
             enqueue,
@@ -287,10 +288,20 @@ class AdminService:
             repair_track_playback_task,
         )
 
+        progress_id = progress.new_progress_id()
+        await progress.safe_set_progress(
+            progress_id,
+            stage="queued",
+            track_id=track_id,
+            log_line="queued by admin",
+        )
         try:
             job_id = await enqueue(
                 repair_track_playback_task,
-                payload={"track_id": track_id},
+                payload={
+                    "track_id": track_id,
+                    "progress_id": progress_id,
+                },
                 queue="default",
                 max_attempts=2,
                 idempotency_key=f"playback-repair:track:{track_id}",
@@ -298,6 +309,12 @@ class AdminService:
                 created_by_user_id=actor_id,
             )
         except IdempotencySkipped:
+            await progress.safe_set_progress(
+                progress_id,
+                stage="skipped",
+                track_id=track_id,
+                log_line="playback repair is already queued",
+            )
             return AdminPlaybackRepairEnqueueResponse(
                 queued=False,
                 track_id=track_id,
@@ -307,6 +324,7 @@ class AdminService:
             queued=True,
             track_id=track_id,
             job_id=job_id,
+            progress_id=progress_id,
             detail="Playback repair queued",
         )
 
@@ -321,6 +339,7 @@ class AdminService:
         skipped = 0
         missing = 0
         job_ids: list[str] = []
+        progress_ids: list[str] = []
         for track_id in unique_ids:
             result = await self.enqueue_track_playback_repair(
                 track_id,
@@ -332,6 +351,8 @@ class AdminService:
                 queued += 1
                 if result.job_id is not None:
                     job_ids.append(result.job_id)
+                if result.progress_id is not None:
+                    progress_ids.append(result.progress_id)
             else:
                 skipped += 1
         return AdminPlaybackRepairBulkResponse(
@@ -340,6 +361,7 @@ class AdminService:
             skipped=skipped,
             missing=missing,
             job_ids=job_ids,
+            progress_ids=progress_ids,
             detail=(
                 f"Playback repair queued={queued}, "
                 f"skipped={skipped}, missing={missing}"

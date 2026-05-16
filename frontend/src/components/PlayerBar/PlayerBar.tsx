@@ -65,6 +65,7 @@ export function PlayerBar() {
     hlsError,
     isPlayingFromCache,
     trackChangeSlide,
+    isCardOpen,
   } = usePlayerMeta()
   const {
     togglePlay,
@@ -109,6 +110,15 @@ export function PlayerBar() {
       volumeCloseTimerRef.current = null
     }
   }
+
+  useEffect(() => {
+    if (!isCardOpen) return
+    clearVolumeCloseTimer()
+    setOverflowOpen(false)
+    setAddToPlOpen(false)
+    setVolumePinned(false)
+    setVolumeHover(false)
+  }, [isCardOpen])
 
   const scheduleVolumeClose = () => {
     clearVolumeCloseTimer()
@@ -166,7 +176,7 @@ export function PlayerBar() {
     }
   }, [overflowOpen, volumeOpen])
 
-  if (!track) return null
+  if (!track || isCardOpen) return null
 
   const liked = isLiked(track.id)
 

@@ -998,6 +998,7 @@ export const adminApi = {
       queued: boolean
       track_id: number
       job_id: string | null
+      progress_id: string | null
       detail: string
     }>(`/tracks/${trackId}/playback-health/repair`, {
       method: 'POST',
@@ -1010,6 +1011,7 @@ export const adminApi = {
       skipped: number
       missing: number
       job_ids: string[]
+      progress_ids: string[]
       detail: string
     }>('/tracks/playback-health/repair', {
       method: 'POST',

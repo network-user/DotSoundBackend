@@ -354,6 +354,7 @@
       "repairSelectedBtn": "Repair playback ({{count}})",
       "repairAllIssuesBtn": "Repair all playback issues",
       "repairAllNoIssues": "No playback issues match the current filters.",
+      "openPlaybackRepairTasks": "Playback repair tasks",
       "actionResetMarks": "Reset marks",
       "actionFullRecovery": "Full recovery",
       "actionUnsuppress": "Clear auto-hide",
@@ -869,9 +870,17 @@
         },
         "presets": {
           "catalogSync": "Catalog sync",
+          "playbackRepair": "Playback repair",
           "queued": "Queued",
           "running": "Running",
           "failed": "Failed"
+        },
+        "live": {
+          "title": "Live progress",
+          "stage": "Stage",
+          "track": "Track",
+          "progressId": "Progress ID",
+          "updated": "Updated"
         },
         "actions": {
           "cancel": "Cancel",

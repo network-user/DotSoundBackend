@@ -1517,6 +1517,16 @@
   font-size: 11px;
 }
 
+.admin-chart__grid line {
+  stroke: var(--border);
+  stroke-width: 1;
+  vector-effect: non-scaling-stroke;
+}
+
+.admin-chart__axis text {
+  fill: var(--text-secondary);
+}
+
 .admin-log-stream {
   background: var(--bg-elevated);
   border: 1px solid var(--border);

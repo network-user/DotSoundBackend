@@ -49,6 +49,10 @@ ALLOWED_TASK_NAMES: frozenset[str] = frozenset(
     }
 )
 
+_PLAYBACK_REPAIR_TASK_NAME = (
+    "app.services.playback_repair_worker:repair_track_playback_task"
+)
+
 
 @router.post("/artist-stats-snapshot")
 async def trigger_artist_stats_snapshot(
@@ -435,6 +439,11 @@ async def run_task(
 
 
 def _serialize_bgjob(row: BackgroundJob) -> dict[str, Any]:
+    progress_id = None
+    if isinstance(row.payload, dict):
+        raw_progress_id = row.payload.get("progress_id")
+        if isinstance(raw_progress_id, str) and raw_progress_id:
+            progress_id = raw_progress_id
     return {
         "id": row.id,
         "name": row.name,
@@ -454,6 +463,7 @@ def _serialize_bgjob(row: BackgroundJob) -> dict[str, Any]:
         "created_by_user_id": row.created_by_user_id,
         "idempotency_key": row.idempotency_key,
         "taskiq_task_id": row.taskiq_task_id,
+        "progress_id": progress_id,
         "created_at": row.created_at,
         "updated_at": row.updated_at,
     }
@@ -554,7 +564,24 @@ async def get_background_job(
     row = await AdminTasksRepository(session).get_background_job(job_id)
     if row is None:
         raise HTTPException(status_code=404, detail="job not found")
-    return _serialize_bgjob(row)
+    data = _serialize_bgjob(row)
+    progress_id = data.get("progress_id")
+    if row.name == _PLAYBACK_REPAIR_TASK_NAME and isinstance(
+        progress_id,
+        str,
+    ):
+        from app.services.playback_repair_progress import get_progress
+
+        try:
+            data["live"] = await get_progress(progress_id)
+        except Exception:
+            logger.exception(
+                "admin_playback_repair_progress_read_failed",
+                job_id=job_id,
+                progress_id=progress_id,
+            )
+            data["live"] = None
+    return data
 
 
 @router.post("/jobs/{job_id}/cancel")

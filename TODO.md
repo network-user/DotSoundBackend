@@ -1,5 +1,86 @@
 # DotSound - TODO Tracker
 
+- [x] **SoundCloud fallback and playback repair live progress (2026-05-16)**
+  - SoundCloud stream resolver now tries every available transcoding for
+    the selected protocol before failing, so one dead HLS/progressive
+    variant no longer blocks playback when another variant works.
+  - Admin playback repair enqueue now returns `progress_id` and stores
+    live Redis-backed stages for queued, source verification, refresh,
+    health clearing, repaired, skipped, unresolved, not found, and error
+    outcomes.
+  - Admin Tasks background-job details now expose playback repair live
+    progress and saved result summaries; the Tracks playback-issues tab
+    links directly to the filtered playback repair tasks view.
+  - Reviewed `LEGAL.md` and `docs/legal/` for playback-touching changes;
+    no media storage/access model or legal copy changed.
+  - Verified targeted backend tests, Ruff, and `frontend` production build
+    with `npm run build`.
+
+- [x] **Recharts removal and lightweight SVG charts (2026-05-16)**
+  - Replaced admin `LineChart`, `Sparkline`, and `AreaChart` components
+    with small inline SVG renderers, preserving the existing route APIs.
+  - Replaced public `ArtistStatsView` Recharts usage with the same lightweight
+    SVG approach for monthly listeners, plays, likes, and followers charts.
+  - Removed the `recharts` dependency from the frontend package and deleted
+    the now-unused `admin-charts` manual chunk rule.
+  - Verified `frontend` production build with `npm run build`; the
+    `admin-charts` chunk is gone and large JS chunk warnings remain cleared.
+
+- [x] **Frontend chunk split for mobile payload (2026-05-16)**
+  - Switched the HLS loader from the full `hls.js` build to
+    `hls.js/light`, keeping the same lazy `loadHlsClass()` entry point.
+  - Split the admin app into lazy auth screens, per-route admin chunks,
+    and secure admin-only vendor chunks for query/table/charts/QR/fingerprint
+    dependencies.
+  - Kept admin chunks and admin CSS under `assets/secure/`, filtered them
+    from modulepreload, and preserved the admin bundle hygiene checks.
+  - Reviewed `LEGAL.md` and `docs/legal/` for the playback-touching HLS
+    loader change; no media access, caching, storage, or legal text model
+    changed.
+  - Verified `frontend` production build with `npm run build`; large JS
+    chunk warnings for HLS/admin are gone.
+
+- [x] **Onboarding swipe gesture commit (2026-05-16)**
+  - Made the swipe-stage track card start horizontal drag from the whole
+    card surface via Framer Motion drag controls.
+  - Added right-swipe like and left-swipe dislike commitment with offset
+    and velocity thresholds, off-screen card motion, tint/stamp feedback,
+    and single haptic feedback per gesture.
+  - Kept existing bottom like/dislike/skip buttons and swipe-stage audio
+    preview behavior intact.
+  - Reviewed `LEGAL.md` and `docs/legal/` for playback/recommendation
+    touchpoints; UI gesture only, no media access or recommendation rules
+    changed.
+  - Verified `frontend` production build with `npm run build`.
+
+- [x] **Admin playback repair idempotency fix (2026-05-16)**
+  - Removed the permanent unique constraint from
+    `background_jobs.idempotency_key`; duplicate suppression remains the
+    Redis TTL guard, so repair can be queued again after the guard window.
+  - Added Alembic migration `0103`, service-level enqueue coverage, and
+    API-level regression coverage for repeated playback repair after the
+    guard window.
+
+- [x] **Mini player card overlay and Media Session polish (2026-05-16)**
+  - Bottom `PlayerBar` / touch `MiniPlayerBar` now unmounts while
+    `TrackCardSheet` is open, so the track card is not overlapped by the
+    mini player.
+  - Opening the track card resets local player-bar overflow, playlist, and
+    volume popover state so controls do not reappear after closing.
+  - Media Session artwork for Android/iOS notification controls now uses
+    resized WebP cover variants with correct `sizes` / `type`, and refreshes
+    `playbackState` when metadata is rebound.
+  - Verified `frontend` production build with `npm run build`.
+
+- [x] **Onboarding genre/artist preview removal (2026-05-16)**
+  - Removed standalone play/pause preview buttons from the genre bubble
+    step and artist selection step.
+  - Removed genre/artist preview queue hooks, hidden preview audio nodes,
+    and now-unused preview button styles.
+  - Kept genre and artist cards as pure selection controls; the swipe
+    track preview flow is unchanged.
+  - Verified `frontend` production build with `npm run build`.
+
 - [x] **Mobile mini-player redesign (2026-05-16)**
   - Reworked the touch `MiniPlayerBar` into a floating mobile player
     above the bottom navigation and track sheet layer.

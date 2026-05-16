@@ -5,6 +5,7 @@ import {
   useQuery,
   useQueryClient,
 } from '@tanstack/react-query'
+import { useNavigate } from 'react-router-dom'
 import type { ColumnDef } from '@tanstack/react-table'
 import { MotionPress } from '@/components/ui/MotionPress'
 import { AdminRangeSwitch } from '../components/widgets/AdminRangeSwitch'
@@ -132,6 +133,7 @@ export function TracksRoute() {
   const { t } = useTranslation()
   const { showConfirm, showAlert } = useAdminPrompt()
   const qc = useQueryClient()
+  const navigate = useNavigate()
   const [page, setPage] = useState(1)
   const [search, setSearch] = useState('')
   const [playbackErrorFilter, setPlaybackErrorFilter] = useState('')
@@ -402,6 +404,7 @@ export function TracksRoute() {
       const lines = [
         r.queued ? t('admin.tracks.repairQueued') : r.detail,
         r.job_id ? `job_id=${r.job_id}` : '',
+        r.progress_id ? `progress_id=${r.progress_id}` : '',
       ].filter(Boolean)
       await showAlert(lines.join('\n'))
       refresh()
@@ -421,6 +424,7 @@ export function TracksRoute() {
       skipped: 0,
       missing: 0,
       job_ids: [],
+      progress_ids: [],
       detail: '',
     }
     for (
@@ -435,6 +439,7 @@ export function TracksRoute() {
       aggregate.skipped += result.skipped
       aggregate.missing += result.missing
       aggregate.job_ids.push(...result.job_ids)
+      aggregate.progress_ids.push(...result.progress_ids)
     }
     aggregate.detail = (
       `queued=${aggregate.queued}, skipped=${aggregate.skipped}, ` +
@@ -1291,6 +1296,14 @@ export function TracksRoute() {
           onClick={handleRepairAllPlaybackIssues}
         >
           {t('admin.tracks.repairAllIssuesBtn')}
+        </MotionPress>
+        <MotionPress
+          variant="ghost"
+          onClick={() =>
+            navigate('../tasks?bgName=repair_track_playback_task')
+          }
+        >
+          {t('admin.tracks.openPlaybackRepairTasks')}
         </MotionPress>
         <MotionPress
           variant="ghost"

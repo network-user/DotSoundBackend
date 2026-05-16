@@ -25,6 +25,8 @@ class AdminTrackResponse(TrackResponse):
     )
     playback_recovery_failed_at: datetime | None = None
     playback_suppressed_until: datetime | None = None
+    playback_last_checked_at: datetime | None = None
+    playback_last_repair_attempt_at: datetime | None = None
 
 
 class AdminComplaintResponse(BaseModel):

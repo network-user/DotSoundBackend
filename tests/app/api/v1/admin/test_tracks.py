@@ -1,11 +1,17 @@
 import json
 from datetime import UTC, datetime, timedelta
+from unittest.mock import AsyncMock, patch
 
 import pytest
 from httpx import AsyncClient
-from sqlalchemy import update
-from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import select, update
+from sqlalchemy.ext.asyncio import (
+    AsyncEngine,
+    AsyncSession,
+    async_sessionmaker,
+)
 
+from app.models.background_job import BackgroundJob
 from app.models.track import Track
 from app.models.track_playback_failure_event import (
     TrackPlaybackFailureEvent,
@@ -18,6 +24,14 @@ from tests.conftest import (
 )
 
 pytestmark = pytest.mark.anyio
+
+
+class _PlaybackRepairKicker:
+    def with_labels(self, **_labels: str) -> "_PlaybackRepairKicker":
+        return self
+
+    async def kiq(self, **_payload: object) -> None:
+        return None
 
 
 async def test_admin_list_tracks(
@@ -277,6 +291,139 @@ async def test_admin_playback_unavailable_filters_latest_diagnostic(
     assert matched.id in filtered_ids
     assert other.id not in filtered_ids
     assert stale.id not in filtered_ids
+
+
+async def test_admin_playback_repair_returns_progress_id(
+    client: AsyncClient,
+    db_session: AsyncSession,
+) -> None:
+    admin = await create_test_user(client, 130008)
+    headers = await admin_bearer_for_user(
+        client, db_session, user_id=admin["id"]
+    )
+    track = await create_test_track(
+        client,
+        "Repair Progress Track",
+        uploader_id=admin["id"],
+    )
+
+    with (
+        patch(
+            "app.services.playback_repair_progress.new_progress_id",
+            return_value="progress-1",
+        ),
+        patch(
+            "app.services.playback_repair_progress.safe_set_progress",
+            new=AsyncMock(),
+        ) as set_progress,
+        patch(
+            "app.services.background_jobs.enqueue",
+            new=AsyncMock(return_value="job-1"),
+        ) as enqueue,
+    ):
+        r = await client.post(
+            f"/api/v1/admin/tracks/{track['id']}"
+            "/playback-health/repair",
+            headers=headers,
+        )
+
+    assert r.status_code == 200
+    body = r.json()
+    assert body["queued"] is True
+    assert body["job_id"] == "job-1"
+    assert body["progress_id"] == "progress-1"
+    enqueue.assert_awaited_once()
+    payload = enqueue.await_args.kwargs["payload"]
+    assert payload == {
+        "track_id": track["id"],
+        "progress_id": "progress-1",
+    }
+    set_progress.assert_awaited_once_with(
+        "progress-1",
+        stage="queued",
+        track_id=track["id"],
+        log_line="queued by admin",
+    )
+
+
+async def test_admin_playback_repair_can_be_requeued_after_guard_window(
+    client: AsyncClient,
+    db_session: AsyncSession,
+    db_engine: AsyncEngine,
+) -> None:
+    admin = await create_test_user(client, 130009)
+    headers = await admin_bearer_for_user(
+        client, db_session, user_id=admin["id"]
+    )
+    track = await create_test_track(
+        client,
+        "Repair Requeue Track",
+        uploader_id=admin["id"],
+    )
+    factory: async_sessionmaker[AsyncSession] = async_sessionmaker(
+        db_engine,
+        expire_on_commit=False,
+    )
+
+    async def _slot_open(_key: str, *, ttl_seconds: int) -> bool:
+        return True
+
+    with (
+        patch(
+            "app.services.background_jobs.AsyncSessionLocal",
+            factory,
+        ),
+        patch(
+            "app.services.background_jobs.acquire_idempotency_slot",
+            new=_slot_open,
+        ),
+        patch(
+            "app.services.playback_repair_progress.new_progress_id",
+            side_effect=["progress-1", "progress-2"],
+        ),
+        patch(
+            "app.services.playback_repair_progress.safe_set_progress",
+            new=AsyncMock(),
+        ),
+        patch(
+            "app.services.playback_repair_worker"
+            ".repair_track_playback_task.kicker",
+            return_value=_PlaybackRepairKicker(),
+        ),
+    ):
+        first = await client.post(
+            f"/api/v1/admin/tracks/{track['id']}"
+            "/playback-health/repair",
+            headers=headers,
+        )
+        second = await client.post(
+            f"/api/v1/admin/tracks/{track['id']}"
+            "/playback-health/repair",
+            headers=headers,
+        )
+
+    assert first.status_code == 200
+    assert second.status_code == 200
+    first_body = first.json()
+    second_body = second.json()
+    assert first_body["queued"] is True
+    assert second_body["queued"] is True
+    assert first_body["job_id"] != second_body["job_id"]
+    assert first_body["progress_id"] == "progress-1"
+    assert second_body["progress_id"] == "progress-2"
+
+    rows = [
+        row
+        for row in (
+            await db_session.scalars(
+                select(BackgroundJob).where(
+                    BackgroundJob.idempotency_key
+                    == f"playback-repair:track:{track['id']}"
+                )
+            )
+        ).all()
+    ]
+    assert len(rows) == 2
 
 
 async def test_admin_toggle_track_visibility(

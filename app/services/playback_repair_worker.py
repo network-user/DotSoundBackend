@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from datetime import UTC, datetime
 from typing import Any
 
 import structlog
@@ -12,6 +13,10 @@ from app.core.db import AsyncSessionLocal
 from app.core.tkq import broker
 from app.models.track import Track
 from app.repositories.track import TrackRepository
+from app.services import playback_repair_progress as progress
+from app.services.track_playback_health_service import (
+    TrackPlaybackHealthService,
+)
 from app.services.track_fallback_service import TrackFallbackService
 
 logger: structlog.stdlib.BoundLogger = structlog.get_logger(__name__)
@@ -30,52 +35,165 @@ class TrackPlaybackRepairService:
     def __init__(self, session: AsyncSession) -> None:
         self._session = session
 
-    async def repair_track(self, track_id: int) -> dict[str, Any]:
+    async def repair_track(
+        self,
+        track_id: int,
+        progress_id: str | None = None,
+    ) -> dict[str, Any]:
+        await progress.safe_set_progress(
+            progress_id,
+            stage="loading_track",
+            track_id=track_id,
+            log_line="loading track",
+        )
         track = await self._session.get(Track, track_id)
         if track is None:
-            return {
+            result = {
                 "track_id": track_id,
                 "ok": False,
                 "status": "not_found",
                 "detail": "Track not found",
             }
+            await progress.safe_set_progress(
+                progress_id,
+                stage="not_found",
+                track_id=track_id,
+                log_line="track not found",
+                result=result,
+            )
+            return result
         if not track.is_active or track.deleted_at is not None:
-            return {
+            result = {
                 "track_id": track_id,
                 "ok": False,
                 "status": "skipped",
                 "detail": "Track is inactive",
             }
+            await progress.safe_set_progress(
+                progress_id,
+                stage="skipped",
+                track_id=track_id,
+                log_line="track is inactive",
+                result=result,
+            )
+            return result
         if track.access_mode != "third_party_stream":
-            return {
+            result = {
                 "track_id": track_id,
                 "ok": False,
                 "status": "skipped",
                 "detail": "Track is not a third-party stream",
             }
+            await progress.safe_set_progress(
+                progress_id,
+                stage="skipped",
+                track_id=track_id,
+                log_line="track is not a third-party stream",
+                result=result,
+            )
+            return result
 
         before_sc_url = track.sc_url
         refreshed = False
+        repair_attempted = False
         try:
+            await progress.safe_set_progress(
+                progress_id,
+                stage="verifying_current_source",
+                track_id=track_id,
+                log_line="verifying current source",
+            )
             protocol = await self._verify_current_source(track)
         except HTTPException as first_exc:
             if not _is_soundcloud_track(track):
-                return self._failed_result(track_id, first_exc)
+                result = self._failed_result(track_id, first_exc)
+                await progress.safe_set_progress(
+                    progress_id,
+                    stage="unresolved",
+                    track_id=track_id,
+                    log_line="current source did not resolve",
+                    result=result,
+                )
+                return result
+            repair_attempted = True
+            await progress.safe_set_progress(
+                progress_id,
+                stage="refreshing_source",
+                track_id=track_id,
+                log_line="trying source refresh",
+            )
             refreshed = await self._try_refresh_soundcloud_source(track)
             if not refreshed:
-                return self._failed_result(track_id, first_exc)
+                result = await self._record_unresolved(
+                    track_id,
+                    first_exc,
+                )
+                await progress.safe_set_progress(
+                    progress_id,
+                    stage="unresolved",
+                    track_id=track_id,
+                    log_line=(
+                        "source refresh did not find a replacement; "
+                        "track suppressed"
+                    ),
+                    result=result,
+                )
+                return result
             try:
+                await progress.safe_set_progress(
+                    progress_id,
+                    stage="verifying_refreshed_source",
+                    track_id=track_id,
+                    log_line="verifying refreshed source",
+                )
                 protocol = await self._verify_current_source(track)
             except HTTPException as second_exc:
                 await self._session.rollback()
-                return self._failed_result(track_id, second_exc)
+                result = await self._record_unresolved(
+                    track_id,
+                    second_exc,
+                )
+                await progress.safe_set_progress(
+                    progress_id,
+                    stage="unresolved",
+                    track_id=track_id,
+                    log_line="refreshed source did not resolve; track suppressed",
+                    result=result,
+                )
+                return result
             except Exception as second_exc:  # noqa: BLE001
                 await self._session.rollback()
-                return self._error_result(track_id, second_exc)
+                result = self._error_result(track_id, second_exc)
+                await progress.safe_set_progress(
+                    progress_id,
+                    stage="error",
+                    track_id=track_id,
+                    log_line="repair failed with unexpected error",
+                    result=result,
+                )
+                return result
         except Exception as exc:  # noqa: BLE001
-            return self._error_result(track_id, exc)
+            result = self._error_result(track_id, exc)
+            await progress.safe_set_progress(
+                progress_id,
+                stage="error",
+                track_id=track_id,
+                log_line="repair failed with unexpected error",
+                result=result,
+            )
+            return result
 
+        await progress.safe_set_progress(
+            progress_id,
+            stage="clearing_health",
+            track_id=track_id,
+            log_line="clearing playback health marks",
+        )
         await self._clear_health(track)
+        await self._clear_health(
+            track,
+            repair_attempted=repair_attempted,
+        )
         await self._session.commit()
         new_sc_url = track.sc_url
         logger.info(
@@ -84,7 +202,7 @@ class TrackPlaybackRepairService:
             refreshed_sc_url=refreshed,
             protocol=protocol,
         )
-        return {
+        result = {
             "track_id": track.id,
             "ok": True,
             "status": "repaired",
@@ -93,6 +211,14 @@ class TrackPlaybackRepairService:
             "refreshed_sc_url": refreshed,
             "sc_url_changed": before_sc_url != new_sc_url,
         }
+        await progress.safe_set_progress(
+            progress_id,
+            stage="repaired",
+            track_id=track_id,
+            log_line="playback repair completed",
+            result=result,
+        )
+        return result
 
     async def repair_candidates(self, limit: int) -> dict[str, Any]:
         repo = TrackRepository(self._session)
@@ -130,13 +256,39 @@ class TrackPlaybackRepairService:
             )
             return False
 
-    async def _clear_health(self, track: Track) -> None:
+    async def _clear_health(
+        self,
+        track: Track,
+        *,
+        repair_attempted: bool,
+    ) -> None:
+        now = datetime.now(UTC)
+        track.playback_last_checked_at = now
+        if repair_attempted:
+            track.playback_last_repair_attempt_at = now
         track.playback_suppressed_until = None
         track.playback_last_failure_at = None
         track.playback_last_http_status = None
         track.playback_last_failure_source = None
         track.playback_recovery_failed_at = None
         await self._session.flush()
+
+    async def _record_unresolved(
+        self,
+        track_id: int,
+        exc: HTTPException,
+    ) -> dict[str, Any]:
+        result = self._failed_result(track_id, exc)
+        await TrackPlaybackHealthService(
+            self._session,
+        ).record_scheduled_audit_failed(
+            track_id=track_id,
+            http_status=exc.status_code,
+            detail=_http_detail(exc),
+        )
+        await self._session.commit()
+        result["suppressed"] = True
+        return result
 
     @staticmethod
     def _failed_result(
@@ -162,9 +314,15 @@ class TrackPlaybackRepairService:
 
 
 @broker.task
-async def repair_track_playback_task(track_id: int) -> dict[str, Any]:
+async def repair_track_playback_task(
+    track_id: int,
+    progress_id: str = "",
+) -> dict[str, Any]:
     async with AsyncSessionLocal() as session:
-        return await TrackPlaybackRepairService(session).repair_track(track_id)
+        return await TrackPlaybackRepairService(session).repair_track(
+            track_id,
+            progress_id=progress_id or None,
+        )
 
 
 @broker.task

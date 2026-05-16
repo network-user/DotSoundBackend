@@ -33,6 +33,7 @@ interface BackgroundJobRow {
   queue: string
   status: string
   payload: Record<string, unknown> | null
+  progress_id: string | null
   attempts: number
   max_attempts: number
   duration_ms: number | null
@@ -45,6 +46,7 @@ interface BackgroundJobRow {
 }
 
 const CATALOG_SYNC_BG_FILTER = 'sync_artist_catalog'
+const PLAYBACK_REPAIR_BG_FILTER = 'repair_track_playback_task'
 
 const BG_STATUS_OPTIONS = [
   '',
@@ -86,11 +88,32 @@ function readBgPayloadTarget(payload: unknown): string {
   const data = payload as Record<string, unknown>
   const artistId = data.artist_id
   const albumId = data.soundcloud_album_id
+  const trackId = data.track_id
   if (artistId !== undefined && albumId !== undefined) {
     return `artist:${artistId} / album:${albumId}`
   }
   if (artistId !== undefined) return `artist:${artistId}`
+  if (trackId !== undefined) return `track:${trackId}`
   return 'вЂ“'
+}
+
+interface LiveProgress {
+  progress_id?: string
+  track_id?: number
+  stage?: string
+  state?: string
+  updated_at?: string
+  logs?: string[]
+  result?: Record<string, unknown>
+}
+
+function readLiveProgress(raw: unknown): LiveProgress | null {
+  if (!raw || typeof raw !== 'object') return null
+  const data = raw as Record<string, unknown>
+  const live = data.live
+  if (!live || typeof live !== 'object') return null
+  const value = live as LiveProgress
+  return value.stage || value.state ? value : null
 }
 
 interface JobRow {
@@ -552,6 +575,8 @@ export function TasksRoute() {
         ? adminApi.getBackgroundJob(bgDetailId)
         : Promise.resolve(null),
     enabled: !!bgDetailId,
+    refetchInterval: bgDetailId ? 2500 : false,
+    refetchIntervalInBackground: false,
   })
 
   const invalidateBg = () => {
@@ -1071,6 +1096,18 @@ export function TasksRoute() {
           <MotionPress
             variant="ghost"
             haptic="selection"
+            onClick={() =>
+              setBgPreset({
+                name: PLAYBACK_REPAIR_BG_FILTER,
+                status: '',
+              })
+            }
+          >
+            {t('admin.tasks.bg.presets.playbackRepair')}
+          </MotionPress>
+          <MotionPress
+            variant="ghost"
+            haptic="selection"
             onClick={() => setBgPreset({ status: 'queued' })}
           >
             {t('admin.tasks.bg.presets.queued')}
@@ -1191,6 +1228,64 @@ export function TasksRoute() {
                     <strong>{formatAdminDate(bgDetail.data.created_at)}</strong>
                   </div>
                 </div>
+                {(() => {
+                  const live = readLiveProgress(bgDetail.data)
+                  if (!live) return null
+                  const logs = Array.isArray(live.logs)
+                    ? live.logs.slice(-8)
+                    : []
+                  return (
+                    <div className="admin-bg-detail__block">
+                      <span>{t('admin.tasks.bg.live.title')}</span>
+                      <div className="admin-bg-detail__grid">
+                        <div>
+                          <span>
+                            {t('admin.tasks.bg.live.stage')}
+                          </span>
+                          <StatusPill
+                            kind={
+                              live.state === 'finished'
+                                ? bgJobKind('done')
+                                : bgJobKind('running')
+                            }
+                          >
+                            {live.stage ?? live.state ?? 'running'}
+                          </StatusPill>
+                        </div>
+                        <div>
+                          <span>
+                            {t('admin.tasks.bg.live.track')}
+                          </span>
+                          <strong className="admin-mono">
+                            {live.track_id ?? 'РІР‚вЂњ'}
+                          </strong>
+                        </div>
+                        <div>
+                          <span>
+                            {t('admin.tasks.bg.live.progressId')}
+                          </span>
+                          <strong className="admin-mono">
+                            {live.progress_id ?? 'РІР‚вЂњ'}
+                          </strong>
+                        </div>
+                        <div>
+                          <span>
+                            {t('admin.tasks.bg.live.updated')}
+                          </span>
+                          <strong>
+                            {formatAdminDate(live.updated_at)}
+                          </strong>
+                        </div>
+                      </div>
+                      {logs.length > 0 && (
+                        <pre>{logs.join('\n')}</pre>
+                      )}
+                      {live.result && (
+                        <JsonViewer value={live.result} collapsed />
+                      )}
+                    </div>
+                  )
+                })()}
                 {Boolean(bgDetail.data.error) && (
                   <div className="admin-bg-detail__block is-error">
                     <span>{t('admin.tasks.detail.errorTitle')}</span>

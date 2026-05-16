@@ -209,6 +209,15 @@ class Track(Base, TimestampMixin):
         nullable=True,
         index=True,
     )
+    playback_last_checked_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True),
+        nullable=True,
+        index=True,
+    )
+    playback_last_repair_attempt_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True),
+        nullable=True,
+    )
     lyrics_catalog_miss_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True),
         nullable=True,

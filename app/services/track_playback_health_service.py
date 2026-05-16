@@ -149,6 +149,41 @@ class TrackPlaybackHealthService:
             http_status=http_status,
         )
 
+    async def record_scheduled_audit_failed(
+        self,
+        *,
+        track_id: int,
+        http_status: int | None,
+        detail: str | None,
+    ) -> None:
+        truncated = detail[:512] if detail else None
+        await self._repo.insert_failure_event(
+            track_id=track_id,
+            user_id=None,
+            source="scheduled_playback_audit_failed",
+            http_status=http_status,
+            detail_truncated=truncated,
+        )
+        tr = await self._session.get(Track, track_id)
+        if tr is None:
+            return
+        now = datetime.now(UTC)
+        tr.playback_last_checked_at = now
+        tr.playback_last_repair_attempt_at = now
+        tr.playback_last_failure_at = now
+        tr.playback_last_http_status = http_status
+        tr.playback_last_failure_source = "scheduled_playback_audit_failed"
+        tr.playback_recovery_failed_at = now
+        tr.playback_suppressed_until = (
+            now + PLAYBACK_HEALTH_AUTO_SUPPRESS_DURATION
+        )
+        await self._session.flush()
+        logger.info(
+            "playback_health_scheduled_audit_failed_recorded",
+            track_id=track_id,
+            http_status=http_status,
+        )
+
     async def clear_failure_state(self, track_id: int) -> Track | None:
         tr = await self._session.get(Track, track_id)
         if tr is None:

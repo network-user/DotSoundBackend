@@ -1,18 +1,28 @@
-import {
-  Line,
-  LineChart as RechartsLineChart,
-  ResponsiveContainer,
-  YAxis,
-} from 'recharts'
-
-export interface SparkPoint {
-  v: number
-}
-
 interface Props {
   data: number[]
   height?: number
   ariaLabel?: string
+}
+
+const WIDTH = 140
+
+function pathFor(values: number[], height: number): string {
+  const clean = values.filter(Number.isFinite)
+  if (clean.length === 0) return ''
+  const min = Math.min(...clean)
+  const max = Math.max(...clean)
+  const range = max - min || 1
+  return clean
+    .map((value, i) => {
+      const x =
+        clean.length === 1
+          ? WIDTH / 2
+          : (i / (clean.length - 1)) * WIDTH
+      const y =
+        height - ((value - min) / range) * (height - 4) - 2
+      return `${i === 0 ? 'M' : 'L'}${x},${y}`
+    })
+    .join(' ')
 }
 
 export function Sparkline({
@@ -20,9 +30,7 @@ export function Sparkline({
   height = 32,
   ariaLabel,
 }: Props) {
-  const points: SparkPoint[] = data.map((v) => ({
-    v,
-  }))
+  const path = pathFor(data, height)
   return (
     <span
       className="admin-sparkline"
@@ -36,30 +44,21 @@ export function Sparkline({
         color: 'var(--accent)',
       }}
     >
-      <ResponsiveContainer
-        width="100%"
-        height={height}
-      >
-        <RechartsLineChart
-          data={points}
-          margin={{
-            top: 2,
-            right: 2,
-            bottom: 2,
-            left: 2,
-          }}
+      {path ? (
+        <svg
+          viewBox={`0 0 ${WIDTH} ${height}`}
+          width="100%"
+          height={height}
         >
-          <YAxis hide domain={['auto', 'auto']} />
-          <Line
-            type="monotone"
-            dataKey="v"
+          <path
+            d={path}
+            fill="none"
             stroke="currentColor"
             strokeWidth={1.5}
-            dot={false}
-            isAnimationActive={false}
+            vectorEffect="non-scaling-stroke"
           />
-        </RechartsLineChart>
-      </ResponsiveContainer>
+        </svg>
+      ) : null}
     </span>
   )
 }

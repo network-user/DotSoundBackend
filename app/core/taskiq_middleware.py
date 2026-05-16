@@ -19,11 +19,17 @@ existing workers migrate incrementally.
 from __future__ import annotations
 
 import asyncio
+import json
 from datetime import UTC, datetime
 from typing import Any
 
 import structlog
-from taskiq import TaskiqMessage, TaskiqMiddleware, TaskiqResult
+from taskiq import (
+    AsyncBroker,
+    TaskiqMessage,
+    TaskiqMiddleware,
+    TaskiqResult,
+)
 
 from app.core.db import AsyncSessionLocal
 from app.models.background_job import BackgroundJob
@@ -44,6 +50,36 @@ def _int_label(message: TaskiqMessage, key: str, default: int) -> int:
         return int(raw)
     except (TypeError, ValueError):
         return default
+
+
+def _result_summary(value: object) -> dict[str, object] | None:
+    if value is None:
+        return None
+    if isinstance(value, dict):
+        raw: object = value
+    elif isinstance(value, list):
+        raw = {
+            "items": value[:50],
+            "truncated": len(value) > 50,
+        }
+    else:
+        raw = {"value": str(value)[:2000]}
+    try:
+        encoded = json.dumps(raw, default=str)
+        if len(encoded) > 16000:
+            return {
+                "truncated": True,
+                "value": encoded[:16000],
+            }
+        decoded: object = json.loads(encoded)
+    except Exception:
+        return {"value": str(value)[:2000]}
+    if isinstance(decoded, dict):
+        return {
+            str(key): item_value
+            for key, item_value in decoded.items()
+        }
+    return {"value": decoded}
 
 
 class BackgroundJobLifecycleMiddleware(TaskiqMiddleware):
@@ -95,6 +131,7 @@ class BackgroundJobLifecycleMiddleware(TaskiqMiddleware):
                         * 1000
                     )
                 row.error = None
+                row.result_summary = _result_summary(result.return_value)
                 await session.commit()
         except Exception:
             logger.exception(
@@ -168,7 +205,7 @@ class BackgroundJobLifecycleMiddleware(TaskiqMiddleware):
 
 
 async def _delayed_rekick(
-    broker: Any,
+    broker: AsyncBroker,
     message: TaskiqMessage,
     *,
     delay_seconds: float,

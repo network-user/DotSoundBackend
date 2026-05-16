@@ -5,6 +5,65 @@ import path from 'path'
 
 const MINI_APP_BASE = '/mini_app/'
 
+const normalizeModuleId = (id: string): string =>
+  id.replace(/\\/g, '/')
+
+const sanitizeChunkName = (name: string): string =>
+  name
+    .replace(/[^a-zA-Z0-9_-]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .slice(0, 80)
+
+const adminDependencyChunk = (id: string): string | null => {
+  const normalized = normalizeModuleId(id)
+  if (
+    normalized.includes(
+      'node_modules/@tanstack/react-query',
+    ) ||
+    normalized.includes(
+      'node_modules/@tanstack/query-core',
+    )
+  ) {
+    return 'admin-query'
+  }
+  if (
+    normalized.includes(
+      'node_modules/@tanstack/react-table',
+    ) ||
+    normalized.includes(
+      'node_modules/@tanstack/table-core',
+    )
+  ) {
+    return 'admin-table'
+  }
+  if (normalized.includes('node_modules/qrcode/')) {
+    return 'admin-qrcode'
+  }
+  if (
+    normalized.includes(
+      'node_modules/@fingerprintjs/',
+    )
+  ) {
+    return 'admin-fingerprint'
+  }
+  if (normalized.includes('node_modules/zustand/')) {
+    return 'admin-state'
+  }
+  return null
+}
+
+const isAdminSourceModule = (id: string): boolean =>
+  normalizeModuleId(id).includes('/src/admin/')
+
+const isAdminBundleChunk = (chunk: {
+  moduleIds: readonly string[]
+}): boolean =>
+  chunk.moduleIds.some(
+    (id) =>
+      isAdminSourceModule(id) ||
+      adminDependencyChunk(id) !== null,
+  )
+
 const redirectRootToMiniApp = (): PluginOption => {
   const handler: Connect.NextHandleFunction = (req, res, next) => {
     const rawUrl = req.url || '/'
@@ -264,44 +323,59 @@ export default defineConfig({
     modulePreload: {
       polyfill: false,
       resolveDependencies: (_filename, deps) =>
-        deps.filter(
-          (d) =>
-            !d.includes('admin-bundle') &&
-            !d.includes('/hls-') &&
-            !d.includes('\\hls-'),
-        ),
+        deps.filter((d) => {
+          const normalized = normalizeModuleId(d)
+          return (
+            !normalized.includes('/secure/') &&
+            !normalized.includes('admin-bundle') &&
+            !normalized.includes('/hls-')
+          )
+        }),
     },
     rollupOptions: {
       output: {
         manualChunks(id) {
-          if (id.includes('/src/admin/')) {
-            return 'admin-bundle'
-          }
-          if (id.includes('node_modules/hls.js')) {
-            return 'hls'
-          }
-          if (
-            id.includes('node_modules/react/') ||
-            id.includes('node_modules/react-dom/') ||
-            id.includes('node_modules/@twa-dev/sdk')
-          ) {
-            return 'vendor'
+          const normalized = normalizeModuleId(id)
+          const adminDepChunk = adminDependencyChunk(
+            normalized,
+          )
+          if (adminDepChunk) {
+            return adminDepChunk
           }
           if (
-            id.includes('node_modules/@tanstack/') ||
-            id.includes('node_modules/recharts/') ||
-            id.includes('node_modules/qrcode/') ||
-            id.includes(
-              'node_modules/@fingerprintjs/',
+            normalized.includes(
+              '/src/admin/AdminApp.tsx',
             )
           ) {
             return 'admin-bundle'
+          }
+          if (
+            normalized.includes('/src/admin/routes/')
+          ) {
+            const parsed = path.parse(normalized)
+            return `admin-route-${sanitizeChunkName(
+              parsed.name,
+            )}`
+          }
+          if (normalized.includes('node_modules/hls.js')) {
+            return 'hls'
+          }
+          if (
+            normalized.includes('node_modules/react/') ||
+            normalized.includes(
+              'node_modules/react-dom/',
+            ) ||
+            normalized.includes(
+              'node_modules/@twa-dev/sdk',
+            )
+          ) {
+            return 'vendor'
           }
           return undefined
         },
         assetFileNames: (info) => {
           const name = info.name || ''
-          if (name.includes('admin-bundle')) {
+          if (name.toLowerCase().includes('admin')) {
             return 'assets/secure/[name][extname]'
           }
           return 'assets/[name]-[hash][extname]'
@@ -309,6 +383,14 @@ export default defineConfig({
         chunkFileNames: (info) => {
           if (info.name === 'admin-bundle') {
             return 'assets/secure/admin-bundle.js'
+          }
+          if (isAdminBundleChunk(info)) {
+            const name = info.name.startsWith('admin-')
+              ? info.name
+              : `admin-${info.name}`
+            return `assets/secure/${sanitizeChunkName(
+              name,
+            )}-[hash].js`
           }
           return 'assets/[name]-[hash].js'
         },

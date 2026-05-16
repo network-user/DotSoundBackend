@@ -354,6 +354,7 @@
       "repairSelectedBtn": "Лечить playback ({{count}})",
       "repairAllIssuesBtn": "Лечить все playback-ошибки",
       "repairAllNoIssues": "Playback-ошибок по текущим фильтрам нет.",
+      "openPlaybackRepairTasks": "Задачи лечения playback",
       "actionResetMarks": "Сброс меток",
       "actionFullRecovery": "Полное восст.",
       "actionUnsuppress": "Снять auto-hide",
@@ -869,9 +870,17 @@
         },
         "presets": {
           "catalogSync": "Sync каталога",
+          "playbackRepair": "Лечение playback",
           "queued": "Queued",
           "running": "Running",
           "failed": "Failed"
+        },
+        "live": {
+          "title": "Живой прогресс",
+          "stage": "Этап",
+          "track": "Трек",
+          "progressId": "Progress ID",
+          "updated": "Обновлено"
         },
         "actions": {
           "cancel": "Отменить",

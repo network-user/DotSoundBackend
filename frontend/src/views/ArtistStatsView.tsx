@@ -1,17 +1,11 @@
-import { useEffect, useMemo, useState } from 'react'
+import {
+  useEffect,
+  useId,
+  useMemo,
+  useState,
+} from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
-import {
-  LineChart,
-  Line,
-  XAxis,
-  YAxis,
-  CartesianGrid,
-  Tooltip,
-  ResponsiveContainer,
-  AreaChart,
-  Area,
-} from 'recharts'
 
 import { api } from '@/lib/api'
 import { Icon } from '@/components/Icon/Icon'
@@ -162,6 +156,182 @@ function ChartSkeleton() {
       <div className="stats-chart-card stats-chart-card--skeleton" />
       <div className="stats-chart-card stats-chart-card--skeleton" />
     </div>
+  )
+}
+
+const CHART_WIDTH = 640
+const CHART_HEIGHT = 220
+const CHART_PAD_LEFT = 48
+const CHART_PAD_RIGHT = 18
+const CHART_PAD_TOP = 12
+const CHART_PAD_BOTTOM = 30
+
+function formatChartValue(value: number): string {
+  return fmtCount(value)
+}
+
+function StatsMetricChart({
+  data,
+  metric,
+  metricLabel,
+  area = false,
+  ariaLabel,
+}: {
+  data: ChartRow[]
+  metric: MetricKey
+  metricLabel: string
+  area?: boolean
+  ariaLabel: string
+}) {
+  const gradientId = useId().replace(/:/g, '')
+  const clean = data.filter((row) =>
+    Number.isFinite(row[metric]),
+  )
+  if (clean.length === 0) {
+    return <div className="empty-state" />
+  }
+
+  const plotWidth =
+    CHART_WIDTH - CHART_PAD_LEFT - CHART_PAD_RIGHT
+  const plotHeight =
+    CHART_HEIGHT - CHART_PAD_TOP - CHART_PAD_BOTTOM
+  const maxValue = Math.max(1, ...clean.map((row) => row[metric]))
+  const yMax = maxValue * 1.08
+  const xRange = Math.max(1, clean.length - 1)
+  const points = clean.map((row, index) => {
+    const x =
+      CHART_PAD_LEFT + (index / xRange) * plotWidth
+    const y =
+      CHART_PAD_TOP +
+      plotHeight -
+      (row[metric] / yMax) * plotHeight
+    return { row, x, y }
+  })
+  const linePath = points
+    .map((p, i) => `${i === 0 ? 'M' : 'L'}${p.x},${p.y}`)
+    .join(' ')
+  const bottom = CHART_PAD_TOP + plotHeight
+  const areaPath =
+    points.length > 0
+      ? `${linePath} L${points[points.length - 1].x},${bottom} L${
+          points[0].x
+        },${bottom} Z`
+      : ''
+  const yTicks = [0, yMax / 3, (yMax * 2) / 3, yMax]
+    .map((value) => ({
+      value,
+      y:
+        CHART_PAD_TOP +
+        plotHeight -
+        (value / yMax) * plotHeight,
+    }))
+    .reverse()
+  const xLabels =
+    clean.length <= 2
+      ? clean
+      : [
+          clean[0],
+          clean[Math.floor((clean.length - 1) / 2)],
+          clean[clean.length - 1],
+        ]
+
+  return (
+    <svg
+      className="stats-chart-svg"
+      viewBox={`0 0 ${CHART_WIDTH} ${CHART_HEIGHT}`}
+      role="img"
+      aria-label={ariaLabel}
+    >
+      <defs>
+        <linearGradient
+          id={gradientId}
+          x1="0"
+          y1="0"
+          x2="0"
+          y2="1"
+        >
+          <stop
+            offset="0%"
+            stopColor="currentColor"
+            stopOpacity={0.32}
+          />
+          <stop
+            offset="100%"
+            stopColor="currentColor"
+            stopOpacity={0}
+          />
+        </linearGradient>
+      </defs>
+      <g className="stats-chart-grid" aria-hidden>
+        {yTicks.map((tick) => (
+          <g key={tick.value}>
+            <line
+              x1={CHART_PAD_LEFT}
+              x2={CHART_WIDTH - CHART_PAD_RIGHT}
+              y1={tick.y}
+              y2={tick.y}
+            />
+            <text
+              x={CHART_PAD_LEFT - 8}
+              y={tick.y + 4}
+              textAnchor="end"
+            >
+              {formatChartValue(tick.value)}
+            </text>
+          </g>
+        ))}
+      </g>
+      {area && (
+        <path
+          d={areaPath}
+          fill={`url(#${gradientId})`}
+        />
+      )}
+      <path
+        d={linePath}
+        fill="none"
+        stroke="currentColor"
+        strokeWidth={2}
+        vectorEffect="non-scaling-stroke"
+      />
+      {points.map((point) => (
+        <circle
+          key={point.row.fullName}
+          cx={point.x}
+          cy={point.y}
+          r={3}
+          fill="currentColor"
+        >
+          <title>
+            {point.row.fullName}: {formatChartValue(point.row[metric])}{' '}
+            {metricLabel}
+          </title>
+        </circle>
+      ))}
+      <g className="stats-chart-axis" aria-hidden>
+        {xLabels.map((row) => {
+          const index = clean.indexOf(row)
+          const x =
+            CHART_PAD_LEFT + (index / xRange) * plotWidth
+          return (
+            <text
+              key={row.fullName}
+              x={x}
+              y={CHART_HEIGHT - 8}
+              textAnchor={
+                index === 0
+                  ? 'start'
+                  : index === clean.length - 1
+                    ? 'end'
+                    : 'middle'
+              }
+            >
+              {row.name}
+            </text>
+          )
+        })}
+      </g>
+    </svg>
   )
 }
 
@@ -333,14 +503,6 @@ export function ArtistStatsView() {
   }
 
   const hasHistory = chartData.length > 0
-  const tooltipContentStyle = {
-    background: 'var(--surface-2)',
-    border: '1px solid var(--border)',
-    borderRadius: 'var(--radius)',
-    color: 'var(--text)',
-    fontSize: '0.85rem',
-    padding: '8px 12px',
-  }
 
   return (
     <div className="view-container artist-stats-view">
@@ -389,74 +551,13 @@ export function ArtistStatsView() {
               >
                 <h3>{t('artistStats.monthlyListeners')}</h3>
                 <div className="chart-container">
-                  <ResponsiveContainer width="100%" height="100%">
-                    <AreaChart data={chartData}>
-                      <defs>
-                        <linearGradient
-                          id="colorListeners"
-                          x1="0"
-                          y1="0"
-                          x2="0"
-                          y2="1"
-                        >
-                          <stop
-                            offset="0%"
-                            stopColor="currentColor"
-                            stopOpacity={0.35}
-                          />
-                          <stop
-                            offset="100%"
-                            stopColor="currentColor"
-                            stopOpacity={0}
-                          />
-                        </linearGradient>
-                      </defs>
-                      <CartesianGrid
-                        strokeDasharray="3 3"
-                        vertical={false}
-                        stroke="var(--border)"
-                      />
-                      <XAxis
-                        dataKey="name"
-                        axisLine={false}
-                        tickLine={false}
-                        tick={{
-                          fill: 'var(--text-secondary)',
-                          fontSize: 12,
-                        }}
-                      />
-                      <YAxis
-                        axisLine={false}
-                        tickLine={false}
-                        tick={{
-                          fill: 'var(--text-secondary)',
-                          fontSize: 12,
-                        }}
-                        tickFormatter={fmtCount}
-                        width={48}
-                      />
-                      <Tooltip
-                        contentStyle={tooltipContentStyle}
-                        labelFormatter={(label) => {
-                          const row = chartData.find(
-                            (r) => r.name === label,
-                          )
-                          return row?.fullName ?? String(label)
-                        }}
-                        formatter={(val: number) => [
-                          fmtCount(val),
-                          t('artistStats.listeners'),
-                        ]}
-                      />
-                      <Area
-                        type="monotone"
-                        dataKey="listeners"
-                        stroke="currentColor"
-                        strokeWidth={2}
-                        fill="url(#colorListeners)"
-                      />
-                    </AreaChart>
-                  </ResponsiveContainer>
+                  <StatsMetricChart
+                    data={chartData}
+                    metric="listeners"
+                    metricLabel={t('artistStats.listeners')}
+                    area
+                    ariaLabel={t('artistStats.aria.chartListeners')}
+                  />
                 </div>
               </section>
 
@@ -466,7 +567,6 @@ export function ArtistStatsView() {
                 metric="plays"
                 metricLabelKey="artistStats.plays"
                 data={chartData}
-                tooltipContentStyle={tooltipContentStyle}
                 t={t}
                 accentClass="stats-chart-card--accent"
               />
@@ -477,7 +577,6 @@ export function ArtistStatsView() {
                 metric="likes"
                 metricLabelKey="artistStats.likes"
                 data={chartData}
-                tooltipContentStyle={tooltipContentStyle}
                 t={t}
                 accentClass="stats-chart-card--muted"
               />
@@ -488,7 +587,6 @@ export function ArtistStatsView() {
                 metric="followers"
                 metricLabelKey="artistStats.followers"
                 data={chartData}
-                tooltipContentStyle={tooltipContentStyle}
                 t={t}
                 accentClass="stats-chart-card--muted"
               />
@@ -558,7 +656,6 @@ interface ChartLineCardProps {
   metric: 'plays' | 'likes' | 'followers'
   metricLabelKey: string
   data: ChartRow[]
-  tooltipContentStyle: Record<string, string>
   t: (key: string, opts?: Record<string, unknown>) => string
   accentClass: string
 }
@@ -569,7 +666,6 @@ function ChartLineCard({
   metric,
   metricLabelKey,
   data,
-  tooltipContentStyle,
   t,
   accentClass,
 }: ChartLineCardProps) {
@@ -581,59 +677,12 @@ function ChartLineCard({
     >
       <h3>{t(titleKey)}</h3>
       <div className="chart-container">
-        <ResponsiveContainer width="100%" height="100%">
-          <LineChart data={data}>
-            <CartesianGrid
-              strokeDasharray="3 3"
-              vertical={false}
-              stroke="var(--border)"
-            />
-            <XAxis
-              dataKey="name"
-              axisLine={false}
-              tickLine={false}
-              tick={{
-                fill: 'var(--text-secondary)',
-                fontSize: 12,
-              }}
-            />
-            <YAxis
-              axisLine={false}
-              tickLine={false}
-              tick={{
-                fill: 'var(--text-secondary)',
-                fontSize: 12,
-              }}
-              tickFormatter={fmtCount}
-              width={48}
-            />
-            <Tooltip
-              contentStyle={tooltipContentStyle}
-              labelFormatter={(label) => {
-                const row = data.find(
-                  (r) => r.name === label,
-                )
-                return row?.fullName ?? String(label)
-              }}
-              formatter={(val: number) => [
-                fmtCount(val),
-                t(metricLabelKey),
-              ]}
-            />
-            <Line
-              type="monotone"
-              dataKey={metric}
-              stroke="currentColor"
-              strokeWidth={2}
-              dot={{
-                r: 3,
-                fill: 'currentColor',
-                stroke: 'currentColor',
-              }}
-              activeDot={{ r: 5 }}
-            />
-          </LineChart>
-        </ResponsiveContainer>
+        <StatsMetricChart
+          data={data}
+          metric={metric}
+          metricLabel={t(metricLabelKey)}
+          ariaLabel={t(ariaKey)}
+        />
       </div>
     </section>
   )
@@ -805,6 +854,22 @@ function ArtistStatsStyles() {
         width: 100%;
         aspect-ratio: 16 / 7;
         min-height: 200px;
+      }
+      .stats-chart-svg {
+        display: block;
+        width: 100%;
+        height: 100%;
+        overflow: visible;
+      }
+      .stats-chart-grid line {
+        stroke: var(--border);
+        stroke-width: 1;
+        vector-effect: non-scaling-stroke;
+      }
+      .stats-chart-grid text,
+      .stats-chart-axis text {
+        fill: var(--text-secondary);
+        font-size: 11px;
       }
       .artist-stats-view .back-btn:focus-visible,
       .stats-kpi-card:focus-within,

@@ -568,7 +568,10 @@ class TrackRepository(BaseRepository[Track]):
     ) -> list[Track]:
         if limit <= 0:
             return []
-        soundcloud = (Track.source_platform == "soundcloud") | (
+        source_platform = func.lower(
+            func.coalesce(Track.source_platform, "")
+        )
+        soundcloud = (source_platform == "soundcloud") | (
             Track.sc_url.isnot(None)
         )
         needs_repair = (
@@ -579,17 +582,25 @@ class TrackRepository(BaseRepository[Track]):
                 & (Track.playback_suppressed_until > func.now())
             )
         )
+        repair_rank = case((needs_repair, 0), else_=1)
+        checked_rank = case(
+            (Track.playback_last_checked_at.is_(None), 0),
+            else_=1,
+        )
         result = await self._session.execute(
             select(Track)
             .where(
                 Track.is_active.is_(True),
+                Track.is_public.is_(True),
                 Track.deleted_at.is_(None),
                 Track.access_mode == "third_party_stream",
                 soundcloud,
-                needs_repair,
             )
             .order_by(
+                repair_rank.asc(),
                 Track.playback_last_failure_at.desc(),
+                checked_rank.asc(),
+                Track.playback_last_checked_at.asc(),
                 Track.id.asc(),
             )
             .limit(limit)

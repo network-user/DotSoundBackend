@@ -1,16 +1,11 @@
 import { useMemo } from 'react'
-import { useTranslation } from 'react-i18next'
-import { Icon } from '@/components/Icon/Icon'
 import { coverProxyUrl } from '@/lib/coverProxy'
 import type { OnboardingGenreBubble } from '@/types/api'
 
 interface Props {
   bubble: OnboardingGenreBubble
   selected: boolean
-  isPlaying?: boolean
-  isLoading?: boolean
   onToggle: (genre: string) => void
-  onTogglePreview: (genre: string) => void
 }
 
 function coverUrl(key: string): string {
@@ -20,12 +15,8 @@ function coverUrl(key: string): string {
 export function GenreBubble({
   bubble,
   selected,
-  isPlaying = false,
-  isLoading = false,
   onToggle,
-  onTogglePreview,
 }: Props) {
-  const { t } = useTranslation()
   const covers = useMemo(
     () => bubble.sample_cover_keys.slice(0, 4),
     [bubble.sample_cover_keys],
@@ -77,8 +68,6 @@ export function GenreBubble({
   const stateClass = [
     'onb-v2-bubble',
     selected ? 'is-selected' : '',
-    isPlaying ? 'is-playing' : '',
-    isLoading ? 'is-loading' : '',
   ]
     .filter(Boolean)
     .join(' ')
@@ -106,31 +95,6 @@ export function GenreBubble({
           >
             ✓
           </span>
-        )}
-      </button>
-      <button
-        type="button"
-        className={[
-          'onb-v2-bubble__preview-btn',
-          isPlaying ? 'is-playing' : '',
-          isLoading ? 'is-loading' : '',
-        ]
-          .filter(Boolean)
-          .join(' ')}
-        aria-label={
-          isPlaying
-            ? t('onboarding.preview.stop')
-            : t('onboarding.preview.play')
-        }
-        onClick={() => onTogglePreview(bubble.genre)}
-      >
-        {isLoading ? (
-          <span className="onb-v2-bubble__preview-spinner" />
-        ) : (
-          <Icon
-            name={isPlaying ? 'pause' : 'play'}
-            size={14}
-          />
         )}
       </button>
     </div>

@@ -11,6 +11,7 @@ import {
   type PanInfo,
   type ValueAnimationTransition,
   animate,
+  useDragControls,
   useMotionValue,
   useTransform,
 } from 'framer-motion'
@@ -29,7 +30,6 @@ import { showIsland } from '@/lib/island'
 import { trackActivationEvent } from '@/lib/activation'
 import { getIsAdmin, hapticSelection } from '@/lib/telegram'
 import { useOnboardingAudio } from '@/hooks/useOnboardingAudio'
-import { usePreviewLoop } from '@/hooks/usePreviewLoop'
 import { AvatarBuilder } from '@/components/Onboarding/AvatarBuilder'
 import { GenreBubble } from '@/components/Onboarding/GenreBubble'
 import { useBrandLabel } from '@/lib/brand'
@@ -53,9 +53,15 @@ type Step =
   | 'swipe'
   | 'complete'
 
+interface SwipeDecisionOptions {
+  haptic?: boolean
+}
+
 const MIN_GENRES = 3
 const SWIPE_BATCH = 5
 const SWIPE_THRESHOLD = 110
+const SWIPE_VELOCITY_THRESHOLD = 720
+const SWIPE_VELOCITY_MIN_OFFSET = 36
 
 const STEP_ORDER: Step[] = [
   'welcome',
@@ -343,10 +349,15 @@ export function OnboardingV2({ onComplete }: Props) {
   }
 
   const recordDecision = useCallback(
-    (decision: OnboardingTasteDecision) => {
+    (
+      decision: OnboardingTasteDecision,
+      options?: SwipeDecisionOptions,
+    ) => {
       const tr = tasteTracks[tasteIndex]
       if (!tr) return
-      hapticSelection()
+      if (options?.haptic !== false) {
+        hapticSelection()
+      }
       setTasteDecisions((prev) => [
         ...prev,
         { track_id: tr.id, decision },
@@ -997,43 +1008,6 @@ function GenresStep({
   const { t } = useTranslation()
   const [searchQuery, setSearchQuery] = useState('')
 
-  const genreFetcher = useCallback(
-    async (genre: string): Promise<Track[]> => {
-      const resp = await api.fetchGenrePreviewQueue(genre, 10)
-      return resp.items
-    },
-    [],
-  )
-  const onGenrePreviewStart = useCallback((genre: string) => {
-    trackActivationEvent('preview_started', {
-      meta: { kind: 'genre', key: genre },
-    })
-  }, [])
-  const preview = usePreviewLoop<string>({
-    fetcher: genreFetcher,
-    onPreviewStart: onGenrePreviewStart,
-  })
-
-  // Warm the queue cache for the first ~14 bubbles so the first tap
-  // is instant. Idempotent — repeat calls skip already-loaded keys.
-  const prefetch = preview.prefetchKeys
-  useEffect(() => {
-    const keys = bubbles.slice(0, 14).map((b) => b.genre)
-    if (keys.length > 0) prefetch(keys)
-  }, [bubbles, prefetch])
-
-  const handleTogglePreview = useCallback(
-    (genre: string) => {
-      if (preview.playingKey === genre || preview.loadingKey === genre) {
-        preview.stop()
-        return
-      }
-      preview.prime()
-      void preview.start(genre)
-    },
-    [preview],
-  )
-
   const filteredBubbles = useMemo(() => {
     if (!searchQuery.trim()) return bubbles
     const q = searchQuery.toLowerCase()
@@ -1105,10 +1079,7 @@ function GenresStep({
                 selected={selected.includes(
                   b.genre,
                 )}
-                isPlaying={preview.playingKey === b.genre}
-                isLoading={preview.loadingKey === b.genre}
                 onToggle={onToggle}
-                onTogglePreview={handleTogglePreview}
               />
             ))}
           </div>
@@ -1127,14 +1098,6 @@ function GenresStep({
           {counterText}
         </p>
       </div>
-      <audio
-        ref={preview.audioRef}
-        preload="auto"
-        playsInline
-        aria-hidden
-        tabIndex={-1}
-        className="onb-v2-hidden-audio"
-      />
     </>
   )
 }
@@ -1147,8 +1110,8 @@ interface SwipeStepProps {
   playingId: number | null
   audioLoading: boolean
   audioBlocked: boolean
-  onLike: () => void
-  onDislike: () => void
+  onLike: (options?: SwipeDecisionOptions) => void
+  onDislike: (options?: SwipeDecisionOptions) => void
   onSkipCard: () => void
   onTogglePreview: () => void
   reduce: boolean
@@ -1200,15 +1163,21 @@ function SwipeStep({
     }
   }, [tracks, index])
 
-  const handleLike = useCallback(() => {
-    setExitDir(1)
-    onLike()
-  }, [onLike])
+  const handleLike = useCallback(
+    (options?: SwipeDecisionOptions) => {
+      setExitDir(1)
+      onLike(options)
+    },
+    [onLike],
+  )
 
-  const handleDislike = useCallback(() => {
-    setExitDir(-1)
-    onDislike()
-  }, [onDislike])
+  const handleDislike = useCallback(
+    (options?: SwipeDecisionOptions) => {
+      setExitDir(-1)
+      onDislike(options)
+    },
+    [onDislike],
+  )
 
   return (
     <>
@@ -1300,7 +1269,7 @@ function SwipeStep({
               variant="ghost"
               haptic="medium"
               className="onb-v2-swipe-btn onb-v2-swipe-btn--dislike"
-              onClick={handleDislike}
+              onClick={() => handleDislike()}
               ariaLabel={t(
                 'redesign.onboardingV2.swipe.dislike',
               )}
@@ -1322,7 +1291,7 @@ function SwipeStep({
               variant="ghost"
               haptic="medium"
               className="onb-v2-swipe-btn onb-v2-swipe-btn--like"
-              onClick={handleLike}
+              onClick={() => handleLike()}
               ariaLabel={t(
                 'redesign.onboardingV2.swipe.like',
               )}
@@ -1358,8 +1327,8 @@ interface SwipeCardProps {
   isPlaying: boolean
   audioLoading: boolean
   audioBlocked: boolean
-  onLike: () => void
-  onDislike: () => void
+  onLike: (options?: SwipeDecisionOptions) => void
+  onDislike: (options?: SwipeDecisionOptions) => void
   onTogglePreview: () => void
   reduce: boolean
 }
@@ -1379,6 +1348,7 @@ function SwipeCard({
   const transportHideTimerRef = useRef<ReturnType<
     typeof setTimeout
   > | null>(null)
+  const committedRef = useRef(false)
 
   useEffect(() => {
     if (transportHideTimerRef.current) {
@@ -1407,6 +1377,7 @@ function SwipeCard({
   }, [isPlaying, audioLoading, track.id])
 
   const x = useMotionValue(0)
+  const dragControls = useDragControls()
   const xSpan = reduce ? 120 : 200
   const rotate = useTransform(
     x,
@@ -1434,43 +1405,119 @@ function SwipeCard({
     [0.55, 0],
   )
 
-  const handleDragEnd = (
-    _: unknown,
-    info: PanInfo,
-  ) => {
-    const v = info.offset.x
-    if (v > SWIPE_THRESHOLD) {
-      onLike()
-    } else if (v < -SWIPE_THRESHOLD) {
-      onDislike()
-    } else {
+  const resolveSwipeDirection = useCallback(
+    (offsetX: number, velocityX: number): -1 | 0 | 1 => {
+      if (offsetX > SWIPE_THRESHOLD) return 1
+      if (offsetX < -SWIPE_THRESHOLD) return -1
+      if (
+        velocityX > SWIPE_VELOCITY_THRESHOLD &&
+        offsetX > SWIPE_VELOCITY_MIN_OFFSET
+      ) {
+        return 1
+      }
+      if (
+        velocityX < -SWIPE_VELOCITY_THRESHOLD &&
+        offsetX < -SWIPE_VELOCITY_MIN_OFFSET
+      ) {
+        return -1
+      }
+      return 0
+    },
+    [],
+  )
+
+  const commitSwipe = useCallback(
+    (dir: -1 | 1) => {
+      if (committedRef.current) return
+      committedRef.current = true
+      hapticSelection()
+
+      const exitX = dir * (reduce ? 340 : 560)
+      const controls = animate(
+        x,
+        exitX,
+        {
+          duration: reduce ? 0.18 : 0.24,
+          ease: [0.2, 0.65, 0.3, 1],
+        } as ValueAnimationTransition<number>,
+      )
+      void controls.then(() => {
+        if (dir > 0) {
+          onLike({ haptic: false })
+          return
+        }
+        onDislike({ haptic: false })
+      })
+    },
+    [onDislike, onLike, reduce, x],
+  )
+
+  const handleDragEnd = useCallback(
+    (_: unknown, info: PanInfo) => {
+      if (committedRef.current) return
+      const dir = resolveSwipeDirection(
+        info.offset.x,
+        info.velocity.x,
+      )
+      if (dir !== 0) {
+        commitSwipe(dir)
+        return
+      }
       void animate(
         x,
         0,
         SPRING_SNAPPY as ValueAnimationTransition<number>,
       )
+    },
+    [commitSwipe, resolveSwipeDirection, x],
+  )
+
+  useEffect(() => {
+    committedRef.current = false
+    x.set(0)
+  }, [track.id, x])
+
+  const startDrag = useCallback(
+    (event: React.PointerEvent<HTMLDivElement>) => {
+      if (committedRef.current) return
+      if (event.button !== 0) return
+      dragControls.start(event)
+    },
+    [dragControls],
+  )
+
+  const handleTap = useCallback(() => {
+    if (committedRef.current) return
+    if (!onTogglePreview) return
+    if (audioLoading) return
+    if (isPlaying && !transportVisible) {
+      onTogglePreview()
     }
-  }
+  }, [
+    audioLoading,
+    isPlaying,
+    onTogglePreview,
+    transportVisible,
+  ])
 
   return (
     <m.div
       className="onb-v2-swipe-card"
       drag="x"
+      dragControls={dragControls}
+      dragDirectionLock
+      dragListener={false}
       dragConstraints={{
         left: -240,
         right: 240,
       }}
       dragElastic={reduce ? 0.35 : 0.6}
+      dragMomentum={false}
       dragSnapToOrigin={false}
       style={{ x, rotate }}
+      onPointerDownCapture={startDrag}
       onDragEnd={handleDragEnd}
-      onTap={() => {
-        if (!onTogglePreview) return
-        if (audioLoading) return
-        if (isPlaying && !transportVisible) {
-          onTogglePreview()
-        }
-      }}
+      onTap={handleTap}
       whileTap={{ cursor: 'grabbing' }}
       transition={SPRING_SNAPPY}
       variants={{
@@ -1761,43 +1808,6 @@ function ArtistsStep({
   const { t } = useTranslation()
   const [searchQuery, setSearchQuery] = useState('')
 
-  const artistFetcher = useCallback(
-    async (id: number): Promise<Track[]> => {
-      const resp = await api.fetchArtistPreviewQueue(id, 10)
-      return resp.items
-    },
-    [],
-  )
-  const onArtistPreviewStart = useCallback((id: number) => {
-    trackActivationEvent('preview_started', {
-      meta: { kind: 'artist', key: id },
-    })
-  }, [])
-  const preview = usePreviewLoop<number>({
-    fetcher: artistFetcher,
-    onPreviewStart: onArtistPreviewStart,
-  })
-
-  // Warm queue cache for the first ~12 artist cards so the first
-  // tap on ▶ doesn't wait on the network.
-  const prefetch = preview.prefetchKeys
-  useEffect(() => {
-    const ids = artists.slice(0, 12).map((a) => a.id)
-    if (ids.length > 0) prefetch(ids)
-  }, [artists, prefetch])
-
-  const handleTogglePreview = useCallback(
-    (id: number) => {
-      if (preview.playingKey === id || preview.loadingKey === id) {
-        preview.stop()
-        return
-      }
-      preview.prime()
-      void preview.start(id)
-    },
-    [preview],
-  )
-
   const filteredArtists = useMemo(() => {
     if (!searchQuery.trim()) return artists
     const q = searchQuery.toLowerCase()
@@ -1847,66 +1857,36 @@ function ArtistsStep({
               )}
             </div>
             <div className="onboarding-artists-grid">
-              {filteredArtists.map((a) => {
-                const playing = preview.playingKey === a.id
-                const playLoading = preview.loadingKey === a.id
-                return (
-                  <div
-                    key={a.id}
-                    className={
-                      [
-                        'onboarding-artist-card',
-                        selected.includes(a.id) ? 'selected' : '',
-                        playing ? 'is-playing' : '',
-                      ]
-                        .filter(Boolean)
-                        .join(' ')
-                    }
+              {filteredArtists.map((a) => (
+                <div
+                  key={a.id}
+                  className={
+                    [
+                      'onboarding-artist-card',
+                      selected.includes(a.id) ? 'selected' : '',
+                    ]
+                      .filter(Boolean)
+                      .join(' ')
+                  }
+                >
+                  <button
+                    type="button"
+                    className="onboarding-artist-card__toggle"
+                    aria-pressed={selected.includes(a.id)}
+                    onClick={() => onToggle(a.id)}
                   >
-                    <button
-                      type="button"
-                      className="onboarding-artist-card__toggle"
-                      aria-pressed={selected.includes(a.id)}
-                      onClick={() => onToggle(a.id)}
-                    >
-                      <span className="onboarding-artist-cover-wrap">
-                        <CoverImage
-                          coverKey={a.image_key}
-                          className="cover-image"
-                        />
-                      </span>
-                      <span className="onboarding-artist-name">
-                        {a.name}
-                      </span>
-                    </button>
-                    <button
-                      type="button"
-                      className={[
-                        'onboarding-artist-preview-btn',
-                        playing ? 'is-playing' : '',
-                        playLoading ? 'is-loading' : '',
-                      ]
-                        .filter(Boolean)
-                        .join(' ')}
-                      aria-label={
-                        playing
-                          ? t('onboarding.preview.stop')
-                          : t('onboarding.preview.play')
-                      }
-                      onClick={() => handleTogglePreview(a.id)}
-                    >
-                      {playLoading ? (
-                        <span className="onboarding-artist-preview-spinner" />
-                      ) : (
-                        <Icon
-                          name={playing ? 'pause' : 'play'}
-                          size={14}
-                        />
-                      )}
-                    </button>
-                  </div>
-                )
-              })}
+                    <span className="onboarding-artist-cover-wrap">
+                      <CoverImage
+                        coverKey={a.image_key}
+                        className="cover-image"
+                      />
+                    </span>
+                    <span className="onboarding-artist-name">
+                      {a.name}
+                    </span>
+                  </button>
+                </div>
+              ))}
               {filteredArtists.length === 0 && (
                 <p className="onb-v2-artists-empty">
                   {t('onboarding.artists.empty')}
@@ -1916,14 +1896,6 @@ function ArtistsStep({
           </>
         )}
       </div>
-      <audio
-        ref={preview.audioRef}
-        preload="auto"
-        playsInline
-        aria-hidden
-        tabIndex={-1}
-        className="onb-v2-hidden-audio"
-      />
     </>
   )
 }

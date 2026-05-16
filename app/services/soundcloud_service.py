@@ -622,84 +622,92 @@ class SoundCloudService:
             saw_manifest_404 = False
             saw_transient_network_error = False
             for protocol in protocols_order:
-                selected = next(
-                    (
-                        t
-                        for t in transcodings
-                        if t.get("format", {}).get("protocol") == protocol
-                        and not t.get("snipped")
-                    ),
-                    None,
-                )
-                if not selected:
+                variants = [
+                    t
+                    for t in transcodings
+                    if t.get("format", {}).get("protocol") == protocol
+                    and not t.get("snipped")
+                    and isinstance(t.get("url"), str)
+                ]
+                if not variants:
                     continue
                 attempted = True
-                attempted_protocols.append(protocol)
-                try:
-                    r = await client.get(selected["url"], params=params)
-                except httpx.HTTPError as exc:
-                    saw_transient_network_error = True
-                    logger.warning(
-                        "soundcloud_transcoding_network_error",
-                        protocol=protocol,
-                        error=type(exc).__name__,
-                        force_direct=force_direct,
+                if protocol not in attempted_protocols:
+                    attempted_protocols.append(protocol)
+                for index, selected in enumerate(variants, start=1):
+                    try:
+                        r = await client.get(selected["url"], params=params)
+                    except httpx.HTTPError as exc:
+                        saw_transient_network_error = True
+                        logger.warning(
+                            "soundcloud_transcoding_network_error",
+                            protocol=protocol,
+                            variant_index=index,
+                            variant_count=len(variants),
+                            error=type(exc).__name__,
+                            force_direct=force_direct,
+                        )
+                        continue
+                    if r.status_code in (401, 403):
+                        raise HTTPException(
+                            status_code=(
+                                status.HTTP_503_SERVICE_UNAVAILABLE
+                            ),
+                            detail=_sc_client_auth_error_detail(
+                                stage="transcoding_manifest",
+                                upstream_status=r.status_code,
+                            ),
+                        )
+                    if r.status_code == 404:
+                        saw_manifest_404 = True
+                        logger.warning(
+                            "soundcloud_transcoding_manifest_404",
+                            protocol=protocol,
+                            variant_index=index,
+                            variant_count=len(variants),
+                            force_direct=force_direct,
+                        )
+                        continue
+                    if not r.is_success:
+                        logger.warning(
+                            "soundcloud_transcoding_http_error",
+                            status_code=r.status_code,
+                            protocol=protocol,
+                            variant_index=index,
+                            variant_count=len(variants),
+                            force_direct=force_direct,
+                        )
+                        report_outbound_proxy_result(proxy_url, ok=False)
+                        raise HTTPException(
+                            status_code=status.HTTP_502_BAD_GATEWAY,
+                            detail=_sc_error_detail(
+                                code="soundcloud_upstream_http_error",
+                                message="SoundCloud upstream error",
+                                reason="provider_manifest_http_error",
+                                stage="transcoding_manifest",
+                                retryable=True,
+                                upstream_status=r.status_code,
+                                attempted_protocols=attempted_protocols,
+                            ),
+                        )
+                    stream_url: str = r.json()["url"]
+                    protocol_out: str = selected.get("format", {}).get(
+                        "protocol", protocol
                     )
-                    continue
-                if r.status_code in (401, 403):
-                    raise HTTPException(
-                        status_code=(status.HTTP_503_SERVICE_UNAVAILABLE),
-                        detail=_sc_client_auth_error_detail(
-                            stage="transcoding_manifest",
-                            upstream_status=r.status_code,
-                        ),
+                    cache_ttl = (
+                        settings.stream_url_cache_ttl_soundcloud_hls
+                        if protocol_out == "hls"
+                        else settings.stream_url_cache_ttl_soundcloud
                     )
-                if r.status_code == 404:
-                    saw_manifest_404 = True
-                    logger.warning(
-                        "soundcloud_transcoding_manifest_404",
-                        protocol=protocol,
-                        force_direct=force_direct,
+                    await set_cached_stream(
+                        CACHE_KEY_SC,
+                        cache_id,
+                        stream_url,
+                        protocol_out,
+                        cache_ttl,
                     )
-                    continue
-                if not r.is_success:
-                    logger.warning(
-                        "soundcloud_transcoding_http_error",
-                        status_code=r.status_code,
-                        protocol=protocol,
-                        force_direct=force_direct,
-                    )
-                    report_outbound_proxy_result(proxy_url, ok=False)
-                    raise HTTPException(
-                        status_code=status.HTTP_502_BAD_GATEWAY,
-                        detail=_sc_error_detail(
-                            code="soundcloud_upstream_http_error",
-                            message="SoundCloud upstream error",
-                            reason="provider_manifest_http_error",
-                            stage="transcoding_manifest",
-                            retryable=True,
-                            upstream_status=r.status_code,
-                            attempted_protocols=attempted_protocols,
-                        ),
-                    )
-                stream_url: str = r.json()["url"]
-                protocol_out: str = selected.get("format", {}).get(
-                    "protocol", protocol
-                )
-                cache_ttl = (
-                    settings.stream_url_cache_ttl_soundcloud_hls
-                    if protocol_out == "hls"
-                    else settings.stream_url_cache_ttl_soundcloud
-                )
-                await set_cached_stream(
-                    CACHE_KEY_SC,
-                    cache_id,
-                    stream_url,
-                    protocol_out,
-                    cache_ttl,
-                )
-                report_outbound_proxy_result(proxy_url, ok=True)
-                return stream_url, protocol_out
+                    report_outbound_proxy_result(proxy_url, ok=True)
+                    return stream_url, protocol_out
 
             if not attempted:
                 raise HTTPException(
