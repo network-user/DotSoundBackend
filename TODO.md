@@ -1,5 +1,20 @@
 # DotSound - TODO Tracker
 
+- [x] **SoundCloud artist station: URN refs + admin probe (2026-05-16)**
+  - `app/services/soundcloud_service.py`: station sync теперь извлекает
+    треки из `tracks[].urn` / `tracks[].uri` / `tracks[].id` и ходит в
+    `/tracks?urns=...` или `/tracks?ids=...` по фактическому типу refs.
+    Это закрывает сценарий, где SoundCloud больше не отдаёт numeric `id`
+    в station payload и release создавался с 0 треков.
+  - `SoundCloudService.import_or_get_track`: `external_id` и `sc_uri`
+    нормализуются из `urn`/`uri` при отсутствии legacy `id`.
+  - Admin API: `GET /api/v1/admin/artists/{artist_id}/catalog/station-probe`
+    возвращает статус station, synthetic release id, число полученных и
+    импортируемых треков, текущий count в релизе и список треков.
+  - Admin UI: в редакторе каталога артиста добавлена кнопка
+    «Проверить station» с выводом результата запроса и per-track статуса.
+  - Тесты: покрыты URN refs, station playlist kind и admin station probe.
+
 - [x] **Яндекс.Музыка: переход на api.music.yandex.net + прогрессивная загрузка (2026-05-16)**
   - `DotSoundPrivateCore/services/outbound/profiles.py`: заменён профиль `firefox124` → `edge101`
     (curl_cffi 0.7.4 не поддерживает firefox), добавлен `resolve_impersonate` + fallback на chrome124.

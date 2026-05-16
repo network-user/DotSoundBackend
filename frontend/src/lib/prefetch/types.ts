@@ -104,7 +104,7 @@ export const DEFAULT_PREFETCH_POLICY: PrefetchPolicySnapshot = {
     weekly_top: 3,
     forgotten_treasures: 3,
     user_choice: 3,
-    radio: 3,
+    radio: 5,
     queue: 3,
     playback: 3,
     search_results: 3,

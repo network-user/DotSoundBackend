@@ -69,7 +69,6 @@ export function RadioView() {
     playNext,
     playPrev,
     playRadioPrevious,
-    playTrack,
     togglePlay,
     startRadio,
     stopRadio,
@@ -553,12 +552,12 @@ export function RadioView() {
           tabIndex={0}
           onClick={() => {
             haptic('light')
-            void playTrack(nextTrack)
+            void handleSwipe('next')
           }}
           onKeyDown={(e) => {
             if (e.key === 'Enter' || e.key === ' ') {
               e.preventDefault()
-              void playTrack(nextTrack)
+              void handleSwipe('next')
             }
           }}
         >

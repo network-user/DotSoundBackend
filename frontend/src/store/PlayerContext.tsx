@@ -432,6 +432,51 @@ type _PlayerSnapshotV2 = {
 const _QUEUE_PERSIST_MAX = 100
 const _QUEUE_PERSIST_TTL_MS = 7 * 24 * 60 * 60 * 1000
 
+const _RADIO_STATE_KEY = 'player-radio-state'
+
+function _saveRadioState(
+  mode: boolean,
+  seedTrackId: number | null,
+): void {
+  try {
+    if (mode && seedTrackId != null) {
+      sessionStorage.setItem(
+        _RADIO_STATE_KEY,
+        JSON.stringify({ mode, seedTrackId }),
+      )
+    } else {
+      sessionStorage.removeItem(_RADIO_STATE_KEY)
+    }
+  } catch {
+    /* quota / private mode */
+  }
+}
+
+function _loadRadioState(): {
+  mode: true
+  seedTrackId: number
+} | null {
+  try {
+    const raw = sessionStorage.getItem(_RADIO_STATE_KEY)
+    if (!raw) return null
+    const parsed = JSON.parse(raw) as {
+      mode?: boolean
+      seedTrackId?: number
+    }
+    if (
+      parsed?.mode === true &&
+      typeof parsed.seedTrackId === 'number' &&
+      Number.isInteger(parsed.seedTrackId) &&
+      parsed.seedTrackId > 0
+    ) {
+      return { mode: true, seedTrackId: parsed.seedTrackId }
+    }
+  } catch {
+    /* ignore */
+  }
+  return null
+}
+
 function _cloneTrackForStorage(t: Track): Track {
   const { resume_position_seconds: _r, ...rest } = t
   return rest as Track
@@ -712,6 +757,7 @@ export function PlayerProvider({
   )
   const swCachePrefetchAbortRef = useRef<AbortController | null>(null)
   const swCachePrefetchTrackIdRef = useRef<number | null>(null)
+  const swCachePrefetchSecondAbortRef = useRef<AbortController | null>(null)
   const audioCtxRef =
     useRef<AudioContext | null>(null)
   const filtersRef = useRef<BiquadFilterNode[]>([])
@@ -1040,6 +1086,13 @@ export function PlayerProvider({
     if (!audio || restoredRef.current) return
     restoredRef.current = true
     const saved = _loadState()
+    const savedRadio = _loadRadioState()
+    if (savedRadio) {
+      radioModeRef.current = true
+      radioSeedTrackIdRef.current = savedRadio.seedTrackId
+      setRadioMode(true)
+      setRadioSeedTrackId(savedRadio.seedTrackId)
+    }
     if (saved.queue && saved.queue.length > 0) {
       manualQueueRef.current = [...saved.queue]
       setQueue([...saved.queue])
@@ -1384,6 +1437,7 @@ export function PlayerProvider({
     radioSeedTrackIdRef.current = null
     setRadioMode(false)
     setRadioSeedTrackId(null)
+    _saveRadioState(false, null)
     manualQueueRef.current = []
     setQueue([])
     playNextInFlightRef.current = false
@@ -2195,6 +2249,7 @@ export function PlayerProvider({
         radioSeedTrackIdRef.current = null
         setRadioMode(false)
         setRadioSeedTrackId(null)
+        _saveRadioState(false, null)
       }
     }
     if (!radioModeRef.current && !isInjectedAdvance) {
@@ -2633,6 +2688,7 @@ export function PlayerProvider({
     radioPlayedIdsRef.current = new Set([seedTrack.id])
     setRadioMode(true)
     setRadioSeedTrackId(seedTrack.id)
+    _saveRadioState(true, seedTrack.id)
     try {
       const result = await api.getRadio(seedTrack.id, 15)
       const newTracks = result.tracks.filter(
@@ -2643,6 +2699,14 @@ export function PlayerProvider({
       }
       manualQueueRef.current = [...newTracks]
       setQueue([...newTracks])
+      try {
+        void getPrefetchManager().enqueue(newTracks, {
+          context: 'radio',
+          replaceContext: true,
+        })
+      } catch {
+        /* ignore prefetch errors */
+      }
     } catch {
       /* best-effort */
     }
@@ -2659,6 +2723,7 @@ export function PlayerProvider({
     radioSeedTrackIdRef.current = null
     setRadioMode(false)
     setRadioSeedTrackId(null)
+    _saveRadioState(false, null)
     manualQueueRef.current = []
     setQueue([])
     const a = audioRef.current
@@ -2916,6 +2981,14 @@ export function PlayerProvider({
         swCachePrefetchAbortRef.current = null
       }
       swCachePrefetchTrackIdRef.current = null
+      if (swCachePrefetchSecondAbortRef.current) {
+        try {
+          swCachePrefetchSecondAbortRef.current.abort()
+        } catch {
+          /* ignore */
+        }
+        swCachePrefetchSecondAbortRef.current = null
+      }
     }
 
     const preloadFirst = (tracks: Track[]) => {
@@ -2974,6 +3047,33 @@ export function PlayerProvider({
         })
       }
 
+      // In radio mode prefetch the second-next track into SW cache
+      // immediately (fire-and-forget, low network priority). This
+      // ensures that when the current track ends and we advance to
+      // tracks[0], tracks[1] is already warm and ready to go.
+      if (radioModeRef.current && tracks.length > 1) {
+        const second = tracks[1]
+        if (
+          second &&
+          second.access_mode !== 'official_embed' &&
+          second.access_mode !== 'external_link' &&
+          second.access_mode !== 'third_party_stream' &&
+          !shouldUseInternalHlsPlayback(second)
+        ) {
+          const ctrl2 = new AbortController()
+          swCachePrefetchSecondAbortRef.current = ctrl2
+          void prefetchProgressiveBodyForCache(second.id, {
+            signal: ctrl2.signal,
+          }).finally(() => {
+            if (
+              swCachePrefetchSecondAbortRef.current === ctrl2
+            ) {
+              swCachePrefetchSecondAbortRef.current = null
+            }
+          })
+        }
+      }
+
       void (async () => {
         if (!shouldUseInternalHlsPlayback(next)) return
         let HlsMod: Awaited<ReturnType<typeof loadHlsClass>>
@@ -3025,7 +3125,7 @@ export function PlayerProvider({
         preloadFirst(res.tracks)
         try {
           void getPrefetchManager().enqueue(res.tracks, {
-            context: 'playback',
+            context: radioModeRef.current ? 'radio' : 'playback',
             replaceContext: true,
           })
         } catch {

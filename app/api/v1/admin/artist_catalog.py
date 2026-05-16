@@ -30,14 +30,13 @@ from app.dependencies import (
     require_step_up,
 )
 from app.models.user import User
-from app.repositories.artist_catalog import ArtistCatalogRepository
 from app.repositories.artist import ArtistRepository
+from app.repositories.artist_catalog import ArtistCatalogRepository
 from app.schemas.admin_artist_catalog import (
     AdminArtistBulkEnrichError,
     AdminArtistBulkEnrichRequest,
     AdminArtistBulkEnrichResponse,
     AdminArtistCatalogOverviewResponse,
-    AdminArtistStationProbeResponse,
     AdminArtistCatalogSyncEnabledRequest,
     AdminArtistCatalogSyncEnabledResponse,
     AdminArtistListItemResponse,
@@ -45,6 +44,7 @@ from app.schemas.admin_artist_catalog import (
     AdminArtistLyricsSyncRequest,
     AdminArtistLyricsSyncResponse,
     AdminArtistSoundcloudPatch,
+    AdminArtistStationProbeResponse,
     AdminCatalogBulkSyncError,
     AdminCatalogBulkSyncRequest,
     AdminCatalogBulkSyncResponse,

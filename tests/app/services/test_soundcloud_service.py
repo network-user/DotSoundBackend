@@ -17,8 +17,8 @@ from app.services.soundcloud_service import (
     SoundCloudRateLimitError,
     SoundCloudService,
     SoundCloudStationNotAvailable,
-    extract_soundcloud_track_ref,
     extract_soundcloud_profile_permalink_from_url,
+    extract_soundcloud_track_ref,
     normalize_soundcloud_permalink,
     soundcloud_track_external_id,
     synthetic_soundcloud_id_for_artist_station,
@@ -1582,7 +1582,7 @@ async def test_fetch_tracks_by_refs_bulk_uses_urns_param(
 )
 @patch.object(
     SoundCloudService,
-    "fetch_tracks_by_ids_bulk",
+    "fetch_tracks_by_refs_bulk",
     new_callable=AsyncMock,
 )
 async def test_fetch_expanded_artist_station_playlist(
@@ -1714,7 +1714,7 @@ async def test_fetch_expanded_artist_station_playlist_wrong_kind(
 )
 @patch.object(
     SoundCloudService,
-    "fetch_tracks_by_ids_bulk",
+    "fetch_tracks_by_refs_bulk",
     new_callable=AsyncMock,
 )
 async def test_fetch_expanded_artist_station_accepts_playlist_kind(

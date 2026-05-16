@@ -18,9 +18,9 @@ from app.repositories.artist import ArtistRepository
 from app.repositories.artist_catalog import ArtistCatalogRepository
 from app.schemas.admin_artist_catalog import (
     AdminArtistCatalogOverviewResponse,
+    AdminArtistSoundcloudPatch,
     AdminArtistStationProbeResponse,
     AdminArtistStationProbeTrack,
-    AdminArtistSoundcloudPatch,
     AdminCatalogReleaseCreate,
     AdminCatalogReleasePatch,
     AdminCatalogReleaseSummaryResponse,
