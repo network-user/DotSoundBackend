@@ -266,6 +266,8 @@ class OnboardingService:
 
         Wraps :func:`order_taste_swipe_tracks` from PrivateCore so
         the chosen tracks rotate genre and respect the user locale.
+        When the user picked artists in onboarding, their catalogue
+        tracks are mixed into the candidate pool first.
         """
         pref = await self._pref_repo.get_by_user_id(user_id)
         user = await self._user_repo.get_by_id(user_id)
@@ -273,23 +275,66 @@ class OnboardingService:
         genres = (
             pref.preferred_genres if pref and pref.preferred_genres else None
         )
+        artist_ids = (
+            list(pref.preferred_artist_ids)
+            if pref and pref.preferred_artist_ids
+            else []
+        )
 
         candidate_count = max(
             count * _TASTE_CANDIDATE_MULTIPLIER,
             count + 5,
         )
 
-        q = select(Track).where(
-            Track.is_active.is_(True),
-            Track.is_public.is_(True),
-            TrackRepository._playback_listing_allowed(),
-        )
-        if genres:
-            q = q.where(Track.genre.in_(genres))
-        q = q.order_by(func.random()).limit(candidate_count)
+        candidates: list[Track] = []
+        seen: set[int] = set()
 
-        result = await self._session.execute(q)
-        candidates = list(result.scalars().all())
+        if artist_ids:
+            per_artist = max(
+                2,
+                candidate_count // max(len(artist_ids), 1),
+            )
+            for artist_id in artist_ids[:24]:
+                track_ids = await self._artist_repo.get_artist_track_ids(
+                    artist_id,
+                    limit=per_artist * 3,
+                )
+                if not track_ids:
+                    continue
+                tracks = (
+                    await self._track_repo.list_active_by_ids_preserve_order(
+                        track_ids,
+                    )
+                )
+                for track in tracks:
+                    if track.id in seen:
+                        continue
+                    if not self._is_swipe_playable_track(track):
+                        continue
+                    candidates.append(track)
+                    seen.add(track.id)
+                    if len(candidates) >= candidate_count:
+                        break
+                if len(candidates) >= candidate_count:
+                    break
+
+        remaining = candidate_count - len(candidates)
+        if remaining > 0:
+            q = select(Track).where(
+                Track.is_active.is_(True),
+                Track.is_public.is_(True),
+                TrackRepository._playback_listing_allowed(),
+            )
+            if genres:
+                q = q.where(Track.genre.in_(genres))
+            if seen:
+                q = q.where(Track.id.not_in(seen))
+            q = q.order_by(func.random()).limit(remaining)
+
+            result = await self._session.execute(q)
+            for track in result.scalars().all():
+                candidates.append(track)
+                seen.add(track.id)
 
         if len(candidates) < candidate_count:
             fallback = await self._session.execute(
@@ -302,16 +347,22 @@ class OnboardingService:
                 .order_by(Track.play_count.desc())
                 .limit(candidate_count)
             )
-            seen = {t.id for t in candidates}
-            for t in fallback.scalars().all():
-                if t.id not in seen:
-                    candidates.append(t)
-                    seen.add(t.id)
+            for track in fallback.scalars().all():
+                if track.id in seen:
+                    continue
+                candidates.append(track)
+                seen.add(track.id)
                 if len(candidates) >= candidate_count:
                     break
 
         if not candidates:
             return []
+
+        primary_by_track = (
+            await self._artist_repo.get_primary_artist_ids_for_tracks(
+                [t.id for t in candidates],
+            )
+        )
 
         inputs = [
             TasteTrackInput(
@@ -320,6 +371,7 @@ class OnboardingService:
                 title=t.title,
                 artist=t.artist,
                 play_count=int(t.play_count or 0),
+                primary_artist_id=primary_by_track.get(t.id),
             )
             for t in candidates
         ]
@@ -327,10 +379,20 @@ class OnboardingService:
             inputs,
             locale=locale,
             selected_genres=tuple(genres) if genres else None,
+            selected_artist_ids=tuple(artist_ids) if artist_ids else None,
             config=TasteSwipeConfig(max_count=count),
         )
         by_id = {t.id: t for t in candidates}
         return [by_id[i] for i in ordered_ids if i in by_id]
+
+    @staticmethod
+    def _is_swipe_playable_track(track: Track) -> bool:
+        return bool(
+            track.blob_id
+            and track.file_key
+            and track.is_active
+            and track.duration_seconds
+        )
 
     async def save_calibration(
         self,

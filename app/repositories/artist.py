@@ -334,6 +334,35 @@ class ArtistRepository(BaseRepository[Artist]):
             out.append((int(sid), float(raw)))
         return out
 
+    async def get_primary_artist_ids_for_tracks(
+        self,
+        track_ids: list[int],
+    ) -> dict[int, int]:
+        if not track_ids:
+            return {}
+        min_pos = (
+            select(
+                TrackArtist.track_id.label("tid"),
+                func.min(TrackArtist.position).label("mp"),
+            )
+            .where(TrackArtist.track_id.in_(track_ids))
+            .group_by(TrackArtist.track_id)
+            .subquery()
+        )
+        stmt = select(
+            TrackArtist.track_id,
+            TrackArtist.artist_id,
+        ).join(
+            min_pos,
+            (TrackArtist.track_id == min_pos.c.tid)
+            & (TrackArtist.position == min_pos.c.mp),
+        )
+        result = await self._session.execute(stmt)
+        return {
+            int(track_id): int(artist_id)
+            for track_id, artist_id in result.all()
+        }
+
     async def get_artist_track_ids(
         self,
         artist_id: int,

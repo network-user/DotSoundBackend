@@ -1,13 +1,14 @@
 import {
   type PointerEvent as ReactPointerEvent,
   useEffect,
+  useLayoutEffect,
   useMemo,
   useRef,
   useState,
 } from 'react'
 import { AnimatePresence } from 'framer-motion'
 import { useTranslation } from 'react-i18next'
-import { useNavigate } from 'react-router-dom'
+import { useLocation, useNavigate } from 'react-router-dom'
 import { Icon } from '@/components/Icon/Icon'
 import { TrackList } from '@/components/TrackList/TrackList'
 import { Waveform } from '@/components/Waveform/Waveform'
@@ -61,6 +62,7 @@ function rubberBand(value: number, max: number): number {
 
 export function RadioView() {
   const { t } = useTranslation()
+  const location = useLocation()
   const navigate = useNavigate()
   const { track: currentTrack, queue, radioSessionTimeline } =
     usePlayerMeta()
@@ -95,6 +97,18 @@ export function RadioView() {
     offsetY: number
   } | null>(null)
   const reduceMotion = useReducedMotion()
+
+  useLayoutEffect(() => {
+    setDragX(0)
+    setIsDragging(false)
+    setIsSwitching(false)
+    switchingRef.current = false
+    pointerRef.current = null
+    const main = document.getElementById('main')
+    if (main) {
+      main.scrollLeft = 0
+    }
+  }, [location.pathname])
 
   const historyTracks = useMemo(
     () => [...radioSessionTimeline].reverse(),
@@ -371,6 +385,7 @@ export function RadioView() {
             ) : null}
 
             <m.div
+              key={`disc-shell-${location.key}`}
               className="rh-radio-disc-shell"
               animate={{
                 x: dragX,

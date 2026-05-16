@@ -255,6 +255,9 @@ body.ds-perf-lite .ambient-layer {
 .ambient-stage__content {
   position: relative;
   z-index: 1;
+  width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
 }
 
 @media (prefers-reduced-motion: reduce) {

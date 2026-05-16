@@ -5594,6 +5594,11 @@ body.ds-perf-lite .eq-spectrum__canvas canvas {
   border-radius: var(--radius);
   animation: onb-shimmer 1.6s ease-in-out infinite;
 }
+
+.onb-v2-artists-loading--inline {
+  height: 72px;
+  margin-bottom: var(--space-3);
+}
 @keyframes onb-shimmer {
   0% { background-position: 200% 0; }
   100% { background-position: -200% 0; }

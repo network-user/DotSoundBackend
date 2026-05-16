@@ -268,26 +268,34 @@ function AnimatedRoutes({
 }) {
   const location = useLocation()
   const [displayed, setDisplayed] = useState(location)
-  const lastKey = useRef(location.pathname)
+  const prevPathRef = useRef(location.pathname)
 
   useEffect(() => {
-    if (lastKey.current === location.pathname) return
-    lastKey.current = location.pathname
+    if (prevPathRef.current === location.pathname) return
+
+    const fromPath = prevPathRef.current
+    prevPathRef.current = location.pathname
+
+    const skipViewTransition =
+      fromPath === '/radio' || location.pathname === '/radio'
 
     const doc = document as Document & {
       startViewTransition?: (
         cb: () => void,
       ) => unknown
     }
-    if (typeof doc.startViewTransition === 'function') {
-      doc.startViewTransition(() => {
-        flushSync(() => {
-          setDisplayed(location)
-        })
-      })
-    } else {
+    if (
+      skipViewTransition ||
+      typeof doc.startViewTransition !== 'function'
+    ) {
       setDisplayed(location)
+      return
     }
+    doc.startViewTransition(() => {
+      flushSync(() => {
+        setDisplayed(location)
+      })
+    })
   }, [location])
 
   return (

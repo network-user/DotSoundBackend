@@ -35,11 +35,15 @@ import { GenreBubble } from '@/components/Onboarding/GenreBubble'
 import { useBrandLabel } from '@/lib/brand'
 import { LEGAL_VERSION } from '@/views/legalContent'
 import type {
+  ArtistInfo,
   OnboardingArtistItem,
   OnboardingBootstrap,
   OnboardingTasteDecision,
   Track,
 } from '@/types/api'
+
+const ARTIST_SEARCH_MIN_LEN = 2
+const ARTIST_SEARCH_DEBOUNCE_MS = 320
 
 import '@/styles/onboarding.css'
 
@@ -1801,6 +1805,16 @@ interface ArtistsStepProps {
   loading: boolean
 }
 
+function toOnboardingArtistItem(
+  artist: Pick<ArtistInfo, 'id' | 'name' | 'image_key'>,
+): OnboardingArtistItem {
+  return {
+    id: artist.id,
+    name: artist.name,
+    image_key: artist.image_key,
+  }
+}
+
 function ArtistsStep({
   artists,
   selected,
@@ -1809,14 +1823,67 @@ function ArtistsStep({
 }: ArtistsStepProps) {
   const { t } = useTranslation()
   const [searchQuery, setSearchQuery] = useState('')
+  const [searchResults, setSearchResults] = useState<
+    OnboardingArtistItem[]
+  >([])
+  const [searchLoading, setSearchLoading] = useState(false)
 
-  const filteredArtists = useMemo(() => {
-    if (!searchQuery.trim()) return artists
-    const q = searchQuery.toLowerCase()
-    return artists.filter((a) =>
-      a.name.toLowerCase().includes(q),
+  useEffect(() => {
+    const q = searchQuery.trim()
+    if (q.length < ARTIST_SEARCH_MIN_LEN) {
+      setSearchResults([])
+      setSearchLoading(false)
+      return
+    }
+
+    let cancelled = false
+    const timer = window.setTimeout(() => {
+      setSearchLoading(true)
+      api
+        .getArtists(q, 40)
+        .then((res) => {
+          if (cancelled) return
+          setSearchResults(
+            res.items.map((item) => toOnboardingArtistItem(item)),
+          )
+        })
+        .catch(() => {
+          if (cancelled) return
+          setSearchResults([])
+        })
+        .finally(() => {
+          if (!cancelled) setSearchLoading(false)
+        })
+    }, ARTIST_SEARCH_DEBOUNCE_MS)
+
+    return () => {
+      cancelled = true
+      window.clearTimeout(timer)
+    }
+  }, [searchQuery])
+
+  const displayedArtists = useMemo(() => {
+    const q = searchQuery.trim().toLowerCase()
+    if (q.length >= ARTIST_SEARCH_MIN_LEN) {
+      const byId = new Map<number, OnboardingArtistItem>()
+      for (const artist of artists) {
+        if (selected.includes(artist.id)) {
+          byId.set(artist.id, artist)
+        }
+      }
+      for (const artist of searchResults) {
+        byId.set(artist.id, artist)
+      }
+      return Array.from(byId.values())
+    }
+    if (!q) return artists
+    return artists.filter((artist) =>
+      artist.name.toLowerCase().includes(q),
     )
-  }, [artists, searchQuery])
+  }, [artists, searchQuery, searchResults, selected])
+
+  const isCatalogSearch =
+    searchQuery.trim().length >= ARTIST_SEARCH_MIN_LEN
 
   return (
     <>
@@ -1858,8 +1925,11 @@ function ArtistsStep({
                 </button>
               )}
             </div>
+            {searchLoading && isCatalogSearch ? (
+              <m.div className="onb-v2-artists-loading onb-v2-artists-loading--inline" />
+            ) : null}
             <div className="onboarding-artists-grid">
-              {filteredArtists.map((a) => (
+              {displayedArtists.map((a) => (
                 <div
                   key={a.id}
                   className={
@@ -1889,7 +1959,7 @@ function ArtistsStep({
                   </button>
                 </div>
               ))}
-              {filteredArtists.length === 0 && (
+              {displayedArtists.length === 0 && !searchLoading && (
                 <p className="onb-v2-artists-empty">
                   {t('onboarding.artists.empty')}
                 </p>
