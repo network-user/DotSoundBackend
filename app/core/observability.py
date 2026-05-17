@@ -43,6 +43,7 @@ _PROM_RECSYS_IMPRESSION_POSITION = None
 _PROM_OFFLINE_ELIGIBILITY = None
 _PROM_OFFLINE_PREFETCH = None
 _PROM_CLIENT_PLAYBACK_EVENTS = None
+_PROM_CLIENT_PLAYBACK_SOURCE = None
 
 _PROM_TOR_CIRCUIT_FAILURE_RATE = None
 _PROM_OUTBOUND_PROXY_POOL_SIZE = None
@@ -444,6 +445,7 @@ def setup_metrics(application: object) -> None:
     global _PROM_OFFLINE_ELIGIBILITY
     global _PROM_OFFLINE_PREFETCH
     global _PROM_CLIENT_PLAYBACK_EVENTS
+    global _PROM_CLIENT_PLAYBACK_SOURCE
     _PROM_OFFLINE_ELIGIBILITY = Counter(
         "offline_eligibility_checks_total",
         (
@@ -463,6 +465,19 @@ def setup_metrics(application: object) -> None:
         "client_playback_events_total",
         "Client playback telemetry events by event name and surface.",
         ["event_name", "surface"],
+        registry=registry,
+    )
+    _PROM_CLIENT_PLAYBACK_SOURCE = Counter(
+        "client_playback_source_chosen_total",
+        (
+            "Which client-side playback path served a track switch, "
+            "labelled by source kind and surface. ``cached_idb`` is a "
+            "blob URL from the IndexedDB pinned cache, "
+            "``cached_sw_progressive`` is a blob URL from the warm "
+            "Workbox cache, ``cached`` is a legacy unsplit value "
+            "kept for backwards compatibility with older clients."
+        ),
+        ["chosen_source", "surface"],
         registry=registry,
     )
 
@@ -889,6 +904,44 @@ def client_playback_event_observed(
     _PROM_CLIENT_PLAYBACK_EVENTS.labels(
         event_name=event_name,
         surface=surface,
+    ).inc()
+
+
+_PLAYBACK_SOURCE_LABELS = frozenset(
+    {
+        "hls",
+        "progressive",
+        "third_party_stream",
+        "cached",
+        "cached_idb",
+        "cached_sw_progressive",
+    }
+)
+
+
+def client_playback_source_observed(
+    *,
+    chosen_source: str,
+    surface: str,
+) -> None:
+    """Record one ``playback_source_chosen`` signal split by source.
+
+    Cardinality is bounded — ``chosen_source`` is validated against a
+    small allowlist before reaching the Prometheus client, and
+    unknown values are coerced to ``"unknown"`` so a buggy / forged
+    client can't blow up the metric series.
+    """
+    if _PROM_CLIENT_PLAYBACK_SOURCE is None:
+        return
+    label = (
+        chosen_source
+        if chosen_source in _PLAYBACK_SOURCE_LABELS
+        else "unknown"
+    )
+    safe_surface = surface if surface in {"player", "radio"} else "unknown"
+    _PROM_CLIENT_PLAYBACK_SOURCE.labels(
+        chosen_source=label,
+        surface=safe_surface,
     ).inc()
 
 

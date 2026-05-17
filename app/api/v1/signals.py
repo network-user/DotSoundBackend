@@ -2,7 +2,10 @@ import structlog
 from fastapi import APIRouter, Depends
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.observability import client_playback_event_observed
+from app.core.observability import (
+    client_playback_event_observed,
+    client_playback_source_observed,
+)
 from app.dependencies import get_current_user, get_db
 from app.models.user import User
 from app.schemas.signal import (
@@ -18,9 +21,7 @@ from app.services.signal_service import (
     SignalService,
 )
 
-router = APIRouter(
-    prefix="/signals", tags=["signals"]
-)
+router = APIRouter(prefix="/signals", tags=["signals"])
 logger = structlog.get_logger(__name__)
 
 
@@ -86,6 +87,14 @@ async def record_client_playback_event(
         event_name=body.event_name,
         surface=body.surface,
     )
+    if (
+        body.event_name == "playback_source_chosen"
+        and body.chosen_source is not None
+    ):
+        client_playback_source_observed(
+            chosen_source=body.chosen_source,
+            surface=body.surface,
+        )
     if body.event_name == "radio_auto_skip_exhausted":
         await record_radio_auto_skip_reason(
             error_code=body.error_code,

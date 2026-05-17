@@ -178,6 +178,59 @@ describe('progressive SW cache helpers', () => {
     expect(isProgressiveSwCachedSync(777)).toBe(true)
     fetchSpy.mockRestore()
   })
+
+  it('legacy sweep deletes unstamped entries on first load', async () => {
+    localStorage.removeItem('ds:progressive-sw-legacy-cleaned:v1')
+    const stampedReq = new Request(
+      'https://example.test/api/v1/tracks/1/audio?force_progressive=true',
+    )
+    const legacyReq = new Request(
+      'https://example.test/api/v1/tracks/2/audio?force_progressive=true',
+    )
+    const stampedRes = new Response(new Uint8Array([1]), {
+      status: 200,
+      headers: { 'x-dotsound-cache-source': 'prefetch' },
+    })
+    const legacyRes = new Response(new Uint8Array([2]), {
+      status: 200,
+      headers: {},
+    })
+    const cacheStore = new Map<string, Response>([
+      [stampedReq.url, stampedRes],
+      [legacyReq.url, legacyRes],
+    ])
+    const requestsByUrl = new Map<string, Request>([
+      [stampedReq.url, stampedReq],
+      [legacyReq.url, legacyReq],
+    ])
+    const cache = {
+      match: vi.fn(async (req: Request | string) => {
+        const url = typeof req === 'string' ? req : req.url
+        return cacheStore.get(url)
+      }),
+      keys: vi.fn(async () =>
+        Array.from(cacheStore.keys()).map(
+          (url) => requestsByUrl.get(url) ?? new Request(url),
+        ),
+      ),
+      delete: vi.fn(async (req: Request | string) => {
+        const url = typeof req === 'string' ? req : req.url
+        return cacheStore.delete(url)
+      }),
+      put: vi.fn(),
+    }
+    ;(globalThis as { caches?: unknown }).caches = {
+      open: vi.fn(async () => cache),
+    }
+    await ensureProgressiveCachedIdsLoaded()
+    expect(cache.delete).toHaveBeenCalledTimes(1)
+    expect(cacheStore.size).toBe(1)
+    expect(isProgressiveSwCachedSync(1)).toBe(true)
+    expect(isProgressiveSwCachedSync(2)).toBe(false)
+    expect(
+      localStorage.getItem('ds:progressive-sw-legacy-cleaned:v1'),
+    ).toBe('1')
+  })
 })
 
 describe('getEffectiveCacheLimit', () => {

@@ -14,9 +14,7 @@ async def _quick_track(
     user_id: int,
 ) -> int:
     headers = await auth_headers(client, user_id)
-    await client.get(
-        "/api/v1/tracks/?size=1", headers=headers
-    )
+    await client.get("/api/v1/tracks/?size=1", headers=headers)
     return 1
 
 
@@ -114,9 +112,7 @@ async def test_record_client_playback_event(
             "consecutive_skips": 3,
             "queue_size": 0,
             "error_code": "soundcloud_stream_unavailable",
-            "error_reason": (
-                "provider_manifest_not_found_for_all_formats"
-            ),
+            "error_reason": ("provider_manifest_not_found_for_all_formats"),
         },
         headers=headers,
     )
@@ -213,6 +209,7 @@ async def test_record_client_playback_source_chosen(
     headers = await auth_headers(client, 9006)
 
     observed: list[tuple[str, str]] = []
+    sources: list[tuple[str, str]] = []
 
     def fake_observed(
         *,
@@ -221,9 +218,20 @@ async def test_record_client_playback_source_chosen(
     ) -> None:
         observed.append((event_name, surface))
 
+    def fake_source(
+        *,
+        chosen_source: str,
+        surface: str,
+    ) -> None:
+        sources.append((chosen_source, surface))
+
     monkeypatch.setattr(
         "app.api.v1.signals.client_playback_event_observed",
         fake_observed,
+    )
+    monkeypatch.setattr(
+        "app.api.v1.signals.client_playback_source_observed",
+        fake_source,
     )
 
     r = await client.post(
@@ -244,6 +252,47 @@ async def test_record_client_playback_source_chosen(
     assert r.status_code == 200
     assert r.json()["status"] == "ok"
     assert observed == [("playback_source_chosen", "player")]
+    assert sources == [("hls", "player")]
+
+
+async def test_record_client_playback_source_split_labels(
+    client: AsyncClient,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    await create_test_user(client, 9009)
+    headers = await auth_headers(client, 9009)
+
+    sources: list[tuple[str, str]] = []
+
+    def fake_source(
+        *,
+        chosen_source: str,
+        surface: str,
+    ) -> None:
+        sources.append((chosen_source, surface))
+
+    monkeypatch.setattr(
+        "app.api.v1.signals.client_playback_source_observed",
+        fake_source,
+    )
+
+    for label in ("cached_idb", "cached_sw_progressive"):
+        r = await client.post(
+            "/api/v1/signals/client/playback-event",
+            json={
+                "event_name": "playback_source_chosen",
+                "surface": "player",
+                "current_track_id": 1,
+                "chosen_source": label,
+            },
+            headers=headers,
+        )
+        assert r.status_code == 200, label
+
+    assert sources == [
+        ("cached_idb", "player"),
+        ("cached_sw_progressive", "player"),
+    ]
 
 
 async def test_record_client_track_switch_latency(

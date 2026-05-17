@@ -7,9 +7,7 @@ class ListenEventRequest(BaseModel):
     track_id: int
     duration_listened: int = Field(ge=0)
     total_duration: int | None = None
-    source_context: str | None = Field(
-        None, max_length=30
-    )
+    source_context: str | None = Field(None, max_length=30)
     last_position: int | None = Field(default=None, ge=0)
 
 
@@ -45,13 +43,18 @@ class ClientPlaybackEventRequest(BaseModel):
     hls_message: str | None = Field(default=None, max_length=240)
     hls_url: str | None = Field(default=None, max_length=512)
     chosen_source: (
-        Literal["hls", "progressive", "third_party_stream", "cached"]
+        Literal[
+            "hls",
+            "progressive",
+            "third_party_stream",
+            "cached",
+            "cached_idb",
+            "cached_sw_progressive",
+        ]
         | None
     ) = None
     tt_canplay_ms: int | None = Field(default=None, ge=0, le=120_000)
-    tt_first_play_ms: int | None = Field(
-        default=None, ge=0, le=120_000
-    )
+    tt_first_play_ms: int | None = Field(default=None, ge=0, le=120_000)
     effective_type: str | None = Field(default=None, max_length=24)
     save_data: bool | None = None
     downlink_mbps: float | None = Field(default=None, ge=0, le=10_000)

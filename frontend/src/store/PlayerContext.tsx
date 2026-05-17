@@ -2445,7 +2445,8 @@ export function PlayerProvider({
         | 'hls'
         | 'progressive'
         | 'third_party_stream'
-        | 'cached',
+        | 'cached_idb'
+        | 'cached_sw_progressive',
     ) => {
       // Fire-and-forget signal that records which playback path was
       // selected for this track switch and how long it took to reach
@@ -3795,6 +3796,10 @@ export function PlayerProvider({
       let cachedUrl: string | null = isCachedSync(newTrack.id)
         ? await getCachedAudioUrl(newTrack.id)
         : null
+      let cachedSource:
+        | 'cached_idb'
+        | 'cached_sw_progressive'
+        | null = cachedUrl ? 'cached_idb' : null
       // If the track is not in IndexedDB (e.g. it's a third_party
       // stream which legal policy forbids us from pinning offline),
       // fall back to the warm Workbox cache. That cache is populated
@@ -3807,14 +3812,15 @@ export function PlayerProvider({
         isProgressiveSwCachedSync(newTrack.id)
       ) {
         cachedUrl = await getProgressiveSwAudioUrl(newTrack.id)
+        if (cachedUrl) cachedSource = 'cached_sw_progressive'
       }
       if (bail()) return
-      if (cachedUrl) {
+      if (cachedUrl && cachedSource) {
         setIsPlayingFromCache(true)
         recordPlaybackSourceTelemetry(
           audio,
           newTrack.id,
-          'cached',
+          cachedSource,
         )
         await startDirectPlayback(audio, cachedUrl)
         if (bail()) return

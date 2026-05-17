@@ -21,6 +21,9 @@ const PLAYBACK_WARM_DEFAULT_BYTES = 512 * 1024
 const PLAYBACK_WARM_HARD_CAP_BYTES = 2 * 1024 * 1024
 const LS_PLAYBACK_WARM_INDEX_LEGACY = 'ds:playback-warm-index:v1'
 const LS_PLAYBACK_WARM_CLEANED = 'ds:playback-warm-cleaned:v1'
+const LS_PROGRESSIVE_SW_LEGACY_CLEANED =
+  'ds:progressive-sw-legacy-cleaned:v1'
+const PROGRESSIVE_SW_CACHE_SOURCE_HEADER = 'x-dotsound-cache-source'
 
 const PROGRESSIVE_SW_CACHE_NAME = 'progressive-audio-cache'
 // Cap full-body prefetches at ~32 MB so a misconfigured CDN can't
@@ -188,6 +191,12 @@ export async function ensureProgressiveCachedIdsLoaded(): Promise<void> {
     return
   }
   PROGRESSIVE_SW_CACHED_LOAD_LOCK.promise = (async () => {
+    // Run the legacy sweep eagerly before populating the mirror so a
+    // hot ``playTrack`` issued in the first 5 seconds of a session
+    // can't pick up a stale 12 MB-capped blob and serve a truncated
+    // file. After this call the cache contains only entries written
+    // by the new explicit ``cache.put`` path.
+    await _cleanupLegacyProgressiveSwCache()
     try {
       const cache = await caches.open(PROGRESSIVE_SW_CACHE_NAME)
       const requests = await cache.keys()
@@ -547,6 +556,69 @@ async function _cleanupLegacyPlaybackWarmCache(): Promise<void> {
     } catch {
       /* ignore */
     }
+  } catch {
+    /* swallow */
+  }
+}
+
+/**
+ * One-shot migration: pre-2026-05-18 builds wrote progressive audio
+ * bodies into Cache API by relying on the Workbox CacheFirst route
+ * to intercept the warm fetch. That route silently dropped responses
+ * larger than the old 12 MB cap and was racy with audio element
+ * Range requests, so a measurable fraction of "already played" track
+ * entries in ``progressive-audio-cache`` are either truncated or
+ * just missing. The current build writes those entries explicitly
+ * via ``cache.put`` and stamps them with
+ * ``${PROGRESSIVE_SW_CACHE_SOURCE_HEADER}: prefetch``.
+ *
+ * On the first launch under the new build, walk every entry in
+ * ``progressive-audio-cache`` and delete the ones that were not
+ * stamped — they are by definition legacy. New entries (stamped)
+ * survive. The track list rebuilds from scratch on the next play
+ * loop, this time at the new 32 MB cap and via explicit ``cache.put``,
+ * so the user-visible effect is "the cache starts working again
+ * without waiting a week for the old TTL to run out".
+ */
+async function _cleanupLegacyProgressiveSwCache(): Promise<void> {
+  if (typeof window === 'undefined') return
+  if (typeof caches === 'undefined') return
+  try {
+    if (
+      localStorage.getItem(LS_PROGRESSIVE_SW_LEGACY_CLEANED) === '1'
+    ) {
+      return
+    }
+  } catch {
+    return
+  }
+  try {
+    const cache = await caches.open(PROGRESSIVE_SW_CACHE_NAME)
+    const requests = await cache.keys()
+    let deleted = 0
+    for (const req of requests) {
+      try {
+        const res = await cache.match(req)
+        if (!res) continue
+        const stamp = res.headers.get(
+          PROGRESSIVE_SW_CACHE_SOURCE_HEADER,
+        )
+        if (stamp === 'prefetch') continue
+        await cache.delete(req)
+        deleted += 1
+      } catch {
+        /* best effort */
+      }
+    }
+    try {
+      localStorage.setItem(
+        LS_PROGRESSIVE_SW_LEGACY_CLEANED,
+        '1',
+      )
+    } catch {
+      /* ignore */
+    }
+    void deleted
   } catch {
     /* swallow */
   }
@@ -1292,6 +1364,7 @@ function startGcScheduler(): void {
   gcSchedulerStarted = true
   window.setTimeout(() => {
     void _cleanupLegacyPlaybackWarmCache().catch(() => {})
+    void _cleanupLegacyProgressiveSwCache().catch(() => {})
     void runCacheGC().catch(() => {})
   }, 5000)
   window.setInterval(

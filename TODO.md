@@ -1,5 +1,45 @@
 # DotSound - TODO Tracker
 
+- [x] **Caching observability: split-метрика + legacy sweep (2026-05-18, follow-up)**
+  - **Split-метрика** — `app/core/observability.py`: новый Counter
+    `client_playback_source_chosen_total{chosen_source, surface}`,
+    отдельный от `client_playback_events_total`. Лейбл
+    `chosen_source` принимает `hls`, `progressive`,
+    `third_party_stream`, `cached_idb`, `cached_sw_progressive`,
+    `cached` (legacy для старых клиентов), всё остальное
+    схлопывается в `unknown` чтобы forge-клиенты не разваливали
+    кардинальность. Подключено в `app/api/v1/signals.py`,
+    дёргается только для `event_name=playback_source_chosen`.
+    После сегодняшнего фикса доля `cached_sw_progressive` должна
+    заметно вырасти на популяции; если не выросла — значит SW
+    cache всё ещё не пишется по другой причине, и алерт
+    `client_cache_hit_ratio` это поймает.
+  - **Backend схема** — `app/schemas/signal.py`: расширен Literal
+    у `chosen_source`, старое значение `"cached"` оставлено для
+    обратной совместимости со старыми клиентами в полёте.
+  - **Frontend** — `frontend/src/store/PlayerContext.tsx`: hot-path
+    `playTrack` теперь различает откуда пришёл blob URL —
+    IndexedDB или Workbox SW cache — и отправляет правильный
+    лейбл в `recordPlaybackSourceTelemetry`.
+  - **Legacy sweep** — `frontend/src/lib/offlineCache.ts`:
+    `_cleanupLegacyProgressiveSwCache()`. На первой загрузке
+    нового билда в `ensureProgressiveCachedIdsLoaded` (т.е. ДО
+    заполнения in-memory мирора) проходит cache.keys() и
+    удаляет все entries в `progressive-audio-cache`, у которых
+    нет header'а `x-dotsound-cache-source: prefetch`. Это
+    отрезает 12 МБ-капнутые легаси-записи, которые писал старый
+    код через Workbox CacheFirst route. Без этого эффект фикса
+    проявился бы только на новых треках (плюс TTL 7 дней на
+    старые битые), сейчас — сразу. Маркер однократности —
+    `localStorage["ds:progressive-sw-legacy-cleaned:v1"]`.
+  - **Tests** — backend `tests/app/api/v1/test_signals.py` +1
+    кейс (`test_record_client_playback_source_split_labels`) +
+    обновление существующего, frontend
+    `src/lib/offlineCache.test.ts` +1 кейс (legacy sweep
+    удаляет unstamped, оставляет stamped, выставляет флаг).
+    Backend signals 10/10 ✓, frontend 46/46 ✓, ruff/black/tsc/lint
+    зелёные.
+
 - [x] **Caching: явный cache.put + blob URL fast-path для прослушанных треков (2026-05-18, regression fix)**
   - **Symptom**: «уже прослушанные треки приходится заново загружать»
     — повторный play любого трека (особенно SoundCloud) шёл в сеть
