@@ -932,7 +932,7 @@ async def get_cover(
     response_model=OfflineEligibilityResponse,
     summary=("Whether this track may be saved into the local PWA cache"),
 )
-@limiter.limit("120/minute")
+@limiter.limit("300/minute")
 async def offline_eligibility(
     request: Request,
     track_id: int,
@@ -1045,7 +1045,7 @@ async def offline_eligibility_batch(
     summary="Proxy-stream audio with HTTP Range support",
     response_model=None,
 )
-@limiter.limit("120/minute")
+@limiter.limit("600/minute")
 async def audio_stream(
     request: Request,
     track_id: int,

@@ -146,6 +146,67 @@ async def _refresh_client_id() -> str | None:
         return None
 
 
+async def _direct_get_fallback(
+    url: str,
+    *,
+    params: dict[str, Any] | None,
+    headers: dict[str, str] | None,
+    timeout_s: float,
+) -> ScBrowserResponse | None:
+    """Last-resort GET from the server's native IP, bypassing the pool.
+
+    Used by :func:`sc_get_with_anti_block` when every Tor / static
+    egress in the OutboundClient pool has been quarantined and the
+    operator has opted into the direct fallback via the
+    ``SC_CATALOG_DIRECT_FALLBACK_ON_EXHAUSTION`` setting (default on).
+
+    The fallback re-uses the realistic browser-like headers from the
+    OutboundClient profile so SoundCloud's anti-bot gate sees the
+    same fingerprint type, just from a different IP. It returns
+    ``None`` on transport or HTTP error so the caller can keep the
+    original ``CIRCUIT_BURNED`` signal.
+    """
+    import httpx
+
+    from app.config import settings
+
+    sent_headers = {
+        "User-Agent": settings.outbound_user_agent,
+        "Accept": "application/json",
+        "Accept-Language": "en-US,en;q=0.9",
+    }
+    if headers:
+        sent_headers.update(headers)
+    try:
+        async with httpx.AsyncClient(
+            timeout=timeout_s,
+            follow_redirects=True,
+        ) as client:
+            resp = await client.get(url, params=params, headers=sent_headers)
+    except Exception as exc:
+        logger.warning(
+            "sc_direct_fallback_transport_error",
+            url=url,
+            error=str(exc)[:200],
+        )
+        return None
+    if resp.status_code >= 400:
+        logger.warning(
+            "sc_direct_fallback_http_error",
+            url=url,
+            status=resp.status_code,
+        )
+        return None
+    return ScBrowserResponse(
+        status_code=resp.status_code,
+        text=resp.text,
+        content=resp.content,
+        headers=dict(resp.headers),
+        url=str(resp.url),
+        identity="direct_fallback",
+    )
+
+
 def _rewrite_client_id(
     params: dict[str, Any] | None,
     new_client_id: str | None,
@@ -223,6 +284,46 @@ async def sc_get_with_anti_block(
                     url=url,
                     attempts=attempts,
                 )
+                try:
+                    from app.services.tor_recovery import (
+                        note_outbound_exhaustion,
+                    )
+
+                    asyncio.create_task(
+                        note_outbound_exhaustion("soundcloud"),
+                        name="tor_recovery_soundcloud",
+                    )
+                except Exception:  # pragma: no cover - best-effort
+                    pass
+                from app.config import settings
+
+                if settings.sc_catalog_direct_fallback_on_exhaustion:
+                    direct = await _direct_get_fallback(
+                        url,
+                        params=current_params or None,
+                        headers=headers,
+                        timeout_s=timeout_s,
+                    )
+                    try:
+                        from app.core.observability import (
+                            sc_direct_fallback_observed,
+                        )
+
+                        sc_direct_fallback_observed(ok=direct is not None)
+                    except Exception:  # pragma: no cover - metrics best-effort
+                        pass
+                    if direct is not None:
+                        logger.warning(
+                            "sc_direct_fallback_after_exhaustion",
+                            url=url,
+                            attempts=attempts,
+                            status=direct.status_code,
+                        )
+                        return ScCallOutcome(
+                            response=direct,
+                            error_kind=ScErrorKind.OK,
+                            attempts=attempts,
+                        )
                 return ScCallOutcome(
                     response=None,
                     error_kind=ScErrorKind.CIRCUIT_BURNED,
@@ -251,6 +352,17 @@ async def sc_get_with_anti_block(
             classification = classify_sc_response(resp.status_code, url=url)
 
             if classification.action is ScAction.PROCEED:
+                try:
+                    from app.services.tor_recovery import (
+                        note_outbound_success,
+                    )
+
+                    asyncio.create_task(
+                        note_outbound_success("soundcloud"),
+                        name="tor_recovery_ok_soundcloud",
+                    )
+                except Exception:  # pragma: no cover - best-effort
+                    pass
                 br = _to_browser_response(resp, url=url)
                 return ScCallOutcome(
                     response=br,

@@ -321,6 +321,31 @@ class AppSettings(BaseSettings):
     # Extra same-mode retries after every SoundCloud transcoding
     # manifest returns 404 through one outbound identity.
     sc_stream_manifest_proxy_retries: int = 2
+
+    # SoundCloud catalog/API last-resort fallback. When every Tor
+    # circuit and static-proxy identity in the OutboundClient pool
+    # has been quarantined (``OutboundExhaustedError``) and this is
+    # ``True``, ``sc_get_with_anti_block`` performs ONE retry from
+    # the server's native IP before giving up with 503. This keeps
+    # the catalog reachable when SC has burned every Tor exit, at
+    # the cost of exposing the server IP to SC. Default on because
+    # the alternative is a hard outage of every third-party SC
+    # track for the whole pod.
+    sc_catalog_direct_fallback_on_exhaustion: bool = True
+    # Auto-recovery of Tor circuits after sustained outbound
+    # exhaustion. When ``OutboundExhaustedError`` keeps firing for the
+    # same outbound service N times in a row within the recovery
+    # window, the Backend issues a single forced NEWNYM signal to the
+    # local Tor daemon (rotates every circuit's exit IP) and clears
+    # PrivateCore's burned-IP quarantine so the next request can pick
+    # the rotated circuits up again. Throttled by
+    # ``tor_recovery_min_interval_s`` and gated by
+    # ``tor_recovery_failure_threshold`` to avoid hammering the Tor
+    # network — Tor itself rate-limits NEWNYM and silently drops
+    # signals that arrive too fast.
+    tor_recovery_enabled: bool = True
+    tor_recovery_failure_threshold: int = 3
+    tor_recovery_min_interval_s: float = 60.0
     # On import, refuse to create a phantom Track row if the very
     # first playback verification fails (every SC transcoding manifest
     # returns 404, geo block, removed, Go+ only, etc.). When False, the

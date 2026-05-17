@@ -195,6 +195,11 @@ Backend (file_validator.py):
   quarantine threshold, exponential back-off, capacity per egress,
   список аудио-CDN сервисов). Питает `app/services/streaming_egress_pool.py`
   и `app/api/v1/tracks/playback.py`. Tor для стриминга не используется.
+- `services/outbound.reset_outbound_quarantine` -- публичная утилита
+  для сброса in-memory burned-IP quarantine. Решение «когда вызывать»
+  лежит в Backend (`app/services/tor_recovery.py`,
+  `app/main.py` NEWNYM callback). Используется при auto-recovery
+  Tor circuits после `OutboundExhaustedError`.
 - `contracts/` -- protocol constants
 
 ## Стек

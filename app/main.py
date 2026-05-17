@@ -227,12 +227,17 @@ async def lifespan(application: FastAPI) -> AsyncIterator[None]:
         component="api",
     )
     if _tor_pool_started:
+        from dotsound_private_core.services.outbound import (
+            reset_outbound_quarantine,
+        )
+
         from app.api.v1.tracks.playback import reset_audio_proxy_clients
         from app.services.tor_pool import get_tor_pool as _gtp
 
         _tp = _gtp()
         if _tp is not None:
             _tp.register_newnym_callback(reset_audio_proxy_clients)
+            _tp.register_newnym_callback(reset_outbound_quarantine)
 
     if _tor_pool_started or settings.outbound_static_proxy_urls_list:
         asyncio.create_task(

@@ -267,6 +267,8 @@ class TorPool:
         self._health_task: asyncio.Task[None] | None = None
         self._renewal_task: asyncio.Task[None] | None = None
         self._data_dir: Path | None = None
+        self._force_newnym_lock = asyncio.Lock()
+        self._last_force_newnym_at: float = 0.0
 
     async def start(self) -> None:
         import stem.control  # type: ignore[import-untyped]
@@ -300,8 +302,7 @@ class TorPool:
         config: dict[str, str | list[str]] = {
             "DataDirectory": str(data_dir),
             "SocksPort": [
-                f"{base_port + i} IsolateClientAuth"
-                for i in range(pool_size)
+                f"{base_port + i} IsolateClientAuth" for i in range(pool_size)
             ],
             "ControlPort": str(control_port),
             "CookieAuthentication": "1",
@@ -460,9 +461,7 @@ class TorPool:
         try:
             import stem.control  # type: ignore[import-untyped]
 
-            ctrl = stem.control.Controller.from_port(
-                port=self._control_port
-            )
+            ctrl = stem.control.Controller.from_port(port=self._control_port)
             password: str = self._settings.tor_control_password
             if password:
                 ctrl.authenticate(password=password)
@@ -484,6 +483,70 @@ class TorPool:
         """Return the proxy URL of every circuit in the pool."""
         return [c.proxy_url for c in self._circuits]
 
+    async def force_newnym(
+        self,
+        *,
+        reason: str = "manual",
+        cooldown_s: float = 30.0,
+    ) -> bool:
+        """Force a NEWNYM signal across the pool, bypassing the timer.
+
+        Used by the Backend recovery loop after sustained outbound
+        exhaustion (Tor circuits all burned). Has a cooldown so callers
+        cannot hammer the Tor network — Tor itself rate-limits NEWNYM
+        and will silently drop signals that arrive too fast.
+
+        Returns ``True`` if NEWNYM was actually sent, ``False`` if it
+        was throttled, the controller is unavailable, or the call
+        failed. Either way the caller should fall back to direct
+        egress for the immediate request.
+        """
+        if self._controller is None:
+            await self._try_reconnect_controller()
+        if self._controller is None:
+            logger.warning(
+                "tor_force_newnym_skipped_no_controller",
+                reason=reason,
+                control_port=self._control_port,
+            )
+            return False
+        async with self._force_newnym_lock:
+            now = time.time()
+            elapsed = now - self._last_force_newnym_at
+            if elapsed < cooldown_s:
+                logger.info(
+                    "tor_force_newnym_throttled",
+                    reason=reason,
+                    elapsed=round(elapsed, 1),
+                    cooldown=cooldown_s,
+                )
+                return False
+            try:
+                from stem import Signal
+
+                self._controller.signal(Signal.NEWNYM)
+                self._last_force_newnym_at = now
+                for circuit in self._circuits:
+                    circuit.ok_count = 0
+                    circuit.fail_count = 0
+                    circuit.exit_ip = None
+                    circuit.exit_ip_checked_at = 0.0
+                    circuit.last_renewed = now
+                logger.warning(
+                    "tor_force_newnym_signaled",
+                    reason=reason,
+                    pool_size=len(self._circuits),
+                )
+            except Exception as exc:
+                logger.error(
+                    "tor_force_newnym_failed",
+                    reason=reason,
+                    error=str(exc),
+                )
+                return False
+        await self._run_newnym_callbacks()
+        return True
+
     def register_newnym_callback(self, cb: object) -> None:
         """Register a callable invoked after each NEWNYM signal.
 
@@ -500,9 +563,7 @@ class TorPool:
                 if asyncio.iscoroutine(result):
                     await result
             except Exception as exc:
-                logger.warning(
-                    "tor_newnym_callback_failed", error=str(exc)
-                )
+                logger.warning("tor_newnym_callback_failed", error=str(exc))
 
     async def _health_check_loop(self) -> None:
         while True:

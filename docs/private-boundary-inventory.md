@@ -74,6 +74,64 @@ which parts are owned by `DotSoundPrivateCore`.
   ``streaming_egress_failure_ratio``. Labels stay
   low-cardinality (egress identity = ``direct`` or
   ``scheme://host:port``).
+- Catalog/API path (``api-v2.soundcloud.com`` resolve / search /
+  transcoding metadata) keeps the legacy OutboundClient pool
+  (Tor / static proxies) as the primary egress. When every
+  identity in the pool is quarantined and
+  ``SC_CATALOG_DIRECT_FALLBACK_ON_EXHAUSTION`` is on (default),
+  ``sc_browser_session._direct_get_fallback`` performs one
+  last-resort GET from the server's native IP. Counted via
+  ``sc_catalog_direct_fallback_total{result}``.
+
+## Tor Circuit Auto-Recovery
+
+- After ``OutboundExhaustedError`` keeps firing for the same
+  outbound service ``TOR_RECOVERY_FAILURE_THRESHOLD`` times in a row
+  (default 3), Backend (`app/services/tor_recovery.py`) issues one
+  forced NEWNYM signal via ``TorPool.force_newnym`` and clears the
+  PrivateCore burned-IP quarantine via
+  ``reset_outbound_quarantine``. Throttled by
+  ``TOR_RECOVERY_MIN_INTERVAL_S`` (default 60s) — Tor itself
+  rate-limits NEWNYM and silently drops signals that arrive too fast.
+- Split of responsibilities:
+  - PrivateCore exposes ``reset_outbound_quarantine() -> int`` that
+    drops every burned identity from the in-memory cache. The
+    decision *whether* to call it lives in Backend (the recovery
+    loop and the periodic NEWNYM callback). PrivateCore only owns
+    the storage shape.
+  - Backend ``TorPool.force_newnym(reason, cooldown_s)`` rotates
+    every circuit's exit IP and triggers the registered
+    NEWNYM-callbacks (which include
+    ``reset_audio_proxy_clients`` and
+    ``reset_outbound_quarantine``).
+  - Backend ``tor_recovery.note_outbound_exhaustion(service)``
+    counts consecutive exhaustions per-service and triggers the
+    pair of operations above when the threshold is reached.
+    Counter is reset by
+    ``tor_recovery.note_outbound_success(service)`` after a clean
+    OutboundClient call.
+- Prometheus surface: ``tor_recovery_triggered_total`` (Counter).
+  Alert ``TorRecoveryFiringTooOften`` (warning, > 1/min for 15m)
+  catches the case where SC bans Tor exits faster than NEWNYM can
+  rotate, indicating residential proxies or longer quarantine TTLs
+  are needed.
+
+## Streaming Alerts
+
+- Prometheus alert rules live in
+  ``infra/prometheus/streaming_alerts.yml`` and are wired in via
+  ``rule_files`` in ``infra/prometheus/prometheus.yml``. The file
+  is mounted by ``docker-compose.observability.yml``. Coverage:
+  - ``SoundCloudCatalogDirectFallbackFailing`` (page) — direct
+    fallback errors > 1/min for 5m. Action: provision residential
+    proxies for the SC catalog or extend the quarantine cooldown.
+  - ``SoundCloudCatalogDirectFallbackElevated`` (warning) — any
+    direct fallback > 2/min for 15m. Capacity-planning signal.
+  - ``StreamingEgressPoolExhausted`` (page) — every streaming
+    proxy quarantined > 1/min for 5m.
+  - ``StreamingEgressHighFailureRatio`` (warning) — single egress
+    > 50% failure for 10m (likely a dead proxy entry).
+  - ``TorRecoveryFiringTooOften`` (warning) — see above.
 
 ## Non-Goals For Slice-1
 

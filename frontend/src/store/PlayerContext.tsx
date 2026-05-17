@@ -490,6 +490,18 @@ type _PlayerSnapshotV2 = {
 const _QUEUE_PERSIST_MAX = 100
 const _QUEUE_PERSIST_TTL_MS = 7 * 24 * 60 * 60 * 1000
 
+// Module-scope dedup for ``armProgressiveBodyCacheWarm``. The hook
+// is closed over per-mount, so without a global memo a quick
+// "play → seek back → play" sequence (or repeated playback of the
+// same track in a session) triggers the full-body warm GET multiple
+// times. Workbox stores the body once anyway, but the duplicate
+// network calls were the main contributor to the per-IP rate-limit
+// errors on ``/api/v1/tracks/{id}/audio`` (limit: 600/min). The set
+// is bounded only by the number of unique tracks played in the
+// current tab; cleared on page reload, which is fine because the SW
+// cache survives reloads.
+const _armedFullBodyCacheTrackIds = new Set<number>()
+
 const _RADIO_STATE_KEY = 'player-radio-state'
 
 function _saveRadioState(
@@ -1955,6 +1967,35 @@ export function PlayerProvider({
   const lastUnavailableFailureRef =
     useRef<PlaybackFailureTelemetry>({})
 
+  // Grace-period retry on transient playback errors (5xx/network).
+  // When the backend audio endpoint hits a temporarily unhappy egress
+  // (Tor circuit burned, streaming pool exhausted) it returns 503 and
+  // the audio element bubbles up MEDIA_ERR_NETWORK. Skipping the
+  // track immediately makes the user mash the play button which only
+  // adds load. Instead we retry the same URL a couple of times with
+  // exponential backoff before giving up — the recovery loop usually
+  // rotates Tor or the pool is fresh again within a couple of seconds.
+  // Counter is per-track so a successful recovery resets it; a fresh
+  // playTrack() also resets it via resetPlaybackRetryState().
+  const PLAYBACK_RETRY_MAX_ATTEMPTS = 2
+  const PLAYBACK_RETRY_BASE_MS = 1500
+  const PLAYBACK_RETRY_JITTER_MS = 600
+  const playbackRetryStateRef = useRef<{
+    trackId: number
+    attempts: number
+    timeoutId: number | null
+  }>({ trackId: 0, attempts: 0, timeoutId: null })
+
+  const resetPlaybackRetryState = useCallback(() => {
+    const s = playbackRetryStateRef.current
+    if (s.timeoutId != null) {
+      window.clearTimeout(s.timeoutId)
+    }
+    s.trackId = 0
+    s.attempts = 0
+    s.timeoutId = null
+  }, [])
+
   // Toast dedup: when a burst of skips happens, collapse them into a single
   // "Пропущено N недоступных треков" island that updates in place.
   const unavailableSkipBatchRef = useRef<{
@@ -2172,6 +2213,46 @@ export function PlayerProvider({
     [requestPlayback, volume],
   )
 
+  const schedulePlaybackRetry = useCallback(
+    (trackId: number, audio: HTMLAudioElement): boolean => {
+      const state = playbackRetryStateRef.current
+      if (state.trackId !== trackId) {
+        if (state.timeoutId != null) {
+          window.clearTimeout(state.timeoutId)
+        }
+        state.trackId = trackId
+        state.attempts = 0
+        state.timeoutId = null
+      }
+      if (state.attempts >= PLAYBACK_RETRY_MAX_ATTEMPTS) {
+        return false
+      }
+      state.attempts += 1
+      const delay =
+        PLAYBACK_RETRY_BASE_MS * state.attempts +
+        Math.floor(Math.random() * PLAYBACK_RETRY_JITTER_MS)
+      const resumeAt = Number.isFinite(audio.currentTime)
+        ? audio.currentTime
+        : 0
+      state.timeoutId = window.setTimeout(() => {
+        state.timeoutId = null
+        if (lastTrackIdRef.current !== trackId) return
+        if (audioRef.current !== audio) return
+        try {
+          audio.load()
+          if (resumeAt > 0.1) {
+            audio.currentTime = resumeAt
+          }
+          void requestPlayback(audio)
+        } catch {
+          /* ignore */
+        }
+      }, delay)
+      return true
+    },
+    [requestPlayback],
+  )
+
   // Once the audio element has reached canplay for ``trackId`` we
   // kick off a no-Range full-body GET against the same URL so the
   // Workbox ``progressive-audio-cache`` route can store a 200 OK
@@ -2201,12 +2282,14 @@ export function PlayerProvider({
       if (track.access_mode === 'official_embed') return
       if (track.access_mode === 'external_link') return
       if (isCachedSync(trackId)) return
+      if (_armedFullBodyCacheTrackIds.has(trackId)) return
       let armed = false
       const trigger = () => {
         if (armed) return
         armed = true
         cleanup()
         if (lastTrackIdRef.current !== trackId) return
+        _armedFullBodyCacheTrackIds.add(trackId)
         void prefetchProgressiveBodyForCache(trackId).catch(
           () => undefined,
         )
@@ -2634,6 +2717,7 @@ export function PlayerProvider({
       // Real playback started — reset auto-skip cascade guard so the
       // next failure starts a fresh attempt count.
       consecutiveAutoSkipsRef.current = 0
+      resetPlaybackRetryState()
       flushUnavailableSkipBatch()
       if ('mediaSession' in navigator)
         navigator.mediaSession.playbackState = 'playing'
@@ -2837,6 +2921,9 @@ export function PlayerProvider({
                 getApiErrorTelemetry(err),
               )
             })
+          return
+        }
+        if (schedulePlaybackRetry(track.id, a)) {
           return
         }
       }
@@ -3273,6 +3360,7 @@ export function PlayerProvider({
       radioAutoSkipHaltedRef.current = false
       radioAutoSkipsRef.current = 0
       consecutiveAutoSkipsRef.current = 0
+      resetPlaybackRetryState()
     }
     if (hasContextTracks) {
       const idx = contextTracks.findIndex(

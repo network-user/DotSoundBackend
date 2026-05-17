@@ -1,5 +1,71 @@
 # DotSound - TODO Tracker
 
+- [x] **Стриминг: alerts + auto-recovery + grace-period retry (2026-05-17, high-priority follow-up)**
+  - **Prometheus alerts** — `infra/prometheus/streaming_alerts.yml` (новый),
+    подключен через `rule_files` в `infra/prometheus/prometheus.yml` и
+    смонтирован в `docker-compose.observability.yml`. 5 правил:
+    `SoundCloudCatalogDirectFallbackFailing` (page, > 1/min на
+    `sc_catalog_direct_fallback_total{result="fail"}` 5m),
+    `SoundCloudCatalogDirectFallbackElevated` (warning, > 2/min 15m),
+    `StreamingEgressPoolExhausted` (page, > 1/min 5m),
+    `StreamingEgressHighFailureRatio` (warning, > 50% 10m),
+    `TorRecoveryFiringTooOften` (warning, > 1/min 15m).
+  - **Auto-recover Tor circuits** — `app/services/tor_recovery.py` (новый):
+    после N подряд `OutboundExhaustedError` для одного service'а
+    форсируется NEWNYM через `TorPool.force_newnym(reason, cooldown_s)`.
+    Throttling — `TOR_RECOVERY_MIN_INTERVAL_S` (default 60s), порог —
+    `TOR_RECOVERY_FAILURE_THRESHOLD` (default 3). NEWNYM-callback в
+    `app/main.py` теперь дополнительно дёргает PrivateCore
+    `reset_outbound_quarantine`, чтобы старые `tor:exit-N` идентичности
+    не блокировали новые circuits. `sc_browser_session` вызывает
+    `note_outbound_exhaustion("soundcloud")` на 503-burned и
+    `note_outbound_success` после `ScAction.PROCEED` (сброс счётчика).
+    Новая метрика `tor_recovery_triggered_total` (Counter).
+  - **PrivateCore** — `dotsound_private_core.services.outbound`: публичный
+    `reset_outbound_quarantine() -> int` (очищает burned-IP cache, возвращает
+    кол-во очищенных записей). Решение «когда вызывать» остаётся в Backend
+    (recovery loop, NEWNYM callback).
+  - **Frontend grace-period retry** — `frontend/src/store/PlayerContext.tsx`:
+    добавлен `schedulePlaybackRetry` (max 2 попытки, base 1500ms +
+    jitter 600ms, backoff x attempt). Срабатывает на
+    `MEDIA_ERR_NETWORK` / `MEDIA_ERR_SRC_NOT_SUPPORTED` после исчерпания
+    стандартных recovery-веток (rebind / refresh stream URL). Сбрасывается
+    на каждом `playTrack` и при успешном `playing` event. Решает UX
+    «трек упал на transient 503 → пользователь жмёт reload → ещё больше
+    нагрузки». Грейс-период даёт recovery loop'у успеть сменить circuit.
+  - **Tests** — Backend `tests/app/services/test_tor_recovery.py` (6 кейсов:
+    disabled / pool disabled / threshold / success-resets / throttle /
+    pool-not-started); `tests/app/services/test_tor_pool.py` +3 кейса для
+    `force_newnym` (no-controller, signal+callbacks, throttle).
+    PrivateCore `tests/dotsound_private_core/services/test_outbound_reset_quarantine.py`
+    (2 кейса: empty noop, clears burned). Frontend `tsc` ✓.
+  - **Доки** — `.env.example` с `TOR_RECOVERY_*`.
+
+- [x] **Стриминг: catalog direct-fallback, rate-limit bump, frontend dedup (2026-05-17, hotfix)**
+  - **Backend** — `app/services/sc_browser_session.py`: при
+    `OutboundExhaustedError` (все Tor circuits / static identities в quarantine)
+    делается один retry с родного IP сервера через `_direct_get_fallback`.
+    Сохранён legacy путь — без флага возвращается прежний `CIRCUIT_BURNED`.
+    Управляется `SC_CATALOG_DIRECT_FALLBACK_ON_EXHAUSTION` (default `true`).
+    Метрика `sc_catalog_direct_fallback_total{result}` (Counter в
+    `app/core/observability.py`). Решает 503 `soundcloud_circuit_burned` /
+    `all_circuits_burned` в production когда SC сжёг все Tor exits.
+  - **Backend** — `app/api/v1/tracks/playback.py`: `audio_stream` rate-limit
+    120/min → **600/min**, `offline_eligibility` 120/min → **300/min**.
+    Решает 429 `Rate limit exceeded` от активного клиента (Range-chunks +
+    full-body warm + cold-context full-body neighbour быстро забивали 120/min).
+  - **Frontend** — `frontend/src/store/PlayerContext.tsx`: module-scope
+    `_armedFullBodyCacheTrackIds: Set<number>` дедупит
+    `armProgressiveBodyCacheWarm` per-tab. Один трек прогревается max раз
+    за сессию — повторное play / seek-back уже не дёргает full-body GET.
+    PrefetchManager и `inFlightTrackIds` уже дедуплицированы, не тронут.
+  - **Доки** — `.env.example` с описанием
+    `SC_CATALOG_DIRECT_FALLBACK_ON_EXHAUSTION`.
+  - **Tests** — `tests/app/services/test_sc_browser_session_fallback.py`
+    (3 кейса: success when pool exhausted, fallback HTTP error → CIRCUIT_BURNED,
+    skipped when flag off). Backend pool/playback/proxy_pool/audio cache:
+    35/35 ✓. Frontend 41/41 ✓.
+
 - [x] **Стриминг: пул egress, метрики, sticky-per-transcoding, прогрев кеша (2026-05-17, follow-up)**
   - `app/services/streaming_egress_pool.py`: добавлен `make_sticky_key(track_id, stream_url)`.
     Sticky-ключ теперь учитывает не только трек, но и transcoding-вариант

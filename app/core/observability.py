@@ -53,6 +53,10 @@ _PROM_STREAMING_EGRESS_EXHAUSTED = None
 _PROM_STREAMING_EGRESS_IN_FLIGHT = None
 _PROM_STREAMING_EGRESS_FAILURE_RATIO = None
 
+_PROM_SC_DIRECT_FALLBACK = None
+
+_PROM_TOR_RECOVERY_TRIGGERED = None
+
 _PROM_REGISTRY: object | None = None
 
 
@@ -383,6 +387,28 @@ def setup_metrics(application: object) -> None:
             "(failures / (successes + failures))."
         ),
         ["egress"],
+        registry=registry,
+    )
+
+    global _PROM_SC_DIRECT_FALLBACK
+    _PROM_SC_DIRECT_FALLBACK = Counter(
+        "sc_catalog_direct_fallback_total",
+        (
+            "Number of SoundCloud catalog/API GETs that fell back "
+            "to the server's native IP after every Tor / static "
+            "egress was quarantined, labelled by outcome."
+        ),
+        ["result"],
+        registry=registry,
+    )
+
+    global _PROM_TOR_RECOVERY_TRIGGERED
+    _PROM_TOR_RECOVERY_TRIGGERED = Counter(
+        "tor_recovery_triggered_total",
+        (
+            "Number of forced NEWNYM signals issued by the Backend "
+            "auto-recovery loop after sustained outbound exhaustion."
+        ),
         registry=registry,
     )
 
@@ -891,3 +917,17 @@ def streaming_egress_pool_exhausted(*, service: str) -> None:
     if _PROM_STREAMING_EGRESS_EXHAUSTED is None:
         return
     _PROM_STREAMING_EGRESS_EXHAUSTED.labels(service=service).inc()
+
+
+def sc_direct_fallback_observed(*, ok: bool) -> None:
+    """Record one SoundCloud catalog direct-fallback attempt."""
+    if _PROM_SC_DIRECT_FALLBACK is None:
+        return
+    _PROM_SC_DIRECT_FALLBACK.labels(result="ok" if ok else "fail").inc()
+
+
+def tor_recovery_triggered_observed() -> None:
+    """Record one forced Tor NEWNYM issued by the recovery loop."""
+    if _PROM_TOR_RECOVERY_TRIGGERED is None:
+        return
+    _PROM_TOR_RECOVERY_TRIGGERED.inc()

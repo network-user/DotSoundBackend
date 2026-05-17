@@ -1,0 +1,103 @@
+groups:
+  - name: dotsound-streaming-egress
+    interval: 30s
+    rules:
+
+      # SoundCloud catalog/API direct-fallback failed too often.
+      # When this fires, both the Tor pool AND the static proxy pool
+      # are quarantined AND the server's native IP is also burned by
+      # SoundCloud. Action: provision residential proxies for the
+      # catalog (SC_OUTBOUND_RESIDENTIAL_*) or grant a longer
+      # quarantine cooldown to let circuits cool off.
+      - alert: SoundCloudCatalogDirectFallbackFailing
+        expr: |
+          sum(rate(sc_catalog_direct_fallback_total{result="fail"}[5m])) > 0.0167
+        for: 5m
+        labels:
+          severity: page
+          component: soundcloud-catalog
+        annotations:
+          summary: "SC catalog direct fallback failing > 1/min for 5m"
+          description: |
+            sc_catalog_direct_fallback_total{result="fail"} rate
+            exceeded 1/min for 5 minutes. Tor circuits are exhausted
+            AND SoundCloud is rejecting the server's native IP.
+            Action: enable residential proxies for the SC catalog
+            service or extend the OutboundClient quarantine cooldown.
+            Runbook: docs/private-boundary-inventory.md (SC catalog
+            direct fallback section).
+
+      # Direct-fallback firing at all is a yellow flag — Tor is
+      # exhausted, just not (yet) burned by SC. Used for capacity
+      # planning, not paging.
+      - alert: SoundCloudCatalogDirectFallbackElevated
+        expr: |
+          sum(rate(sc_catalog_direct_fallback_total[15m])) > 0.0333
+        for: 15m
+        labels:
+          severity: warning
+          component: soundcloud-catalog
+        annotations:
+          summary: "SC catalog falling back to native IP > 2/min for 15m"
+          description: |
+            The Tor + static-proxy pool is exhausted often enough
+            that the catalog is leaning on the server IP. Check Tor
+            circuit health (tor_circuit_*) and consider increasing
+            tor_pool_size or adding STATIC_OUTBOUND_PROXY_URLS.
+
+      # Streaming egress pool itself running out of healthy proxies.
+      # Audio bytes will fall back to the server IP if
+      # STREAMING_PROXY_OUT_FALLBACK_DIRECT=true, otherwise playback
+      # 503s.
+      - alert: StreamingEgressPoolExhausted
+        expr: |
+          sum by (service) (
+            rate(streaming_egress_exhausted_total[5m])
+          ) > 0.0167
+        for: 5m
+        labels:
+          severity: page
+          component: streaming-egress
+        annotations:
+          summary: "Streaming egress pool exhausted for {{ $labels.service }}"
+          description: |
+            Every proxy in the streaming egress pool is in quarantine
+            for the {{ $labels.service }} service, rate > 1/min for
+            5 minutes. Action: refill STREAMING_PROXY_OUT_URLS, check
+            upstream provider health, or temporarily allow direct
+            egress (STREAMING_PROXY_OUT_FALLBACK_DIRECT=true).
+
+      # Per-egress failure ratio > 50% — single proxy is dying but
+      # pool is not yet exhausted. Yellow flag, useful for spotting
+      # one bad proxy in a healthy pool of N.
+      - alert: StreamingEgressHighFailureRatio
+        expr: streaming_egress_failure_ratio > 0.5
+        for: 10m
+        labels:
+          severity: warning
+          component: streaming-egress
+        annotations:
+          summary: "Streaming egress {{ $labels.egress }} > 50% failure"
+          description: |
+            Streaming egress {{ $labels.egress }} failure ratio is
+            above 50% for 10 minutes. Likely a dead/blocked proxy
+            URL. Rotate STREAMING_PROXY_OUT_URLS or remove the entry.
+
+      # Tor recovery loop firing repeatedly = sustained SC blocking.
+      # If we keep triggering NEWNYM and it does not help, something
+      # is wrong on the SC side or the proxy provider is geo-banned.
+      - alert: TorRecoveryFiringTooOften
+        expr: |
+          sum(rate(tor_recovery_triggered_total[15m])) > 0.0166
+        for: 15m
+        labels:
+          severity: warning
+          component: tor
+        annotations:
+          summary: "Forced Tor NEWNYM > 1/min for 15m"
+          description: |
+            The Backend is force-issuing NEWNYM at a sustained rate.
+            Either SC is mass-banning Tor exits faster than we can
+            rotate, or quarantine cooldown is too aggressive. Check
+            tor_circuit_* metrics and consider longer
+            quarantine_seconds or residential proxies.

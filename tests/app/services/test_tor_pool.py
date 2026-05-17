@@ -148,6 +148,65 @@ async def test_run_newnym_callbacks_swallows_exceptions() -> None:
     assert good_calls == [1]
 
 
+async def test_force_newnym_skipped_without_controller() -> None:
+    pool = TorPool(settings=mock.MagicMock())
+    pool._control_port = 0
+    pool._controller = None
+    ok = await pool.force_newnym(reason="test")
+    assert ok is False
+
+
+async def test_force_newnym_signals_and_runs_callbacks(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    pool = TorPool(settings=mock.MagicMock())
+    pool._circuits = [TorCircuit(index=0, socks_port=9050)]
+    controller = mock.MagicMock()
+    controller.signal = mock.MagicMock()
+    pool._controller = controller
+    pool._control_port = 9051
+
+    cb_calls: list[int] = []
+
+    async def cb() -> None:
+        cb_calls.append(1)
+
+    pool._newnym_callbacks = [cb]
+
+    fake_signal_module = mock.MagicMock()
+    fake_signal_module.NEWNYM = "NEWNYM"
+    monkeypatch.setitem(__import__("sys").modules, "stem", fake_signal_module)
+
+    ok = await pool.force_newnym(reason="test", cooldown_s=0.0)
+
+    assert ok is True
+    controller.signal.assert_called_once()
+    assert cb_calls == [1]
+    assert pool._circuits[0].fail_count == 0
+    assert pool._circuits[0].ok_count == 0
+
+
+async def test_force_newnym_throttled_within_cooldown(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    pool = TorPool(settings=mock.MagicMock())
+    pool._circuits = [TorCircuit(index=0, socks_port=9050)]
+    controller = mock.MagicMock()
+    pool._controller = controller
+    pool._control_port = 9051
+
+    fake_signal_module = mock.MagicMock()
+    fake_signal_module.NEWNYM = "NEWNYM"
+    monkeypatch.setitem(__import__("sys").modules, "stem", fake_signal_module)
+
+    ok1 = await pool.force_newnym(reason="first", cooldown_s=300.0)
+    ok2 = await pool.force_newnym(reason="second", cooldown_s=300.0)
+
+    assert ok1 is True
+    assert ok2 is False
+    controller.signal.assert_called_once()
+
+
 def test_desktop_tbb_path_in_candidates(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
