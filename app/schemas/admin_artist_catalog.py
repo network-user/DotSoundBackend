@@ -200,6 +200,7 @@ class AdminStationGapItem(BaseModel):
     name: str
     image_key: str | None = None
     soundcloud_user_id: int | None = None
+    catalog_sync_enabled: bool = True
     station_track_count: int | None = None
     station_synced_at: str | None = None
 

@@ -14,6 +14,7 @@ import {
   shareNatively,
 } from '@/lib/platform'
 import { showIsland } from '@/lib/island'
+import { getInternalUserId } from '@/lib/telegram'
 import type { Track } from '@/types/api'
 
 interface Props {
@@ -44,6 +45,7 @@ export function ProfileTrackList({
     onToggleVisibility(updated)
   }
 
+  const currentUserId = getInternalUserId()
   const title = t(
     'profile.myTracksTitle',
     'Мои треки',
@@ -76,103 +78,119 @@ export function ProfileTrackList({
             )}
           </div>
           <div className="profile-tracks-empty__hint">
-            {t(
-              'profile.myTracksEmptyHint',
-              'Загрузите свой первый трек, чтобы он появился здесь',
-            )}
+            {t('profile.myTracksEmptyHint')}
           </div>
-          <MotionPress
-            type="button"
-            variant="primary"
-            haptic="medium"
-            className="profile-tracks-empty__cta"
-            onClick={() => {
-              tap()
-              navigate('/upload')
-            }}
-          >
-            <Icon name="upload" size={16} />
-            <span>
-              {t(
-                'profile.myTracksUpload',
-                'Загрузить трек',
-              )}
-            </span>
-          </MotionPress>
         </div>
       ) : (
         <div className="profile-tracks-section__list track-list">
           {tracks.map((track) => {
-            const buildMenu = (): LongPressMenuItem[] => [
-              {
-                id: 'share',
-                label: t('profile.trackAction.share', 'Поделиться'),
-                icon: 'share',
-                onPick: async () => {
-                  try {
-                    const links = await api.getShareLinks(track.id)
-                    const url = links.url
-                    const ok = await shareNatively({
-                      url,
-                      title: track.title,
-                      text: track.artist || undefined,
-                    })
-                    if (!ok) {
-                      const copied = await copyToClipboard(url)
+            const isOwned =
+              track.uploaded_by_id === currentUserId
+
+            const buildMenu = (): LongPressMenuItem[] => {
+              const items: LongPressMenuItem[] = [
+                {
+                  id: 'share',
+                  label: t(
+                    'profile.trackAction.share',
+                    'Поделиться',
+                  ),
+                  icon: 'share',
+                  onPick: async () => {
+                    try {
+                      const links =
+                        await api.getShareLinks(track.id)
+                      const url = links.url
+                      const ok = await shareNatively({
+                        url,
+                        title: track.title,
+                        text: track.artist || undefined,
+                      })
+                      if (!ok) {
+                        const copied =
+                          await copyToClipboard(url)
+                        showIsland({
+                          kind: copied ? 'toast' : 'error',
+                          title: copied
+                            ? t(
+                                'profile.trackAction.copied',
+                                'Ссылка скопирована',
+                              )
+                            : t(
+                                'profile.trackAction.copyFail',
+                                'Не удалось скопировать',
+                              ),
+                          iconName: copied
+                            ? 'check'
+                            : 'alert-triangle',
+                          durationMs: 2500,
+                        })
+                      }
+                    } catch {
                       showIsland({
-                        kind: copied ? 'toast' : 'error',
-                        title: copied
-                          ? t('profile.trackAction.copied', 'Ссылка скопирована')
-                          : t('profile.trackAction.copyFail', 'Не удалось скопировать'),
-                        iconName: copied ? 'check' : 'alert-triangle',
+                        kind: 'error',
+                        title: t(
+                          'profile.trackAction.shareFail',
+                          'Не удалось поделиться',
+                        ),
+                        iconName: 'alert-triangle',
                         durationMs: 2500,
                       })
                     }
-                  } catch {
-                    showIsland({
-                      kind: 'error',
-                      title: t(
-                        'profile.trackAction.shareFail',
-                        'Не удалось поделиться',
-                      ),
-                      iconName: 'alert-triangle',
-                      durationMs: 2500,
-                    })
-                  }
+                  },
                 },
-              },
-              {
-                id: 'open',
-                label: t('profile.trackAction.open', 'Открыть страницу'),
-                icon: 'external-link',
-                onPick: () => {
-                  navigate(`/track/${track.id}`)
+                {
+                  id: 'open',
+                  label: t(
+                    'profile.trackAction.open',
+                    'Открыть страницу',
+                  ),
+                  icon: 'external-link',
+                  onPick: () => {
+                    navigate(`/track/${track.id}`)
+                  },
                 },
-              },
-              {
-                id: 'visibility',
-                label: track.is_public
-                  ? t('profile.trackAction.makePrivate', 'Сделать приватным')
-                  : t('profile.trackAction.makePublic', 'Сделать публичным'),
-                icon: track.is_public ? 'lock' : 'globe',
-                onPick: () => onToggleVisibility(track),
-              },
-              {
-                id: 'delete',
-                label: t('profile.trackAction.delete', 'Удалить'),
-                icon: 'trash',
-                destructive: true,
-                onPick: () => onDelete(track),
-              },
-            ]
+              ]
+              if (isOwned) {
+                items.push(
+                  {
+                    id: 'visibility',
+                    label: track.is_public
+                      ? t(
+                          'profile.trackAction.makePrivate',
+                          'Сделать приватным',
+                        )
+                      : t(
+                          'profile.trackAction.makePublic',
+                          'Сделать публичным',
+                        ),
+                    icon: track.is_public ? 'lock' : 'globe',
+                    onPick: () => onToggleVisibility(track),
+                  },
+                  {
+                    id: 'delete',
+                    label: t(
+                      'profile.trackAction.delete',
+                      'Удалить',
+                    ),
+                    icon: 'trash',
+                    destructive: true,
+                    onPick: () => onDelete(track),
+                  },
+                )
+              }
+              return items
+            }
             return (
               <LongPressMenu key={track.id} items={buildMenu()}>
                 <TrackCard
                   track={track}
                   contextTracks={tracks}
-                  onDeleted={handleDeleted}
+                  onDeleted={isOwned ? handleDeleted : undefined}
                   onVisibilityChanged={
-                    handleVisibilityChanged
+                    isOwned
+                      ? handleVisibilityChanged
+                      : undefined
                   }
                 />
               </LongPressMenu>

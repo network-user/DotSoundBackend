@@ -470,6 +470,7 @@ class ArtistCatalogRepository(BaseRepository[ArtistCatalogRelease]):
         *,
         offset: int = 0,
         limit: int = 50,
+        include_sync_disabled: bool = False,
     ) -> tuple[list[tuple], int]:
         """Artists eligible for station sync that either have no station
         playlist or have fewer than *min_track_count* tracks in it.
@@ -478,6 +479,10 @@ class ArtistCatalogRepository(BaseRepository[ArtistCatalogRelease]):
         ``(Artist, track_count: int | None, synced_at: datetime | None)``.
         ``track_count`` is ``None`` when the artist has no station release.
         Ordered ascending by track count (nulls first), then by artist id.
+
+        When *include_sync_disabled* is ``True`` the filter on
+        ``catalog_sync_enabled`` is removed so the caller can see artists
+        that have been paused but still have a station gap.
         """
         from app.models.artist import Artist
 
@@ -501,13 +506,14 @@ class ArtistCatalogRepository(BaseRepository[ArtistCatalogRelease]):
             .subquery()
         )
         gap_filter = [
-            Artist.catalog_sync_enabled.is_(True),
             Artist.soundcloud_user_id.isnot(None),
             or_(
                 station_sq.c.artist_id.is_(None),
                 station_sq.c.track_count < min_track_count,
             ),
         ]
+        if not include_sync_disabled:
+            gap_filter.insert(0, Artist.catalog_sync_enabled.is_(True))
         data_stmt = (
             select(
                 Artist,

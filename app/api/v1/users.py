@@ -700,6 +700,37 @@ async def get_my_library(
 
 
 @router.get(
+    "/me/collection",
+    response_model=TrackListResponse,
+    summary=(
+        "Current user's personal collection: "
+        "liked tracks and self-imported tracks"
+    ),
+)
+@limiter.limit("60/minute")
+async def get_my_collection(
+    request: Request,
+    page: int = Query(1, ge=1),
+    size: int = Query(50, ge=1, le=100),
+    session: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> TrackListResponse:
+    structlog.contextvars.bind_contextvars(
+        user_id=current_user.id
+    )
+    service = TrackService(session)
+    tracks, total = await service.list_liked_or_imported_by_user(
+        user_id=current_user.id,
+        page=page,
+        size=size,
+    )
+    items = await dedupe_and_build_track_list(session, tracks)
+    return TrackListResponse(
+        items=items, total=total, page=page, size=size
+    )
+
+
+@router.get(
     "/me/followed-artists/tracks",
     response_model=TrackListResponse,
     summary="Tracks from artists the current user follows",

@@ -122,6 +122,25 @@ router = APIRouter(prefix="/system", tags=["admin-system"])
 logger: structlog.stdlib.BoundLogger = structlog.get_logger(__name__)
 
 
+@router.get("/queue-depth")
+async def queue_depth(
+    _admin: User = Depends(require_capability("metrics.view")),
+) -> dict[str, Any]:
+    """Return approximate Taskiq Redis queue length.
+
+    Used by the admin UI to show a real-time pressure badge without
+    requiring a full dashboard load.
+    """
+    try:
+        from app.core.redis import get_redis_client
+
+        redis = get_redis_client()
+        length = int(await redis.llen("taskiq"))
+        return {"queue_length": length, "available": True}
+    except Exception:
+        return {"queue_length": None, "available": False}
+
+
 @router.get("/services")
 async def services_health(
     _admin: User = Depends(require_capability("metrics.view")),

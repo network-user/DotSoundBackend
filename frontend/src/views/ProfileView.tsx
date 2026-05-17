@@ -127,7 +127,7 @@ export function ProfileView({
       )
 
     api
-      .getMyLibrary()
+      .getMyCollection()
       .then((data) => setMyTracks(data.items))
       .catch(() => {})
   }, [])

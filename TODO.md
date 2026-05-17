@@ -1,5 +1,25 @@
 # DotSound - TODO Tracker
 
+- [x] **Рекомендации: фикс медленной загрузки плейлистов + фильтрация воспроизводимых треков (2026-05-17)**
+  - **`app/repositories/recommendation.py`**: добавлен `TrackRepository._playable_filter()` во все
+    кандидатные запросы (`get_candidate_tracks`, `get_cyrillic_likely_ru_candidates`,
+    `get_popular_tracks`, `get_tracks_by_ids`, `get_incomplete_listens`, `get_recent_tracks`).
+    Треки без `file_key` и без `third_party_stream`/`official_embed` access_mode теперь
+    не попадают ни в один рекомендательный плейлист/микс.
+  - **`app/services/external_discovery_service.py`**: переход от последовательных SoundCloud
+    HTTP-запросов к параллельным через `asyncio.gather`. Trending + поиск по жанрам + ru-буст
+    теперь выполняются одновременно.
+  - **`app/services/recommendation_service.py`**:
+    - Добавлены `_EXTERNAL_DISCOVERY_TIMEOUT = 8s` и `_EXTERNAL_IMPORT_TIMEOUT = 15s` —
+      оба блока (discover + import) обёрнуты в `asyncio.timeout`, при таймауте плейлист
+      отдаётся без внешних треков вместо подвисания запроса.
+    - `_import_external_candidates` переведён с серийного цикла на `asyncio.gather` +
+      `Semaphore(5)` — до 5 SC-треков импортируются параллельно.
+    - `get_daily_mix`: добавлен Redis-кеш `rec:daily_mix:{user_id}` с TTL до полуночи UTC.
+      Повторный запрос в тот же день — только быстрый `get_tracks_by_ids`, нет пересчёта.
+    - `get_genre_mixes`: добавлен Redis-кеш `rec:genre_mixes:{user_id}` с TTL 3 часа.
+      Восстановление из кеша — через `rec_repo.get_tracks_by_ids` (c playable filter).
+
 - [x] **Controlled catalog growth: backpressure + priority ordering (2026-05-17)**
   - **PrivateCore `sc_anti_block_policy.py`**: `SC_QUEUE_BACKPRESSURE_THRESHOLD` 1000 → 200.
     Свипы теперь останавливаются раньше, не давая очереди разбухать.
@@ -216,6 +236,12 @@
     re-enable is guarded by env-driven station/full/re-enrich sweep
     limits so `CATALOG_AUTO_SYNC_ENABLED=true` can be rolled out in
     small batches.
+  - Hotfix: backend-side worker audio egress is disabled for third-party
+    tracks by default (`WORKER_THIRD_PARTY_AUDIO_ENABLED=false`).
+    Internal compute/audio-compute endpoints no longer resolve or proxy
+    SoundCloud audio to workers unless explicitly re-enabled, and new
+    external tracks skip audio-feature/audio-embedding worker jobs when
+    there is no local `file_key`.
 
 - [x] **Playback buffering / fast seek overhaul (2026-05-16)**
   - Симптом: первое воспроизведение и переключение трека «висели» 20–30 c,
@@ -4197,3 +4223,41 @@
   - `api/v1/admin/artist_catalog.py`: новый endpoint
     `PATCH /artists/{artist_id}/catalog-sync-enabled` (admin session required,
     30/min) — позволяет вручную включить/выключить синк для любого артиста.
+
+## Library: вкладка «Импортированное» (2026-05-17)
+
+- `[x]` **Backend: TrackRepository** — `list_imported_by_user(user_id, offset, limit, source_filter)`:
+  фильтр `uploaded_by_id = user_id AND imported_from IS NOT NULL`, с
+  опциональным фильтром по источнику (telegram, soundcloud и т.д.),
+  hidden-sources excluded.
+- `[x]` **Backend: TrackService** — `list_imported_by_user(user_id, page, size, source_filter)`
+- `[x]` **Backend: API** — `GET /api/v1/tracks/my/imported` (120/min rate limit),
+  query params: `page`, `size`, `source` (optional, max 32 chars).
+- `[x]` **Frontend: types/api.ts** — добавлено поле `imported_from: string | null` в `Track`.
+- `[x]` **Frontend: lib/api.ts** — метод `getMyImportedTracks(page, size, source?)`.
+- `[x]` **Frontend: ImportedView.tsx** — новый view-компонент (аналог LikedView):
+  чипсы-фильтры (Все / Telegram / SoundCloud / Другие), пагинация «показать ещё»,
+  клиентский фильтр для «Другие».
+- `[x]` **Frontend: LibraryView.tsx** — вкладка `imported` между «Плейлисты» и «История».
+- `[x]` **i18n** — `library.tabImported` в ru/en; блок `redesign.imported.*` (title,
+  loaded, empty, loading, showMore, sourceAll, sourceTelegram, sourceSoundcloud,
+  sourceOther, sourceFilterAria) в i18n_extra2_ru/en.json.
+
+## Profile: «Мои треки» — коллекция вместо загрузок (2026-05-17)
+
+- `[x]` **Backend: UserTrackLibraryRepository** — `list_liked_or_imported(user_id, offset, limit)`:
+  UNION из (liked track ids via `likes` JOIN) ∪ (imported track ids via
+  `uploaded_by_id = user_id AND imported_from IS NOT NULL`);
+  фильтр: `is_active`, `deleted_at IS NULL`, hidden-sources excluded.
+- `[x]` **Backend: TrackService** — `list_liked_or_imported_by_user(user_id, page, size)`.
+- `[x]` **Backend: API** — `GET /api/v1/users/me/collection` (60/min),
+  params: `page`, `size`. Старый `/me/library` сохранён без изменений
+  (используется в `TrackCardSheet` и `GenreMixView`).
+- `[x]` **Frontend: lib/api.ts** — метод `api.getMyCollection(page, size)`.
+- `[x]` **Frontend: ProfileView** — `getMyLibrary()` → `getMyCollection()`.
+- `[x]` **Frontend: ProfileTrackList** — delete и visibility-toggle показываются
+  только для треков, где `track.uploaded_by_id === getInternalUserId()`
+  (owned); для лайкнутых чужих треков — только share + open.
+  Кнопка «Загрузить трек» убрана из empty state.
+- `[x]` **i18n** — `profile.myTracksEmptyHint` в ru.json / en.json обновлён:
+  «Лайкайте треки или импортируйте музыку…».

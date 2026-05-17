@@ -1038,6 +1038,18 @@
     "commentHideAll": "Скрыть для всех",
     "commentHideSelf": "Скрыть для себя"
   },
+  "imported": {
+    "title": "Импортированное",
+    "loaded": "В списке: {{count}}",
+    "empty": "Здесь появятся треки, которые вы импортировали из Telegram, SoundCloud и других сервисов",
+    "loading": "Загрузка…",
+    "showMore": "Показать ещё",
+    "sourceAll": "Все",
+    "sourceTelegram": "Telegram",
+    "sourceSoundcloud": "SoundCloud",
+    "sourceOther": "Другие",
+    "sourceFilterAria": "Фильтр по источнику"
+  },
   "import": {
     "jobTimeout": "Импорт занял слишком много времени. Попробуйте позже.",
     "importJobTimeout": "Импорт треков занимает дольше обычного. Подождите или отмените и попробуйте меньше треков за раз.",

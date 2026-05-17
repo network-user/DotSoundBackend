@@ -1,3 +1,4 @@
+import asyncio
 import hashlib
 import json
 from collections import defaultdict
@@ -81,6 +82,9 @@ _DAILY_SIZE = 30
 _WEEKLY_SIZE = 50
 _GLOBAL_TOP_SIZE = 20
 _UNSEEN_POOL_LIMIT = 100
+_EXTERNAL_DISCOVERY_TIMEOUT = 8
+_EXTERNAL_IMPORT_TIMEOUT = 15
+_GENRE_MIXES_CACHE_TTL = 3 * 60 * 60
 _RADIO_CACHE_TTL = 30 * 60
 _RADIO_SKIP_GUARD_SECONDS = 1
 _RADIO_LAST_QUEUE_TTL = 20
@@ -378,6 +382,7 @@ class RecommendationService:
         self,
         candidates: list,
         user_id: int,
+        max_concurrency: int = 5,
     ) -> list[int]:
         from app.config import settings
         from app.services.soundcloud_service import SoundCloudService
@@ -386,50 +391,57 @@ class RecommendationService:
             return []
 
         sc_svc = SoundCloudService(settings.sc_client_id, self._session)
-        track_ids: list[int] = []
-        for c in candidates:
+        sem = asyncio.Semaphore(max_concurrency)
+
+        async def _import_one(c: Any) -> int | None:
             if not c.external_url:
-                continue
-            try:
-                dur_ms = (
-                    c.duration_seconds * 1000 if c.duration_seconds else None
-                )
-                sc_uri = (
-                    f"soundcloud:tracks:{c.external_id}"
-                    if c.external_id
-                    else None
-                )
-                sc_data: dict[str, Any] = {
-                    "permalink_url": c.external_url,
-                    "title": c.title,
-                    "user": {"username": c.artist or ""},
-                    "duration": dur_ms,
-                    "artwork_url": c.cover_url,
-                    "genre": c.genre,
-                    "id": c.external_id,
-                    "uri": sc_uri,
-                }
-                if c.external_id is not None:
-                    try:
-                        ext_id = int(c.external_id)
-                        full = await sc_svc.fetch_track_by_id(ext_id)
-                        if isinstance(full, dict):
-                            sc_data.update(full)
-                    except Exception:
-                        pass
-                track = await sc_svc.import_or_get_track(
-                    sc_data,
-                    uploader_id=user_id,
-                    skip_background_lyrics=True,
-                )
-                track_ids.append(track.id)
-            except Exception as exc:
-                logger.warning(
-                    "sc_discovery_import_failed",
-                    title=c.title,
-                    error=str(exc),
-                )
-        return track_ids
+                return None
+            async with sem:
+                try:
+                    dur_ms = (
+                        c.duration_seconds * 1000
+                        if c.duration_seconds
+                        else None
+                    )
+                    sc_uri = (
+                        f"soundcloud:tracks:{c.external_id}"
+                        if c.external_id
+                        else None
+                    )
+                    sc_data: dict[str, Any] = {
+                        "permalink_url": c.external_url,
+                        "title": c.title,
+                        "user": {"username": c.artist or ""},
+                        "duration": dur_ms,
+                        "artwork_url": c.cover_url,
+                        "genre": c.genre,
+                        "id": c.external_id,
+                        "uri": sc_uri,
+                    }
+                    if c.external_id is not None:
+                        try:
+                            ext_id = int(c.external_id)
+                            full = await sc_svc.fetch_track_by_id(ext_id)
+                            if isinstance(full, dict):
+                                sc_data.update(full)
+                        except Exception:
+                            pass
+                    track = await sc_svc.import_or_get_track(
+                        sc_data,
+                        uploader_id=user_id,
+                        skip_background_lyrics=True,
+                    )
+                    return track.id
+                except Exception as exc:
+                    logger.warning(
+                        "sc_discovery_import_failed",
+                        title=c.title,
+                        error=str(exc),
+                    )
+                    return None
+
+        results = await asyncio.gather(*[_import_one(c) for c in candidates])
+        return [tid for tid in results if tid is not None]
 
     async def get_home_sections(self, user_id: int) -> dict:
         pref = await self._pref_repo.get_by_user_id(user_id)
@@ -828,6 +840,13 @@ class RecommendationService:
         ]
 
     async def get_daily_mix(self, user_id: int, size: int = 30) -> list[Track]:
+        redis = get_redis_client()
+        cache_key = f"rec:daily_mix:{user_id}"
+        cached = await redis.get(cache_key)
+        if cached:
+            ids: list[int] = json.loads(cached)
+            return await self._rec_repo.get_tracks_by_ids(ids)
+
         (
             user_prefs,
             user_locale,
@@ -898,9 +917,34 @@ class RecommendationService:
             track_ids=[t.id for t in result],
             algorithm_version=algo_version,
         )
+        if result:
+            await redis.setex(
+                cache_key,
+                _midnight_ttl(),
+                json.dumps([t.id for t in result]),
+            )
         return result
 
     async def get_genre_mixes(self, user_id: int) -> list[dict]:
+        redis = get_redis_client()
+        cache_key = f"rec:genre_mixes:{user_id}"
+        cached = await redis.get(cache_key)
+        if cached:
+            raw_items: list[dict] = json.loads(cached)
+            output: list[dict] = []
+            for item in raw_items:
+                tracks = await self._rec_repo.get_tracks_by_ids(
+                    item["track_ids"]
+                )
+                output.append(
+                    {
+                        "genre": item["genre"],
+                        "title": item["title"],
+                        "tracks": tracks,
+                    }
+                )
+            return output
+
         (
             user_prefs,
             user_locale,
@@ -940,7 +984,7 @@ class RecommendationService:
             user_prefs, history, candidates_by_genre
         )
 
-        output: list[dict] = []
+        fresh_output: list[dict] = []
         for mix in mix_results:
             from app.repositories.track import (
                 TrackRepository,
@@ -948,7 +992,7 @@ class RecommendationService:
 
             track_repo = TrackRepository(self._session)
             tracks = await track_repo.get_by_ids_preserve_order(mix.track_ids)
-            output.append(
+            fresh_output.append(
                 {
                     "genre": mix.genre,
                     "title": mix.title,
@@ -958,10 +1002,10 @@ class RecommendationService:
 
         override_repo = GenreMixOverrideRepository(self._session)
         overrides = await override_repo.get_by_genres(
-            [m["genre"] for m in output]
+            [m["genre"] for m in fresh_output]
         )
         overrides_by_genre = {row.genre.lower(): row for row in overrides}
-        for item in output:
+        for item in fresh_output:
             override = overrides_by_genre.get(item["genre"].lower())
             if not override:
                 continue
@@ -977,7 +1021,22 @@ class RecommendationService:
                 item["tracks"] = override_tracks
             item["title"] = override.title
 
-        return output
+        if fresh_output:
+            payload = [
+                {
+                    "genre": item["genre"],
+                    "title": item["title"],
+                    "track_ids": [t.id for t in item["tracks"]],
+                }
+                for item in fresh_output
+            ]
+            await redis.setex(
+                cache_key,
+                _GENRE_MIXES_CACHE_TTL,
+                json.dumps(payload),
+            )
+
+        return fresh_output
 
     async def get_genre_mix(
         self,
@@ -1666,23 +1725,38 @@ class RecommendationService:
             ExternalDiscoveryService,
         )
 
-        external = await ExternalDiscoveryService(self._session).discover(
-            user_prefs.preferred_genres,
-            language_affinity=user_prefs.language_affinity,
-            user_locale=user_locale,
-        )
+        external: list = []
+        try:
+            async with asyncio.timeout(_EXTERNAL_DISCOVERY_TIMEOUT):
+                external = await ExternalDiscoveryService(
+                    self._session
+                ).discover(
+                    user_prefs.preferred_genres,
+                    language_affinity=user_prefs.language_affinity,
+                    user_locale=user_locale,
+                )
+        except TimeoutError:
+            logger.warning("daily_playlist_external_timeout")
+
         int_scored, ext_picked = merge_hybrid_playlist(
             scored, external, _DAILY_SIZE
         )
-
         track_map = {t.id: t for t in all_tracks}
         internal_ids = [
             s.track_id for s in int_scored if s.track_id in track_map
         ]
         global_top = await self.get_global_top()
-        external_track_ids = await self._import_external_candidates(
-            ext_picked, user_id
-        )
+        external_track_ids: list[int] = []
+        if ext_picked:
+            try:
+                async with asyncio.timeout(_EXTERNAL_IMPORT_TIMEOUT):
+                    external_track_ids = (
+                        await self._import_external_candidates(
+                            ext_picked, user_id
+                        )
+                    )
+            except TimeoutError:
+                logger.warning("daily_playlist_import_timeout")
         await self._telemetry.record_impressions(
             user_id=user_id,
             surface="daily_playlist",
@@ -1747,25 +1821,40 @@ class RecommendationService:
             ExternalDiscoveryService,
         )
 
-        external = await ExternalDiscoveryService(self._session).discover(
-            user_prefs.preferred_genres,
-            limit_per_source=20,
-            language_affinity=user_prefs.language_affinity,
-            user_locale=user_locale,
-        )
+        external: list = []
+        try:
+            async with asyncio.timeout(_EXTERNAL_DISCOVERY_TIMEOUT):
+                external = await ExternalDiscoveryService(
+                    self._session
+                ).discover(
+                    user_prefs.preferred_genres,
+                    limit_per_source=20,
+                    language_affinity=user_prefs.language_affinity,
+                    user_locale=user_locale,
+                )
+        except TimeoutError:
+            logger.warning("weekly_playlist_external_timeout")
+
         int_scored, ext_picked = merge_hybrid_playlist(
             scored,
             external,
             _WEEKLY_SIZE,
         )
-
         track_map = {t.id: t for t in all_tracks}
         internal_ids = [
             s.track_id for s in int_scored if s.track_id in track_map
         ]
-        external_track_ids = await self._import_external_candidates(
-            ext_picked, user_id
-        )
+        external_track_ids: list[int] = []
+        if ext_picked:
+            try:
+                async with asyncio.timeout(_EXTERNAL_IMPORT_TIMEOUT):
+                    external_track_ids = (
+                        await self._import_external_candidates(
+                            ext_picked, user_id
+                        )
+                    )
+            except TimeoutError:
+                logger.warning("weekly_playlist_import_timeout")
         await self._telemetry.record_impressions(
             user_id=user_id,
             surface="weekly_playlist",

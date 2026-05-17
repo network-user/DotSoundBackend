@@ -21,8 +21,39 @@ interface StationGapRow {
   id: number
   name: string
   soundcloud_user_id: number | null
+  catalog_sync_enabled: boolean
   station_track_count: number | null
   station_synced_at: string | null
+}
+
+function QueueDepthBadge() {
+  const { data } = useQuery({
+    queryKey: ['admin', 'queue-depth'],
+    queryFn: () => adminApi.getQueueDepth(),
+    refetchInterval: 15_000,
+  })
+  if (!data?.available) return null
+  const n = data.queue_length ?? 0
+  const color =
+    n > 500
+      ? 'var(--color-error, #c0392b)'
+      : n > 100
+        ? 'var(--color-warn, #e67e22)'
+        : 'var(--color-text-secondary, #888)'
+  return (
+    <span
+      style={{
+        fontSize: '12px',
+        color,
+        background: 'var(--color-surface-raised, #1e1e1e)',
+        padding: '2px 8px',
+        borderRadius: '10px',
+        fontVariantNumeric: 'tabular-nums',
+      }}
+    >
+      Очередь: {n}
+    </span>
+  )
 }
 
 function fmtDate(iso: string | null): string {
@@ -69,6 +100,7 @@ export function StationGapRoute() {
     String(DEFAULT_MIN_TRACKS),
   )
   const [page, setPage] = useState(1)
+  const [includeSyncDisabled, setIncludeSyncDisabled] = useState(false)
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set())
   const [resyncResult, setResyncResult] = useState<{
     queued: number
@@ -76,12 +108,19 @@ export function StationGapRoute() {
   } | null>(null)
 
   const list = useQuery({
-    queryKey: ['admin', 'station-gap', minTracks, page],
+    queryKey: [
+      'admin',
+      'station-gap',
+      minTracks,
+      page,
+      includeSyncDisabled,
+    ],
     queryFn: () =>
       adminApi.getStationGapArtists({
         min_tracks: minTracks,
         page,
         size: PAGE_SIZE,
+        include_sync_disabled: includeSyncDisabled || undefined,
       }),
     placeholderData: keepPreviousData,
   })
@@ -151,6 +190,7 @@ export function StationGapRoute() {
       min_tracks: minTracks,
       page: targetPage,
       size: PAGE_SIZE,
+      include_sync_disabled: includeSyncDisabled || undefined,
     })
     return res.items.map((r) => r.id)
   }
@@ -195,6 +235,26 @@ export function StationGapRoute() {
       size: 100,
     },
     {
+      accessorKey: 'catalog_sync_enabled',
+      header: 'Синк',
+      cell: ({ row }) =>
+        row.original.catalog_sync_enabled ? (
+          <span style={{ color: 'var(--color-text-secondary, #888)' }}>
+            вкл
+          </span>
+        ) : (
+          <span
+            style={{
+              color: 'var(--color-error, #c0392b)',
+              fontWeight: 600,
+            }}
+          >
+            выкл
+          </span>
+        ),
+      size: 60,
+    },
+    {
       accessorKey: 'station_track_count',
       header: 'Треков в станции',
       cell: ({ row }) => (
@@ -218,47 +278,73 @@ export function StationGapRoute() {
       title="Пробелы станций"
       subtitle={`Артисты без станционного плейлиста или с < ${minTracks} треков`}
       actions={
-        <MotionPress
-          type="button"
-          variant="primary"
-          disabled={selectedCount === 0 || isBusy}
-          onClick={handleResync}
-        >
-          {resyncMutation.isPending
-            ? 'Ставим в очередь…'
-            : `Resync станций (${selectedCount})`}
-        </MotionPress>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+          <QueueDepthBadge />
+          <MotionPress
+            type="button"
+            variant="primary"
+            disabled={selectedCount === 0 || isBusy}
+            onClick={handleResync}
+          >
+            {resyncMutation.isPending
+              ? 'Ставим в очередь…'
+              : `Resync станций (${selectedCount})`}
+          </MotionPress>
+        </div>
       }
       filters={
         <div
-          style={{ display: 'flex', alignItems: 'center', gap: '8px' }}
+          style={{ display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}
         >
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <label
+              htmlFor="min-tracks-input"
+              style={{ fontSize: '13px', whiteSpace: 'nowrap' }}
+            >
+              Порог треков:
+            </label>
+            <input
+              id="min-tracks-input"
+              type="number"
+              min={0}
+              max={200}
+              value={minTracksInput}
+              onChange={(e) => setMinTracksInput(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') applyMinTracks()
+              }}
+              style={{ width: '70px' }}
+            />
+            <MotionPress
+              type="button"
+              variant="ghost"
+              onClick={applyMinTracks}
+              disabled={isBusy}
+            >
+              Применить
+            </MotionPress>
+          </div>
           <label
-            htmlFor="min-tracks-input"
-            style={{ fontSize: '13px', whiteSpace: 'nowrap' }}
-          >
-            Порог треков:
-          </label>
-          <input
-            id="min-tracks-input"
-            type="number"
-            min={0}
-            max={200}
-            value={minTracksInput}
-            onChange={(e) => setMinTracksInput(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter') applyMinTracks()
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '6px',
+              fontSize: '13px',
+              cursor: 'pointer',
+              userSelect: 'none',
             }}
-            style={{ width: '70px' }}
-          />
-          <MotionPress
-            type="button"
-            variant="ghost"
-            onClick={applyMinTracks}
-            disabled={isBusy}
           >
-            Применить
-          </MotionPress>
+            <input
+              type="checkbox"
+              checked={includeSyncDisabled}
+              onChange={(e) => {
+                setIncludeSyncDisabled(e.target.checked)
+                setPage(1)
+                setSelectedIds(new Set())
+              }}
+            />
+            Включить с выкл. синком
+          </label>
         </div>
       }
       toolbarHint={

@@ -448,6 +448,21 @@ export const api = {
     return request(`/api/v1/tracks/my?page=${page}&size=${size}`)
   },
 
+  getMyImportedTracks(
+    page = 1,
+    size = 50,
+    source?: string,
+  ): Promise<TrackListResponse> {
+    const params = new URLSearchParams({
+      page: String(page),
+      size: String(size),
+    })
+    if (source) params.set('source', source)
+    return request(
+      `/api/v1/tracks/my/imported?${params.toString()}`,
+    )
+  },
+
   getTrackGenres(): Promise<string[]> {
     return request('/api/v1/tracks/genres')
   },
@@ -466,6 +481,19 @@ export const api = {
     }
     return request(
       `/api/v1/users/me/library?${params.toString()}`,
+    )
+  },
+
+  getMyCollection(
+    page = 1,
+    size = 50,
+  ): Promise<TrackListResponse> {
+    const params = new URLSearchParams({
+      page: String(page),
+      size: String(size),
+    })
+    return request(
+      `/api/v1/users/me/collection?${params.toString()}`,
     )
   },
 

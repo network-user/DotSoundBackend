@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import asyncio
+
 import structlog
 from dotsound_private_core.services.recommendation_engine import (
     ExternalTrackCandidate,
@@ -15,6 +17,8 @@ from app.services.soundcloud_service import SoundCloudService
 logger: structlog.stdlib.BoundLogger = structlog.get_logger(
     __name__
 )
+
+_DISCOVER_TIMEOUT_SECONDS = 8
 
 
 class ExternalDiscoveryService:
@@ -36,53 +40,31 @@ class ExternalDiscoveryService:
             settings.sc_client_id,
             self._session,
         )
-        raw: list[dict] = []
-
-        try:
-            raw += await svc.get_trending(
-                limit=limit_per_source
-            )
-        except Exception as exc:
-            logger.warning(
-                "discovery_trending_failed",
-                error=str(exc),
-            )
 
         genres_to_search = (preferred_genres or [])[:2] or [
             "popular",
             "new",
         ]
-        for genre in genres_to_search:
-            try:
-                raw += await svc.search(
-                    genre, limit=limit_per_source
-                )
-            except Exception as exc:
-                logger.warning(
-                    "discovery_genre_search_failed",
-                    genre=genre,
-                    error=str(exc),
-                )
+        queries: list[str] = ["__trending__"] + list(genres_to_search)
+        if should_boost_russian_discovery(language_affinity, user_locale):
+            queries += ["russian", "russian hip hop", "russian pop"]
 
-        if should_boost_russian_discovery(
-            language_affinity,
-            user_locale,
-        ):
-            for term in (
-                "russian",
-                "russian hip hop",
-                "russian pop",
-            ):
-                try:
-                    raw += await svc.search(
-                        term, limit=limit_per_source
-                    )
-                except Exception as exc:
-                    logger.warning(
-                        "discovery_ru_search_failed",
-                        term=term,
-                        error=str(exc),
-                    )
+        async def _fetch(term: str) -> list[dict]:
+            try:
+                if term == "__trending__":
+                    return await svc.get_trending(limit=limit_per_source)
+                return await svc.search(term, limit=limit_per_source)
+            except Exception as exc:
+                label = (
+                    "discovery_trending_failed"
+                    if term == "__trending__"
+                    else "discovery_search_failed"
+                )
+                logger.warning(label, term=term, error=str(exc))
+                return []
+
+        results = await asyncio.gather(*[_fetch(q) for q in queries])
+        raw: list[dict] = [item for batch in results for item in batch]
 
         seen: set[str] = set()
         candidates: list[ExternalTrackCandidate] = []

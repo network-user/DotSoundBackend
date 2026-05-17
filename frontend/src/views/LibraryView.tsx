@@ -3,6 +3,7 @@ import { useTranslation } from 'react-i18next'
 import { useSearchParams, useNavigate } from 'react-router-dom'
 import { LikedView } from '@/views/LikedView'
 import { PlaylistsView } from '@/views/PlaylistsView'
+import { ImportedView } from '@/views/ImportedView'
 import { HistoryList } from '@/components/Profile/HistoryList'
 import { Icon } from '@/components/Icon/Icon'
 import { MotionPress } from '@/components/ui/MotionPress'
@@ -35,7 +36,7 @@ const SHORTCUTS = [
   },
 ] as const
 
-type Tab = 'liked' | 'playlists' | 'history'
+type Tab = 'liked' | 'playlists' | 'imported' | 'history'
 
 const STORAGE_KEY = 'library-tab'
 
@@ -45,6 +46,7 @@ const TABS: Array<{
 }> = [
   { id: 'liked', labelKey: 'library.tabLiked' },
   { id: 'playlists', labelKey: 'library.tabPlaylists' },
+  { id: 'imported', labelKey: 'library.tabImported' },
   { id: 'history', labelKey: 'library.tabHistory' },
 ]
 
@@ -52,6 +54,7 @@ function isTab(s: string | null): s is Tab {
   return (
     s === 'liked' ||
     s === 'playlists' ||
+    s === 'imported' ||
     s === 'history'
   )
 }
@@ -161,6 +164,9 @@ export function LibraryView() {
         {tab === 'liked' && <LikedView embedded />}
         {tab === 'playlists' && (
           <PlaylistsView embedded />
+        )}
+        {tab === 'imported' && (
+          <ImportedView embedded />
         )}
         {tab === 'history' && <HistoryList />}
       </div>

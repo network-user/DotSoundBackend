@@ -175,6 +175,37 @@ class TrackRepository(BaseRepository[Track]):
             total,
         )
 
+    async def list_imported_by_user(
+        self,
+        user_id: int,
+        offset: int = 0,
+        limit: int = 50,
+        source_filter: str | None = None,
+    ) -> tuple[list[Track], int]:
+        condition = (
+            Track.is_active.is_(True)
+            & self._exclude_hidden_sources()
+            & (Track.uploaded_by_id == user_id)
+            & Track.imported_from.isnot(None)
+        )
+        if source_filter:
+            condition = condition & (
+                func.lower(Track.imported_from) == source_filter.lower()
+            )
+        total_result = await self._session.execute(
+            select(func.count()).where(condition)
+        )
+        total = int(total_result.scalar_one())
+
+        tracks_result = await self._session.execute(
+            select(Track)
+            .where(condition)
+            .order_by(Track.created_at.desc())
+            .offset(offset)
+            .limit(limit)
+        )
+        return list(tracks_result.scalars().all()), total
+
     async def list_by_user(
         self,
         user_id: int,

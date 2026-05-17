@@ -151,6 +151,35 @@ async def list_my_tracks(
     )
 
 
+@router.get(
+    "/my/imported",
+    response_model=TrackListResponse,
+)
+@limiter.limit("120/minute")
+async def list_my_imported_tracks(
+    request: Request,
+    page: int = Query(1, ge=1),
+    size: int = Query(50, ge=1, le=100),
+    source: str | None = Query(None, max_length=32),
+    session: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> TrackListResponse:
+    service = TrackService(session)
+    tracks, total = await service.list_imported_by_user(
+        current_user.id,
+        page=page,
+        size=size,
+        source_filter=source or None,
+    )
+    items = await dedupe_and_build_track_list(session, tracks)
+    return TrackListResponse(
+        items=items,
+        total=total,
+        page=page,
+        size=size,
+    )
+
+
 @router.patch(
     "/{track_id}",
     response_model=TrackResponse,

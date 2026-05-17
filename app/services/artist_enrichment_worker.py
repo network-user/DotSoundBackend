@@ -146,9 +146,9 @@ async def re_enrich_pending_artists_task() -> dict:
     from app.config import settings
     from app.services.background_jobs import IdempotencySkipped, enqueue
 
-    if not settings.catalog_auto_sync_enabled:
-        logger.info("re_enrich_sweep_skipped_auto_sync_disabled")
-        return {"status": "skipped_auto_sync_disabled"}
+    if not settings.catalog_reenrich_sweep_enabled:
+        logger.info("re_enrich_sweep_skipped_disabled")
+        return {"status": "skipped_disabled"}
     sweep_limit = _positive_int(
         settings.catalog_reenrich_sweep_limit,
         default=_REENRICH_BATCH_LIMIT,

@@ -38,6 +38,7 @@ class RecommendationRepository:
             Track.is_public.is_(True),
             self._exclude_hidden_sources(),
             TrackRepository._playback_listing_allowed(),
+            TrackRepository._playable_filter(),
         )
         if genre_filter:
             q = q.where(Track.genre.in_(genre_filter))
@@ -58,6 +59,7 @@ class RecommendationRepository:
             Track.is_public.is_(True),
             self._exclude_hidden_sources(),
             TrackRepository._playback_listing_allowed(),
+            TrackRepository._playable_filter(),
         )
         if genre_filter:
             q = q.where(Track.genre.in_(genre_filter))
@@ -188,6 +190,7 @@ class RecommendationRepository:
                 Track.is_public.is_(True),
                 self._exclude_hidden_sources(),
                 TrackRepository._playback_listing_allowed(),
+                TrackRepository._playable_filter(),
             )
             .order_by(Track.play_count.desc())
             .limit(limit)
@@ -207,6 +210,7 @@ class RecommendationRepository:
                 Track.is_public.is_(True),
                 self._exclude_hidden_sources(),
                 TrackRepository._playback_listing_allowed(),
+                TrackRepository._playable_filter(),
                 Track.created_at >= cutoff,
             )
             .order_by(Track.created_at.desc())
@@ -281,6 +285,7 @@ class RecommendationRepository:
                 Track.is_public.is_(True),
                 self._exclude_hidden_sources(),
                 TrackRepository._playback_listing_allowed(),
+                TrackRepository._playable_filter(),
             )
         )
         return list(result.scalars().all())
@@ -295,6 +300,7 @@ class RecommendationRepository:
                 Track.is_public.is_(True),
                 self._exclude_hidden_sources(),
                 TrackRepository._playback_listing_allowed(),
+                TrackRepository._playable_filter(),
             )
         )
         id_order = {tid: i for i, tid in enumerate(ids)}

@@ -57,6 +57,7 @@
   "library": {
     "tabLiked": "Favorites",
     "tabPlaylists": "Playlists",
+    "tabImported": "Imported",
     "tabHistory": "History"
   },
   "admin": {

@@ -33,6 +33,7 @@ export interface Track {
     | 'official_embed'
     | 'external_link'
   source_platform: string | null
+  imported_from: string | null
   sc_url: string | null
   sc_uri: string | null
   source_url: string | null

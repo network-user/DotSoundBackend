@@ -987,10 +987,16 @@ export const adminApi = {
       method: 'POST',
       body: { artist_ids: artistIds, bypass_cache: true },
     }),
+  getQueueDepth: () =>
+    adminFetch<{ queue_length: number | null; available: boolean }>(
+      '/system/queue-depth',
+    ),
+
   getStationGapArtists: (params: {
     min_tracks?: number
     page?: number
     size?: number
+    include_sync_disabled?: boolean
   }) =>
     adminFetch<{
       items: Array<{
@@ -998,6 +1004,7 @@ export const adminApi = {
         name: string
         image_key: string | null
         soundcloud_user_id: number | null
+        catalog_sync_enabled: boolean
         station_track_count: number | null
         station_synced_at: string | null
       }>

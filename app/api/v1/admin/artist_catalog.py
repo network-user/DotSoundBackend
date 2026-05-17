@@ -948,17 +948,23 @@ async def admin_artists_station_gap(
     min_tracks: int = Query(10, ge=0, le=200),
     page: int = Query(1, ge=1),
     size: int = Query(50, ge=1, le=200),
+    include_sync_disabled: bool = Query(False),
     session: AsyncSession = Depends(get_db),
     _admin: User = Depends(require_admin_session),
 ) -> AdminStationGapResponse:
     """List artists whose station playlist is missing or has fewer
-    than *min_tracks* tracks. Used to bulk-schedule station re-syncs."""
+    than *min_tracks* tracks. Used to bulk-schedule station re-syncs.
+
+    Pass ``include_sync_disabled=true`` to also show artists with
+    ``catalog_sync_enabled=false`` (useful for bulk re-enabling).
+    """
     repo = ArtistCatalogRepository(session)
     offset = (page - 1) * size
     rows, total = await repo.find_artists_with_station_gap(
         min_tracks,
         offset=offset,
         limit=size,
+        include_sync_disabled=include_sync_disabled,
     )
     from app.schemas.admin_artist_catalog import AdminStationGapItem
 
@@ -972,6 +978,7 @@ async def admin_artists_station_gap(
                 if artist.soundcloud_user_id is not None
                 else None
             ),
+            catalog_sync_enabled=bool(artist.catalog_sync_enabled),
             station_track_count=(
                 int(track_count) if track_count is not None else None
             ),

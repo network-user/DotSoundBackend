@@ -215,6 +215,35 @@ class TrackService:
             playable_only=playable_only,
         )
 
+    async def list_imported_by_user(
+        self,
+        user_id: int,
+        page: int = 1,
+        size: int = 50,
+        source_filter: str | None = None,
+    ) -> tuple[list[Track], int]:
+        offset = (page - 1) * size
+        return await self._repo.list_imported_by_user(
+            user_id=user_id,
+            offset=offset,
+            limit=size,
+            source_filter=source_filter,
+        )
+
+    async def list_liked_or_imported_by_user(
+        self,
+        user_id: int,
+        page: int = 1,
+        size: int = 50,
+    ) -> tuple[list[Track], int]:
+        user = await self._resolve_user(user_id)
+        offset = (page - 1) * size
+        return await self._library_repo.list_liked_or_imported(
+            user_id=user.id,
+            offset=offset,
+            limit=size,
+        )
+
     async def list_library(
         self,
         user_id: int,

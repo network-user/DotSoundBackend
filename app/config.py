@@ -193,6 +193,7 @@ class AppSettings(BaseSettings):
     catalog_full_sweep_limit: int = 4
     catalog_full_sweep_batch_size: int = 2
     catalog_reenrich_sweep_limit: int = 25
+    catalog_reenrich_sweep_enabled: bool = True
     artist_station_stale_threshold_days: int = 7
     artist_catalog_full_sync_stale_threshold_days: int = 30
     artist_catalog_enqueue_lock_ttl_seconds: int = 300

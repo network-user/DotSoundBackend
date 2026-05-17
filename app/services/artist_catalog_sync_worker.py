@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import contextlib
 from typing import Any
 
@@ -578,6 +579,7 @@ async def sync_stale_stations_batch_task() -> dict[str, Any]:
                 continue
             await sync_artist_similar_station_task.kiq(artist_id)
             enqueued += 1
+            await asyncio.sleep(0.05)
 
     logger.info(
         "station_stale_sweep_complete",
@@ -675,6 +677,7 @@ async def sync_stale_catalogs_batch_task() -> dict[str, Any]:
                 continue
             await sync_artist_catalog_task.kiq(artist_id)
             enqueued += 1
+            await asyncio.sleep(0.05)
 
     logger.info(
         "catalog_stale_sweep_complete",

@@ -3,6 +3,7 @@ from sqlalchemy import and_, delete, func, or_, select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.models.like import Like
 from app.models.track import Track
 from app.models.user_track_library import UserTrackLibrary
 from app.repositories.track import TrackRepository
@@ -143,6 +144,54 @@ class UserTrackLibraryRepository:
         )
         tracks = (await self._session.execute(list_stmt)).scalars().all()
         return list(tracks), int(total)
+
+    async def list_liked_or_imported(
+        self,
+        user_id: int,
+        offset: int = 0,
+        limit: int = 50,
+    ) -> tuple[list[Track], int]:
+        base = (
+            Track.is_active.is_(True)
+            & self._exclude_hidden_sources()
+            & Track.deleted_at.is_(None)
+        )
+        liked_ids = (
+            select(Track.id)
+            .join(
+                Like,
+                (Like.track_id == Track.id)
+                & (Like.user_id == user_id),
+            )
+            .where(base)
+        )
+        imported_ids = (
+            select(Track.id).where(
+                base,
+                Track.uploaded_by_id == user_id,
+                Track.imported_from.isnot(None),
+            )
+        )
+        all_ids_subq = liked_ids.union(imported_ids).subquery()
+
+        total = int(
+            (
+                await self._session.execute(
+                    select(func.count()).select_from(
+                        all_ids_subq
+                    )
+                )
+            ).scalar_one()
+        )
+
+        rows = await self._session.execute(
+            select(Track)
+            .where(Track.id.in_(select(all_ids_subq.c.id)))
+            .order_by(Track.created_at.desc())
+            .offset(offset)
+            .limit(limit)
+        )
+        return list(rows.scalars().all()), total
 
     async def count_by_user(self, user_id: int) -> int:
         result = await self._session.execute(
