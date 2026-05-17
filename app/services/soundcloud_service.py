@@ -133,6 +133,18 @@ class SoundCloudStationNotAvailable(Exception):
         self.reason = reason
 
 
+def _sc_guard_status(r: httpx.Response) -> None:
+    """Raise :class:`SoundCloudRateLimitError` for 403/451 before delegating
+    to ``r.raise_for_status()``.
+
+    Every legacy ``_sc_client`` call site that needs to protect against IP
+    blocks should use this instead of bare ``r.raise_for_status()``.
+    """
+    if r.status_code in (403, 451):
+        raise SoundCloudRateLimitError(r.status_code)
+    r.raise_for_status()
+
+
 def _sc_error_detail(
     *,
     code: str,
@@ -559,7 +571,7 @@ class SoundCloudService:
                         with contextlib.suppress(ValueError):
                             retry_after = float(raw)
                     raise SoundCloudRateLimitError(r.status_code, retry_after)
-                r.raise_for_status()
+                _sc_guard_status(r)
                 data = r.json()
         except SoundCloudSemaphoreTimeout as exc:
             raise HTTPException(
@@ -732,7 +744,7 @@ class SoundCloudService:
                 retry_after=retry_after,
             )
             raise SoundCloudRateLimitError(r.status_code, retry_after)
-        r.raise_for_status()
+        _sc_guard_status(r)
         data = r.json()
         return [
             item["track"]
@@ -1372,7 +1384,7 @@ class SoundCloudService:
                         status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
                         detail=_SC_AUTH_FAILED_MSG,
                     )
-                r.raise_for_status()
+                _sc_guard_status(r)
                 data = r.json()
         except SoundCloudSemaphoreTimeout as exc:
             raise HTTPException(
@@ -2011,7 +2023,7 @@ class SoundCloudService:
                         status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
                         detail=_SC_AUTH_FAILED_MSG,
                     )
-                r.raise_for_status()
+                _sc_guard_status(r)
                 data = r.json()
         except SoundCloudSemaphoreTimeout as exc:
             raise HTTPException(

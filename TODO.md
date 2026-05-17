@@ -1,5 +1,21 @@
 # DotSound - TODO Tracker
 
+- [x] **SC catalog-sync: comprehensive error deferral, no more failed_terminal (2026-05-17)**
+  - Backend `soundcloud_service.py`: добавлен `_sc_guard_status()` helper —
+    преобразует HTTP 403/451 в `SoundCloudRateLimitError` до вызова
+    `r.raise_for_status()`. Заменены все незащищённые вызовы в legacy
+    `_sc_client()` путях: `search()`, `get_trending_tracks()`,
+    `fetch_playlist_by_id()`, `search_users()`.
+  - Backend `artist_catalog_sync_worker.py`: все три local handlers (full,
+    station, release) расширены: теперь перехватывают `HTTPException` с
+    любым 503 статусом (а не только `soundcloud_circuit_burned`) и возвращают
+    `deferred_sc_unavailable` вместо re-raise. Это закрывает `auth_failed` и
+    другие 503-коды от PrivateCore OutboundClient.
+  - **ДЕЙСТВИЕ**: необходим рестарт бэкенд-сервера и Taskiq-воркера.
+  - **TODO (будущее)**: offload каталог-синк задач на ComputeWorker требует
+    рефакторинга `compute_jobs` idempotency для повторяющихся задач (сейчас
+    succeeded строка блокирует повторный enqueue для того же артиста).
+
 - [x] **Settings reset modal + onboarding swipe calibration (2026-05-17)**
   - Frontend: `SettingsConfirmModal` с `z-index: 10200`, solid panel и
     safe-area padding для подтверждения «Сбросить рекомендации» на мобилке;

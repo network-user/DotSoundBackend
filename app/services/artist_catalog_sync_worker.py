@@ -166,25 +166,25 @@ async def run_sync_artist_catalog_local(
             "artist_id": artist_id,
         }
     except HTTPException as exc:
-        _detail = exc.detail if isinstance(exc.detail, dict) else {}
-        if (
-            exc.status_code == 503
-            and _detail.get("code") == "soundcloud_circuit_burned"
-        ):
+        if exc.status_code == 503:
+            _detail = exc.detail if isinstance(exc.detail, dict) else {}
+            _code = _detail.get("code", "")
             logger.warning(
-                "sc_catalog_sync_deferred_circuit_burned",
+                "sc_catalog_sync_deferred_sc_unavailable",
                 artist_id=artist_id,
                 mode="full",
+                code=_code,
             )
             await acsp.set_error(
                 artist_id,
                 mode="full",
                 soundcloud_album_id=None,
-                message="deferred:soundcloud_circuit_burned",
+                message=f"deferred:sc_503:{_code}",
             )
             return {
-                "status": "deferred_circuit_burned",
+                "status": "deferred_sc_unavailable",
                 "artist_id": artist_id,
+                "code": _code,
             }
         await acsp.set_error(
             artist_id,
@@ -268,25 +268,25 @@ async def run_sync_artist_similar_station_local(
             "artist_id": artist_id,
         }
     except HTTPException as exc:
-        _detail = exc.detail if isinstance(exc.detail, dict) else {}
-        if (
-            exc.status_code == 503
-            and _detail.get("code") == "soundcloud_circuit_burned"
-        ):
+        if exc.status_code == 503:
+            _detail = exc.detail if isinstance(exc.detail, dict) else {}
+            _code = _detail.get("code", "")
             logger.warning(
-                "sc_catalog_sync_deferred_circuit_burned",
+                "sc_catalog_sync_deferred_sc_unavailable",
                 artist_id=artist_id,
                 mode="station",
+                code=_code,
             )
             await acsp.set_error(
                 artist_id,
                 mode="station",
                 soundcloud_album_id=None,
-                message="deferred:soundcloud_circuit_burned",
+                message=f"deferred:sc_503:{_code}",
             )
             return {
-                "status": "deferred_circuit_burned",
+                "status": "deferred_sc_unavailable",
                 "artist_id": artist_id,
+                "code": _code,
             }
         await acsp.set_error(
             artist_id,
@@ -470,27 +470,27 @@ async def run_sync_artist_release_local(
             "soundcloud_album_id": soundcloud_album_id,
         }
     except HTTPException as exc:
-        _detail = exc.detail if isinstance(exc.detail, dict) else {}
-        if (
-            exc.status_code == 503
-            and _detail.get("code") == "soundcloud_circuit_burned"
-        ):
+        if exc.status_code == 503:
+            _detail = exc.detail if isinstance(exc.detail, dict) else {}
+            _code = _detail.get("code", "")
             logger.warning(
-                "sc_catalog_sync_deferred_circuit_burned",
+                "sc_catalog_sync_deferred_sc_unavailable",
                 artist_id=artist_id,
                 mode="release",
                 soundcloud_album_id=soundcloud_album_id,
+                code=_code,
             )
             await acsp.set_error(
                 artist_id,
                 mode="release",
                 soundcloud_album_id=soundcloud_album_id,
-                message="deferred:soundcloud_circuit_burned",
+                message=f"deferred:sc_503:{_code}",
             )
             return {
-                "status": "deferred_circuit_burned",
+                "status": "deferred_sc_unavailable",
                 "artist_id": artist_id,
                 "soundcloud_album_id": soundcloud_album_id,
+                "code": _code,
             }
         await acsp.set_error(
             artist_id,
