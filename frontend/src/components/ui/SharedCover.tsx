@@ -8,6 +8,7 @@ import {
   SPRING_LAYOUT,
   useReducedMotion,
 } from '@/lib/motion'
+import { Icon } from '@/components/Icon/Icon'
 
 type ImgAttrs = Omit<
   ImgHTMLAttributes<HTMLImageElement>,
@@ -41,6 +42,7 @@ export function SharedCover({
 }: SharedCoverProps) {
   const reduce = useReducedMotion()
   const [loaded, setLoaded] = useState(false)
+  const [errored, setErrored] = useState(false)
   const layoutId =
     trackId !== null && trackId !== undefined
       ? `cover-${trackId}`
@@ -48,9 +50,10 @@ export function SharedCover({
 
   useEffect(() => {
     setLoaded(false)
+    setErrored(false)
   }, [src])
 
-  if (!src) {
+  if (!src || errored) {
     return (
       <div
         className={[
@@ -61,7 +64,11 @@ export function SharedCover({
           .filter(Boolean)
           .join(' ')}
         aria-hidden="true"
-      />
+      >
+        <span className="shared-cover__empty-icon">
+          <Icon name="music" size={20} />
+        </span>
+      </div>
     )
   }
 
@@ -85,7 +92,10 @@ export function SharedCover({
         className="shared-cover-frame__img"
         transition={reduce ? { duration: 0 } : SPRING_LAYOUT}
         onLoad={() => setLoaded(true)}
-        onError={() => setLoaded(true)}
+        onError={() => {
+          setErrored(true)
+          setLoaded(true)
+        }}
         {...rest}
       />
     </div>

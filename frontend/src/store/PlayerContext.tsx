@@ -1097,6 +1097,15 @@ export function PlayerProvider({
   >(new Map())
   const audioCtxRef =
     useRef<AudioContext | null>(null)
+  // Silent-audio heartbeat handles. The buffer source plays a 1 s
+  // looped silent buffer at near-zero gain to keep the
+  // AudioContext continuously emitting samples to the destination
+  // even between tracks; see startSilentHeartbeat for the full
+  // rationale.
+  const silentHeartbeatRef = useRef<{
+    source: AudioBufferSourceNode
+    gain: GainNode
+  } | null>(null)
   const filtersRef = useRef<BiquadFilterNode[]>([])
   const eqBandsRef = useRef<number[]>(
     initialEqRef.current.bands,
@@ -1416,6 +1425,78 @@ export function PlayerProvider({
     applyEqBands()
   }, [applyEqBands])
 
+  // Silent-audio heartbeat. Android Chromium downgrades the PWA
+  // process priority once the AudioContext stops emitting any
+  // samples to the destination -- which happens between tracks
+  // (during the ~200-500 ms it takes the new src to reach
+  // canplay) and during any "silent" tail/head of an HLS segment.
+  // The downgrade ladder is:
+  //   1. ``running`` -> media-foreground priority, fully alive.
+  //   2. ``running`` but no samples for ~30 s -> backgrounded,
+  //      eligible for memory pressure kills.
+  //   3. ``running`` but no samples for ~60 s on a locked screen
+  //      -> killed, notification drawer disappears with the
+  //      process.
+  //
+  // The fix is to keep a continuous, inaudible signal flowing to
+  // ``ctx.destination`` whenever a track is active. A
+  // BufferSourceNode looped over a 1-second silent buffer at gain
+  // ~1e-4 is below the audibility threshold of every consumer
+  // device, but Chromium's process scheduler still counts the
+  // context as "actively producing audio output" -- which keeps
+  // the PWA in the media-foreground bucket the same way a
+  // foreground-service does for native music apps.
+  //
+  // We start the heartbeat lazily on first ``playTrack`` (so a
+  // page that never starts playback never touches the speaker)
+  // and stop it from ``stop()`` so the player does not keep the
+  // session alive after the user explicitly killed it.
+  const startSilentHeartbeat = useCallback(() => {
+    const ctx = audioCtxRef.current
+    if (!ctx || silentHeartbeatRef.current) return
+    try {
+      const buffer = ctx.createBuffer(
+        1,
+        Math.max(1, Math.floor(ctx.sampleRate)),
+        ctx.sampleRate,
+      )
+      const source = ctx.createBufferSource()
+      source.buffer = buffer
+      source.loop = true
+      const gain = ctx.createGain()
+      gain.gain.value = 0.0001
+      source.connect(gain)
+      gain.connect(ctx.destination)
+      source.start(0)
+      silentHeartbeatRef.current = { source, gain }
+    } catch {
+      // Some Safari builds throw on createBufferSource when the
+      // context is still "interrupted"; the next playTrack will
+      // call this again after resumeAudioOutput().
+    }
+  }, [])
+
+  const stopSilentHeartbeat = useCallback(() => {
+    const beat = silentHeartbeatRef.current
+    if (!beat) return
+    silentHeartbeatRef.current = null
+    try {
+      beat.source.stop(0)
+    } catch {
+      /* already stopped */
+    }
+    try {
+      beat.source.disconnect()
+    } catch {
+      /* ignore */
+    }
+    try {
+      beat.gain.disconnect()
+    } catch {
+      /* ignore */
+    }
+  }, [])
+
   const setEqBand = useCallback(
     (idx: number, gain: number) => {
       setEqBands((prev) => {
@@ -1701,11 +1782,18 @@ export function PlayerProvider({
       if (ctx && ctx.state === 'suspended') {
         void ctx.resume().catch(() => {})
       }
+      // Re-arm the silent heartbeat in case Chromium garbage-
+      // collected the looped buffer source while we were
+      // backgrounded (rare, but it has been observed on
+      // ARM Chrome 130+ after a long screen-off period).
+      if (ctx && !silentHeartbeatRef.current) {
+        startSilentHeartbeat()
+      }
     }
     document.addEventListener('visibilitychange', onVisibility)
     return () =>
       document.removeEventListener('visibilitychange', onVisibility)
-  }, [])
+  }, [startSilentHeartbeat])
 
   const toggleRepeat = useCallback(() => {
     setRepeatMode((prev) => {
@@ -2673,8 +2761,10 @@ export function PlayerProvider({
     const _maybeTriggerPseudoCrossfade = (
       a: HTMLAudioElement,
     ) => {
-      if (!radioModeRef.current) return
       if (a.paused) return
+      // Repeat-one would loop on the same track, no point trying
+      // to cross-fade into itself.
+      if (repeatModeRef.current === 'one') return
       const dur = a.duration
       if (!Number.isFinite(dur) || dur <= 0) return
       const remainingMs = (dur - a.currentTime) * 1000
@@ -2689,9 +2779,13 @@ export function PlayerProvider({
       if (crossfadeFiredForRef.current === currentId) return
       // Only fire if there is actually something to cross-fade to,
       // so we don't preempt the natural ``onEnded`` for the last
-      // track of a finite queue.
+      // track of a finite queue. ``manualQueueRef`` is populated in
+      // every mode that has a queue (radio, album, playlist, manual
+      // queue), so this gates the trigger correctly without having
+      // to special-case ``radioModeRef``.
       const nextInQueue = manualQueueRef.current[0]
       if (!nextInQueue) return
+      if (nextInQueue.id === currentId) return
       // Don't compete with an in-flight ``playNext`` (e.g. from a
       // user swipe that just landed) -- that would double-advance.
       if (playNextInFlightRef.current) return
@@ -2964,6 +3058,7 @@ export function PlayerProvider({
     }
     if (bail()) return
     _initAudioCtx()
+    startSilentHeartbeat()
     if (hlsRef.current) {
       hlsRef.current.destroy()
       hlsRef.current = null
@@ -2977,36 +3072,29 @@ export function PlayerProvider({
     // switch.
     const targetVolume =
       audio.volume > 0 ? audio.volume : volume
-    // Soft fade-out + explicit pause guarantees the previous source
-    // cannot keep emitting audio while the new src is loading. This
-    // is the fix for the user-reported "tracks overlap" symptom: on
-    // some Chromium-Android builds setting ``audio.src = newUrl``
-    // implicitly schedules a pause but the buffer release is async,
-    // so for ~100-300 ms both the tail of the old track and the
-    // first frames of the new one play simultaneously. We avoid the
-    // legacy ``src=''`` + ``load()`` reset trio (those break iOS
-    // Safari's user-gesture chain), but a plain ``pause()`` is safe
-    // on every platform and is exactly the missing barrier.
-    if (!audio.paused && audio.volume > 0) {
-      try {
-        await _tweenVolume(audio, 0, TRACK_FADE_OUT_MS)
-      } catch {
-        /* tweening is best-effort; never block the switch */
-      }
-    }
+    // Hard barrier so the previous track cannot bleed into the new
+    // one. We pause+silence synchronously (zero added latency) and
+    // run the cosmetic fade-out *in parallel* with the new src load
+    // so the user does not eat an 80 ms blocking gap on every
+    // switch -- that gap was the "noticeable pause before next
+    // track" the user reported. The fade-out is a no-op for the
+    // perceived audio (we already set volume=0 below) but it makes
+    // the AudioContext meter wind down smoothly for any downstream
+    // analyser visualizers.
+    const paused = audio.paused
+    const previousVolume = audio.volume
     try {
       audio.pause()
     } catch {
       /* ignore */
     }
-    // Drop volume to silence so the new track fades *in* from zero
-    // instead of clipping in at full volume the moment ``canplay``
-    // fires. The fade-in is kicked off below after the audio is
-    // actually ready to play.
     try {
       audio.volume = 0
     } catch {
       /* ignore */
+    }
+    if (!paused && previousVolume > 0) {
+      void _tweenVolume(audio, 0, TRACK_FADE_OUT_MS).catch(() => {})
     }
     setIsPlaying(false)
     setIsPlayingFromCache(false)
@@ -4184,6 +4272,7 @@ export function PlayerProvider({
     }
     streamLoadFailedTrackIdRef.current = null
     prefetchedStreamsRef.current.clear()
+    stopSilentHeartbeat()
     _releaseWakeLock()
     if ('mediaSession' in navigator) {
       navigator.mediaSession.metadata = null

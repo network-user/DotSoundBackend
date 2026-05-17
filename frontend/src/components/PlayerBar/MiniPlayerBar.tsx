@@ -353,20 +353,23 @@ export function MiniPlayerBar() {
                 }
                 transition={COVER_SPRING}
               >
-                {coverSrc ? (
-                  <SharedCover
-                    trackId={track.id}
-                    src={coverSrc}
-                    srcSet={coverSrcSet}
-                    sizes={coverProxySizes(56)}
-                    alt=""
-                    className="mp-cover-img"
-                  />
-                ) : (
-                  <div className="mp-cover-empty">
-                    <Icon name="music" size={18} />
-                  </div>
-                )}
+                <SharedCover
+                  trackId={track.id}
+                  src={coverSrc}
+                  srcSet={coverSrcSet}
+                  sizes={coverProxySizes(56)}
+                  alt=""
+                  className="mp-cover-img"
+                />
+                {/*
+                  SharedCover already renders a styled empty/error
+                  fallback when src is null OR when the image
+                  request fails (404 / SW miss / CDN stall). We
+                  used to gate on coverSrc and fall through to a
+                  bare ``<Icon name="music" />`` which on small
+                  displays looked like the broken-image glyph next
+                  to a stray "site logo" tile.
+                */}
               </m.div>
             </AnimatePresence>
           </div>

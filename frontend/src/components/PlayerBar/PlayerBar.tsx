@@ -267,18 +267,22 @@ export function PlayerBar() {
           exit={slidePresence.exit}
           transition={slidePresence.transition}
         >
-          {coverSrc ? (
-            <SharedCover
-              trackId={track.id}
-              src={coverSrc}
-              srcSet={coverSrcSet}
-              sizes={coverProxySizes(56)}
-              alt=""
-              className="pb-cover-vt"
-            />
-          ) : (
-            <Icon name="music" size={20} />
-          )}
+          <SharedCover
+            trackId={track.id}
+            src={coverSrc}
+            srcSet={coverSrcSet}
+            sizes={coverProxySizes(56)}
+            alt=""
+            className="pb-cover-vt"
+          />
+          {/*
+            SharedCover renders a styled empty/error fallback
+            when src is null or the request fails. The legacy
+            inline ``<Icon name="music" />`` fallback was bleeding
+            into the stacking context as a broken-glyph + site
+            logo combination on Android Chrome, which is what
+            the user sees as "site logo instead of cover".
+          */}
         </m.div>
       </AnimatePresence>
     </div>
