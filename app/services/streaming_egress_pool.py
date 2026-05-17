@@ -23,6 +23,7 @@ of egress capacity.
 
 from __future__ import annotations
 
+import hashlib
 import threading
 from dataclasses import dataclass
 from time import monotonic
@@ -155,12 +156,14 @@ class StreamingEgressPool:
         ok: bool,
     ) -> None:
         """Release the slot and record the outcome."""
+        quarantined = False
         with self._lock:
             now = monotonic()
-            health = self._healths.get(decision.egress_name, EgressHealth())
-            health = record_request_finished(health=health)
+            previous = self._healths.get(decision.egress_name, EgressHealth())
+            health = record_request_finished(health=previous)
             health = record_egress_outcome(health=health, ok=ok, now=now)
             self._healths[decision.egress_name] = health
+            quarantined = health.quarantined_until > previous.quarantined_until
             if not ok and decision.sticky_key is not None:
                 pinned = self._sticky.get(decision.sticky_key)
                 if pinned is not None and pinned[0] == decision.egress_name:
@@ -174,7 +177,22 @@ class StreamingEgressPool:
             sticky_key=decision.sticky_key,
             in_flight=health.in_flight,
             consecutive_failures=health.consecutive_failures,
+            quarantined=quarantined,
         )
+        try:
+            from app.core.observability import (
+                streaming_egress_pick_observed,
+            )
+
+            streaming_egress_pick_observed(
+                egress=decision.egress_name,
+                ok=ok,
+                in_flight=health.in_flight,
+                failure_ratio=health.failure_ratio(),
+                quarantined=quarantined,
+            )
+        except Exception:  # pragma: no cover - metrics must never break stream
+            pass
 
     def reset_for_tests(self) -> None:
         """Clear all state. Tests only."""
@@ -193,3 +211,31 @@ def get_streaming_egress_pool() -> StreamingEgressPool:
 def is_audio_streaming_service(service: str | None) -> bool:
     """Re-export the PrivateCore predicate for Backend callers."""
     return is_streaming_audio_service(service)
+
+
+def make_sticky_key(track_id: int, stream_url: str | None) -> str:
+    """Compose a sticky-key for a single playback session.
+
+    The CDN binds a session to the IP that opened the first byte-range
+    request, so we want every byte of one transcoding to leave from the
+    same egress. Different transcodings of the same track (HLS vs
+    progressive, or two qualities for a manual quality switch) produce
+    different stream URLs and therefore must form separate sticky
+    buckets — otherwise switching quality forces the new transcoding
+    onto a possibly-overloaded egress.
+
+    Implementation: ``track:{id}:{path_hash}`` where ``path_hash`` is a
+    short blake2b digest of the URL ``scheme + host + path`` (query is
+    intentionally dropped because SoundCloud's signed URLs change
+    ``?Policy=…&Signature=…`` per resolve while the underlying object
+    is the same). When ``stream_url`` is ``None`` or empty the key
+    falls back to ``track:{id}`` so legacy callers keep working.
+    """
+    if not stream_url:
+        return f"track:{int(track_id)}"
+    parsed = urlsplit(stream_url)
+    canonical = f"{parsed.scheme}://{parsed.netloc}{parsed.path}"
+    digest = hashlib.blake2b(
+        canonical.encode("utf-8"), digest_size=6
+    ).hexdigest()
+    return f"track:{int(track_id)}:{digest}"

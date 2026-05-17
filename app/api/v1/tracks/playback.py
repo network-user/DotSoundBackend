@@ -47,6 +47,7 @@ from app.services.public_playcount_service import (
 )
 from app.services.radio_service import RadioService
 from app.services.snippet_service import SnippetService
+from app.services.streaming_egress_pool import make_sticky_key
 from app.services.track_playback_health_service import (
     TrackPlaybackHealthService,
     playback_suppressed_blocks_streaming,
@@ -341,6 +342,14 @@ async def _http_proxy_range_get(
                     service=proxy_service,
                     sticky_key=sticky_key,
                 )
+                try:
+                    from app.core.observability import (
+                        streaming_egress_pool_exhausted,
+                    )
+
+                    streaming_egress_pool_exhausted(service=proxy_service)
+                except Exception:  # pragma: no cover - metrics best-effort
+                    pass
                 raise HTTPException(
                     status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
                     detail=detail_error,
@@ -497,7 +506,9 @@ async def _proxy_cors_bypass_third_party_audio(
             detail_fail="Bandcamp stream failed",
             detail_error="Bandcamp stream error",
             proxy_service="bandcamp",
-            sticky_key=f"track:{getattr(track, 'id', 0)}",
+            sticky_key=make_sticky_key(
+                int(getattr(track, "id", 0)), stream_url
+            ),
         )
     if sp == "youtube":
         from app.services.youtube_service import YouTubeService
@@ -516,7 +527,9 @@ async def _proxy_cors_bypass_third_party_audio(
             detail_fail="YouTube stream failed",
             detail_error="YouTube stream error",
             proxy_service="youtube",
-            sticky_key=f"track:{getattr(track, 'id', 0)}",
+            sticky_key=make_sticky_key(
+                int(getattr(track, "id", 0)), stream_url
+            ),
         )
     raise HTTPException(
         status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
@@ -1158,8 +1171,9 @@ async def audio_stream(
                         "Referer": settings.lyrics_sc_cdn_referer,
                     },
                     proxy_service="soundcloud",
-                    sticky_key=(
-                        f"track:{int(getattr(eff_track, 'id', track_id))}"
+                    sticky_key=make_sticky_key(
+                        int(getattr(eff_track, "id", track_id)),
+                        stream_url,
                     ),
                 )
             except HTTPException as exc:

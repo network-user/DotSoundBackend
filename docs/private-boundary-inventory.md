@@ -60,9 +60,20 @@ which parts are owned by `DotSoundPrivateCore`.
   state — per-egress in-flight counter, last-use timestamp, quarantine
   window, and the per-track sticky map — guarded by a single
   `threading.Lock`. The playback range proxy
-  (`app/api/v1/tracks/playback.py`) routes audio CDN requests through
-  the pool and falls back to the server's native egress when no proxy
-  is available or healthy. Tor is intentionally not on this path.
+  (`app/api/v1/tracks/playback.py`) and the background audio-cache
+  worker (`app/services/audio_cache_worker.py`) both route audio CDN
+  requests through the pool, sharing capacity caps and quarantine
+  state. They both fall back to the server's native egress when no
+  proxy is available or healthy. Tor is intentionally not on this
+  path. Sticky binding uses ``make_sticky_key(track_id, stream_url)``
+  so different transcodings of the same track form separate buckets.
+- Prometheus surface: ``streaming_egress_picks_total``,
+  ``streaming_egress_quarantine_total``,
+  ``streaming_egress_exhausted_total``,
+  ``streaming_egress_in_flight``,
+  ``streaming_egress_failure_ratio``. Labels stay
+  low-cardinality (egress identity = ``direct`` or
+  ``scheme://host:port``).
 
 ## Non-Goals For Slice-1
 

@@ -1,5 +1,35 @@
 # DotSound - TODO Tracker
 
+- [x] **Стриминг: пул egress, метрики, sticky-per-transcoding, прогрев кеша (2026-05-17, follow-up)**
+  - `app/services/streaming_egress_pool.py`: добавлен `make_sticky_key(track_id, stream_url)`.
+    Sticky-ключ теперь учитывает не только трек, но и transcoding-вариант
+    (`track:{id}:{blake2b6(scheme+host+path)}`). Query-string (Policy/Signature/Expires
+    у SC) намеренно отбрасывается — подпись меняется на каждый ресолв, объект тот же.
+    Разные качества/протоколы (HLS vs progressive) формируют разные sticky-bucket'ы и
+    могут уходить на разные egress'ы.
+  - `app/api/v1/tracks/playback.py`: все 3 точки вызова (`bandcamp` / `youtube` /
+    `soundcloud`) перешли на `make_sticky_key(track_id, stream_url)` вместо
+    `f"track:{id}"`.
+  - `app/services/audio_cache_worker.py`: `_download_bytes` теперь идёт через тот же
+    `streaming_egress_pool` со sticky-ключом, который совпадает с live-playback.
+    Прогрев CAS-кеша больше не насыщает один IP сервера — пул round-robin'ит между
+    `STREAMING_PROXY_OUT_URLS`, разделяет capacity и quarantine с playback-проксёй.
+    Tor по-прежнему исключён.
+  - `app/core/observability.py`: 5 новых Prometheus-метрик
+    `streaming_egress_picks_total{egress, ok}`,
+    `streaming_egress_quarantine_total{egress}`,
+    `streaming_egress_exhausted_total{service}`,
+    `streaming_egress_in_flight{egress}`,
+    `streaming_egress_failure_ratio{egress}`.
+    `streaming_egress_pool.finish` пишет их через `streaming_egress_pick_observed`,
+    исчерпание пула — через `streaming_egress_pool_exhausted`.
+  - Tests: `tests/app/services/test_streaming_egress_pool.py` — 4 кейса на
+    `make_sticky_key` (ignores query, distinguishes transcodings, distinguishes
+    tracks, fallback). `tests/app/services/test_audio_cache_worker.py` — новый
+    модуль (5 кейсов: pool skipped for unknown platform, pool used for SC, slot
+    released on HTTP error, RuntimeError on pool exhaustion + Prometheus counter).
+    Backend pool/playback/proxy_pool: 32/32 ✓.
+
 - [x] **Стриминг: dedicated egress pool + кеш уже проигранных треков (2026-05-17)**
   - **PrivateCore (`DotSoundPrivateCore`)** — `services/streaming_egress_policy.py`:
     новый policy-модуль для пула egress, который Backend использует для

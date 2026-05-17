@@ -7,6 +7,7 @@ import pytest
 from app.services.streaming_egress_pool import (
     StreamingEgressPool,
     is_audio_streaming_service,
+    make_sticky_key,
 )
 
 
@@ -221,3 +222,27 @@ def test_duplicate_proxy_urls_collapse_to_one_egress(
     assert decision_b is not None
     assert decision_a.egress_name == decision_b.egress_name
     pool.finish(decision_b, ok=True)
+
+
+def test_make_sticky_key_falls_back_without_url() -> None:
+    assert make_sticky_key(42, None) == "track:42"
+    assert make_sticky_key(42, "") == "track:42"
+
+
+def test_make_sticky_key_ignores_query_string() -> None:
+    base = "https://cf-media.sndcdn.com/media/abc/playlist.m3u8"
+    a = make_sticky_key(42, f"{base}?Policy=eyJ&Signature=A")
+    b = make_sticky_key(42, f"{base}?Policy=eyJ&Signature=B&Expires=999")
+    assert a == b
+    assert a.startswith("track:42:")
+
+
+def test_make_sticky_key_distinguishes_transcodings() -> None:
+    progressive = "https://cf-media.sndcdn.com/media/abc/progressive.mp3?sig=1"
+    hls = "https://cf-media.sndcdn.com/media/abc/playlist.m3u8?sig=2"
+    assert make_sticky_key(42, progressive) != make_sticky_key(42, hls)
+
+
+def test_make_sticky_key_distinguishes_tracks() -> None:
+    url = "https://cdn.example.com/x/y.mp3"
+    assert make_sticky_key(1, url) != make_sticky_key(2, url)

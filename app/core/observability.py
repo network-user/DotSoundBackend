@@ -47,6 +47,12 @@ _PROM_CLIENT_PLAYBACK_EVENTS = None
 _PROM_TOR_CIRCUIT_FAILURE_RATE = None
 _PROM_OUTBOUND_PROXY_POOL_SIZE = None
 
+_PROM_STREAMING_EGRESS_PICKS = None
+_PROM_STREAMING_EGRESS_QUARANTINE = None
+_PROM_STREAMING_EGRESS_EXHAUSTED = None
+_PROM_STREAMING_EGRESS_IN_FLIGHT = None
+_PROM_STREAMING_EGRESS_FAILURE_RATIO = None
+
 _PROM_REGISTRY: object | None = None
 
 
@@ -328,6 +334,55 @@ def setup_metrics(application: object) -> None:
     _PROM_OUTBOUND_PROXY_POOL_SIZE = Gauge(
         "outbound_proxy_pool_size",
         "Number of outbound proxy entries active (Tor circuits or static).",
+        registry=registry,
+    )
+
+    global _PROM_STREAMING_EGRESS_PICKS
+    global _PROM_STREAMING_EGRESS_QUARANTINE
+    global _PROM_STREAMING_EGRESS_EXHAUSTED
+    global _PROM_STREAMING_EGRESS_IN_FLIGHT
+    global _PROM_STREAMING_EGRESS_FAILURE_RATIO
+    _PROM_STREAMING_EGRESS_PICKS = Counter(
+        "streaming_egress_picks_total",
+        (
+            "Streaming egress pool picks resolved by outcome "
+            "(ok/fail) and egress identity."
+        ),
+        ["egress", "ok"],
+        registry=registry,
+    )
+    _PROM_STREAMING_EGRESS_QUARANTINE = Counter(
+        "streaming_egress_quarantine_total",
+        (
+            "Number of times an egress entered exponential-backoff "
+            "quarantine after consecutive transport failures."
+        ),
+        ["egress"],
+        registry=registry,
+    )
+    _PROM_STREAMING_EGRESS_EXHAUSTED = Counter(
+        "streaming_egress_exhausted_total",
+        (
+            "Number of times the streaming egress pool returned no "
+            "decision (every proxy quarantined / at capacity, and "
+            "direct fallback disabled)."
+        ),
+        ["service"],
+        registry=registry,
+    )
+    _PROM_STREAMING_EGRESS_IN_FLIGHT = Gauge(
+        "streaming_egress_in_flight",
+        "Live count of in-flight streaming requests per egress.",
+        ["egress"],
+        registry=registry,
+    )
+    _PROM_STREAMING_EGRESS_FAILURE_RATIO = Gauge(
+        "streaming_egress_failure_ratio",
+        (
+            "Lifetime failure ratio per egress "
+            "(failures / (successes + failures))."
+        ),
+        ["egress"],
         registry=registry,
     )
 
@@ -782,15 +837,13 @@ def client_playback_event_observed(
     ).inc()
 
 
-def tor_circuit_health_observed(
-    *, circuit: int, failure_rate: float
-) -> None:
+def tor_circuit_health_observed(*, circuit: int, failure_rate: float) -> None:
     """Update the Prometheus gauge for a single Tor circuit's failure rate."""
     if _PROM_TOR_CIRCUIT_FAILURE_RATE is None:
         return
-    _PROM_TOR_CIRCUIT_FAILURE_RATE.labels(
-        circuit=str(circuit)
-    ).set(max(0.0, min(1.0, failure_rate)))
+    _PROM_TOR_CIRCUIT_FAILURE_RATE.labels(circuit=str(circuit)).set(
+        max(0.0, min(1.0, failure_rate))
+    )
 
 
 def outbound_proxy_pool_size_set(*, size: int) -> None:
@@ -798,3 +851,43 @@ def outbound_proxy_pool_size_set(*, size: int) -> None:
     if _PROM_OUTBOUND_PROXY_POOL_SIZE is None:
         return
     _PROM_OUTBOUND_PROXY_POOL_SIZE.set(int(size))
+
+
+def streaming_egress_pick_observed(
+    *,
+    egress: str,
+    ok: bool,
+    in_flight: int,
+    failure_ratio: float,
+    quarantined: bool,
+) -> None:
+    """Record one streaming-pool slot release.
+
+    The pool calls this from :meth:`StreamingEgressPool.finish` so all
+    metrics share a single update site. Labels stay low-cardinality:
+    ``egress`` is the deterministic short label produced by
+    ``_identity_name`` (``direct`` or ``scheme://host:port``), so the
+    cardinality scales with the proxy fleet, not with track ids.
+    """
+    if _PROM_STREAMING_EGRESS_PICKS is not None:
+        _PROM_STREAMING_EGRESS_PICKS.labels(
+            egress=egress,
+            ok="true" if ok else "false",
+        ).inc()
+    if _PROM_STREAMING_EGRESS_IN_FLIGHT is not None:
+        _PROM_STREAMING_EGRESS_IN_FLIGHT.labels(egress=egress).set(
+            max(0, int(in_flight))
+        )
+    if _PROM_STREAMING_EGRESS_FAILURE_RATIO is not None:
+        _PROM_STREAMING_EGRESS_FAILURE_RATIO.labels(egress=egress).set(
+            max(0.0, min(1.0, failure_ratio))
+        )
+    if quarantined and _PROM_STREAMING_EGRESS_QUARANTINE is not None:
+        _PROM_STREAMING_EGRESS_QUARANTINE.labels(egress=egress).inc()
+
+
+def streaming_egress_pool_exhausted(*, service: str) -> None:
+    """Record one pool-exhaustion event for the given service label."""
+    if _PROM_STREAMING_EGRESS_EXHAUSTED is None:
+        return
+    _PROM_STREAMING_EGRESS_EXHAUSTED.labels(service=service).inc()
