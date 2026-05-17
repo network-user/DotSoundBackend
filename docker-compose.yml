@@ -169,6 +169,7 @@ services:
       - app.services.account_deletion_worker
       - app.services.track_title_normalization_task
       - app.tasks.rec_cache_warmer
+      - app.services.sc_import_verify_worker
     env_file:
       - .env
       # PrivateCore-only configuration (lyrics provider tokens, audio
@@ -326,7 +327,9 @@ services:
       - dotsound
 
   backup:
-    image: postgres:16-alpine
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.backup
     restart: unless-stopped
     profiles:
       - backup
@@ -337,6 +340,7 @@ services:
       PGUSER: ${POSTGRES_USER:-dotsound}
       PGPASSWORD: ${POSTGRES_PASSWORD:-dotsound}
       PGDATABASE: ${POSTGRES_DB:-dotsound}
+      MINIO_BACKUP_ENDPOINT: http://minio:9000
     volumes:
       - ./scripts:/scripts:ro
       - backup_data:/backups
@@ -346,6 +350,8 @@ services:
     entrypoint: ["/bin/sh", "-c", "chmod +x /scripts/*.sh && crontab /scripts/backup-crontab && crond -f -d 8"]
     depends_on:
       postgres:
+        condition: service_healthy
+      minio:
         condition: service_healthy
     logging: *default-logging
     networks:

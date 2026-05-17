@@ -532,6 +532,27 @@ async def repair_track_playback_task(
 async def sweep_playback_repair_task(
     limit: int | None = None,
 ) -> dict[str, Any]:
+    from app.services.sc_semaphore import get_active_slot_count
+
+    max_active = max(1, int(settings.soundcloud_global_concurrency))
+    threshold = max(
+        1,
+        int(max_active * settings.soundcloud_background_slot_fraction),
+    )
+    active_slots = await get_active_slot_count()
+    if active_slots >= threshold:
+        logger.info(
+            "sweep_playback_repair_deferred_backpressure",
+            active_slots=active_slots,
+            max_active=max_active,
+            threshold=threshold,
+        )
+        return {
+            "status": "deferred_backpressure",
+            "active_slots": active_slots,
+            "threshold": threshold,
+        }
+
     sweep_limit = int(limit or settings.playback_repair_sweep_limit)
     async with AsyncSessionLocal() as session:
         return await TrackPlaybackRepairService(session).repair_candidates(

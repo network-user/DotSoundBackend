@@ -11,6 +11,15 @@ expiry timestamp, the acquire path first removes expired entries
 and then refuses if the live count is at the cap. Slots are
 auto-released on ``slot_ttl_seconds`` so a crashed worker doesn't
 permanently block the others.
+
+Additional helpers
+------------------
+``get_active_slot_count()``  — instantaneous occupancy (no side effects).
+``get_slot_stats()``         — occupancy + hourly timeout counter for
+                               observability endpoints.
+``SoundCloudSlotSaturated``  — raised by callers that want fast-fail
+                               behaviour when the pool is near full (used
+                               by low-priority background sweeps).
 """
 
 from __future__ import annotations
@@ -21,6 +30,7 @@ import time
 import uuid
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
+from datetime import datetime, timezone
 
 import structlog
 
@@ -33,6 +43,8 @@ _SEMAPHORE_KEY = "sc:semaphore:active"
 _DEFAULT_SLOT_TTL_SECONDS = 30.0
 _RETRY_MIN_SECONDS = 0.5
 _RETRY_MAX_SECONDS = 1.5
+_TIMEOUT_COUNTER_PREFIX = "sc:slot:timeout:"
+_TIMEOUT_COUNTER_TTL_SECONDS = 7200
 
 _ACQUIRE_LUA = """
 redis.call('ZREMRANGEBYSCORE', KEYS[1], 0, ARGV[1])
@@ -44,9 +56,22 @@ redis.call('ZADD', KEYS[1], ARGV[3], ARGV[4])
 return 1
 """
 
+_COUNT_LUA = """
+redis.call('ZREMRANGEBYSCORE', KEYS[1], 0, ARGV[1])
+return redis.call('ZCARD', KEYS[1])
+"""
+
 
 class SoundCloudSemaphoreTimeout(Exception):
     """Raised when a slot cannot be acquired within ``timeout``."""
+
+
+class SoundCloudSlotSaturated(Exception):
+    """Raised by low-priority callers when the pool is near capacity.
+
+    Background sweeps catch this and skip the current cycle rather
+    than queueing behind live user traffic.
+    """
 
 
 async def _try_acquire(
@@ -78,6 +103,71 @@ async def _release(token: str) -> None:
         logger.debug("sc_semaphore_release_failed", token=token)
 
 
+async def _increment_timeout_counter() -> None:
+    try:
+        redis = get_redis_client()
+        hour_key = _TIMEOUT_COUNTER_PREFIX + datetime.now(
+            timezone.utc
+        ).strftime("%Y%m%d%H")
+        await redis.incr(hour_key)
+        await redis.expire(hour_key, _TIMEOUT_COUNTER_TTL_SECONDS)
+    except Exception:
+        pass
+
+
+async def get_active_slot_count() -> int:
+    """Return the number of currently live semaphore slots.
+
+    Expired entries are pruned atomically before the count is read, so
+    the result reflects real occupancy rather than stale entries from
+    crashed workers.
+    """
+    try:
+        redis = get_redis_client()
+        result = await redis.eval(
+            _COUNT_LUA,
+            1,
+            _SEMAPHORE_KEY,
+            str(time.time()),
+        )
+        return int(result)
+    except Exception:
+        return 0
+
+
+async def get_slot_stats() -> dict:
+    """Return semaphore observability snapshot.
+
+    Shape::
+
+        {
+            "active": int,          # live slots right now
+            "max_active": int,      # configured cap
+            "saturated": bool,      # active >= max_active
+            "timeouts_last_hour": int,
+        }
+    """
+    max_active = max(1, int(settings.soundcloud_global_concurrency))
+    active = await get_active_slot_count()
+    timeouts = 0
+    try:
+        redis = get_redis_client()
+        hour_key = _TIMEOUT_COUNTER_PREFIX + datetime.now(
+            timezone.utc
+        ).strftime("%Y%m%d%H")
+        raw = await redis.get(hour_key)
+        if raw is not None:
+            timeouts = int(raw)
+    except Exception:
+        pass
+    return {
+        "active": active,
+        "max_active": max_active,
+        "saturated": active >= max_active,
+        "timeouts_last_hour": timeouts,
+    }
+
+
 @asynccontextmanager
 async def soundcloud_slot(
     *,
@@ -104,6 +194,7 @@ async def soundcloud_slot(
             break
         attempt += 1
         if time.monotonic() >= deadline:
+            await _increment_timeout_counter()
             logger.warning(
                 "sc_semaphore_timeout",
                 attempts=attempt,
@@ -114,6 +205,14 @@ async def soundcloud_slot(
                 f"{timeout_seconds}s "
                 f"(max_active={max_active})"
             )
+        if attempt == 1:
+            current = await get_active_slot_count()
+            if current >= max_active - 1:
+                logger.warning(
+                    "sc_semaphore_near_saturation",
+                    active=current,
+                    max_active=max_active,
+                )
         await asyncio.sleep(
             random.uniform(_RETRY_MIN_SECONDS, _RETRY_MAX_SECONDS)
         )
@@ -126,5 +225,8 @@ async def soundcloud_slot(
 
 __all__ = [
     "SoundCloudSemaphoreTimeout",
+    "SoundCloudSlotSaturated",
+    "get_active_slot_count",
+    "get_slot_stats",
     "soundcloud_slot",
 ]

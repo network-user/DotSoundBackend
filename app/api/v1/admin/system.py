@@ -141,6 +141,38 @@ async def queue_depth(
         return {"queue_length": None, "available": False}
 
 
+@router.get("/sc-semaphore-stats")
+async def sc_semaphore_stats(
+    _admin: User = Depends(require_capability("metrics.view")),
+) -> dict[str, Any]:
+    """Live SoundCloud semaphore occupancy and exhaustion counters.
+
+    Returns::
+
+        {
+            "available": true,
+            "active": int,           // live slots right now
+            "max_active": int,       // configured cap
+            "saturated": bool,       // active >= max_active
+            "timeouts_last_hour": int,
+            "pending_verify": int,   // tracks awaiting deferred verify
+        }
+    """
+    try:
+        from app.core.redis import get_redis_client
+        from app.services.sc_semaphore import get_slot_stats
+
+        stats = await get_slot_stats()
+        redis = get_redis_client()
+        pending = int(await redis.zcard("sc:unverified_imports"))
+        return {"available": True, **stats, "pending_verify": pending}
+    except Exception as exc:
+        return {
+            "available": False,
+            "error": type(exc).__name__,
+        }
+
+
 @router.get("/services")
 async def services_health(
     _admin: User = Depends(require_capability("metrics.view")),

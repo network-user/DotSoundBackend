@@ -251,6 +251,33 @@ async def _maybe_enqueue_audio_cache(track_id: int) -> None:
         )
 
 
+_PENDING_VERIFY_ZSET = "sc:unverified_imports"
+
+
+async def _push_pending_verify(track_id: int) -> None:
+    """Register a newly-imported track for deferred playback verification.
+
+    Called when import_or_get_track runs with skip_playback_verify=True.
+    The sc_import_verify_worker will pick this up after
+    sc_import_verify_delay_minutes and run _verify_imported_track_playback.
+    """
+    import time
+
+    try:
+        from app.core.redis import get_redis_client
+
+        redis = get_redis_client()
+        await redis.zadd(
+            _PENDING_VERIFY_ZSET, {str(track_id): time.time()}
+        )
+    except Exception as exc:  # noqa: BLE001
+        logger.warning(
+            "sc_pending_verify_push_failed",
+            track_id=track_id,
+            error=str(exc),
+        )
+
+
 _SC_STATION_SYNTHETIC_ID_OFFSET = 10**15
 
 _SC_TRACKS_IDS_BATCH_SIZE = 50
@@ -2376,6 +2403,7 @@ class SoundCloudService:
             )
             if skip_playback_verify:
                 await _ingest_schedule(track)
+                await _push_pending_verify(track.id)
             else:
                 playback_verified = await _verify_and_reindex(track)
                 if not playback_verified and settings.sc_strict_import_verify:
@@ -2457,6 +2485,7 @@ class SoundCloudService:
         )
         if skip_playback_verify:
             await _ingest_schedule(track)
+            await _push_pending_verify(track.id)
         else:
             playback_verified = await _verify_and_reindex(track)
             if not playback_verified and settings.sc_strict_import_verify:

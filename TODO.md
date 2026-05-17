@@ -1,5 +1,30 @@
 # DotSound - TODO Tracker
 
+- [x] **SC semaphore: deferred verify sweep, exhaustion metric, backpressure (2026-05-17)**
+  - **P1 — Post-import deferred verification sweep**
+    - `app/services/soundcloud_service.py`: `_push_pending_verify(track_id)` — при `skip_playback_verify=True`
+      для новых треков кладёт ID в Redis ZSET `sc:unverified_imports` со скором `time.time()`.
+    - `app/services/sc_import_verify_worker.py` (новый): Taskiq-задача
+      `verify_pending_sc_imports_task`. Берёт из ZSET записи старше `sc_import_verify_delay_minutes`
+      (10 мин) и моложе `sc_import_verify_ttl_minutes` (60 мин), прогоняет `_resolve_third_party_stream`,
+      при ошибке + `sc_strict_import_verify=True` подавляет трек, при успехе — сбрасывает health-флаги.
+    - `alembic/versions/0111_seed_sc_import_verify_job.py`: seeded ScheduledJob
+      `sc-deferred-import-verify`, cron `*/5 * * * *`.
+    - `docker-compose.yml`: добавлен `app.services.sc_import_verify_worker`.
+    - `app/config.py`: `sc_import_verify_delay_minutes=10`, `sc_import_verify_ttl_minutes=60`,
+      `sc_import_verify_batch=20`.
+  - **P2 — Tor exhaustion metric**
+    - `app/services/sc_semaphore.py`: `SoundCloudSlotSaturated`, `get_active_slot_count()`,
+      `get_slot_stats()`, почасовой счётчик `sc:slot:timeout:{hour}`. При таймауте — инкремент
+      счётчика. При первой же попытке с занятостью ≥ max-1 — структурный лог `sc_semaphore_near_saturation`.
+    - `app/api/v1/admin/system.py`: новый endpoint `GET /api/v1/admin/system/sc-semaphore-stats`
+      — возвращает `{active, max_active, saturated, timeouts_last_hour, pending_verify}`.
+  - **P3 — soundcloud_slot backpressure для фоновых воркеров**
+    - `app/services/playback_repair_worker.py`: в начале `sweep_playback_repair_task`
+      проверяет `get_active_slot_count() >= soundcloud_background_slot_fraction * max_active`.
+      При превышении возвращает `{"status": "deferred_backpressure", ...}` вместо запуска свипа.
+    - `app/config.py`: `soundcloud_background_slot_fraction=0.7` (70% = 7 из 10 слотов).
+
 - [x] **Hotfix: SC Tor exhaustion from parallel recommendation imports (2026-05-17)**
   - **Причина**: `_import_external_candidates` переведён на `asyncio.gather + Semaphore(5)`,
     каждый импорт вызывал `_verify_imported_track_playback` → `_resolve_third_party_stream(use_cache=False)`

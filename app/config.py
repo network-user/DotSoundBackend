@@ -136,6 +136,16 @@ class AppSettings(BaseSettings):
     # ports are reachable.
     soundcloud_global_concurrency: int = 10
     soundcloud_slot_acquire_timeout_seconds: float = 30.0
+    # Background sweeps (repair, enrichment) skip their SC calls when
+    # the slot pool is at or above this fraction of the cap, yielding
+    # capacity to live user traffic. 0.7 == 7 of 10 slots occupied.
+    soundcloud_background_slot_fraction: float = 0.7
+    # Post-import deferred verification settings:
+    # how long to wait before verifying a skip_playback_verify import,
+    # how long to keep the entry in the pending set, and batch size.
+    sc_import_verify_delay_minutes: int = 10
+    sc_import_verify_ttl_minutes: int = 60
+    sc_import_verify_batch: int = 20
     # When True, SoundCloud read-path calls (``fetch_track_by_ref``
     # etc.) are offloaded to the remote DotSoundComputeWorker via a
     # ``soundcloud_rpc`` ComputeJob. The worker performs the actual
