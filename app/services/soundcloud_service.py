@@ -2123,7 +2123,7 @@ class SoundCloudService:
             return False
         try:
             users = await self.search_users(name_q, limit=10)
-        except HTTPException:
+        except (HTTPException, SoundCloudRateLimitError):
             logger.warning(
                 "sc_autofill_search_users_failed",
                 artist_id=artist_id,

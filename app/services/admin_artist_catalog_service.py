@@ -7,6 +7,9 @@ import structlog
 from dotsound_private_core.services.catalog_sync_policy import (
     catalog_sync_enqueue_cooldown_remaining_seconds,
 )
+from dotsound_private_core.services.outbound.errors import (
+    OutboundExhaustedError,
+)
 from dotsound_private_core.services.sc_track_policy import (
     evaluate_soundcloud_track_importability,
 )
@@ -33,6 +36,7 @@ from app.services.artist_catalog_read_service import (
     ArtistCatalogReadService,
 )
 from app.services.soundcloud_service import (
+    SoundCloudRateLimitError,
     SoundCloudService,
     SoundCloudStationNotAvailable,
     soundcloud_track_external_id,
@@ -63,7 +67,14 @@ class AdminArtistCatalogService:
         if artist is None or artist.soundcloud_user_id is not None:
             return
         sc = SoundCloudService(settings.sc_client_id, self._session)
-        await sc.try_autofill_soundcloud_user_id_for_artist(artist_id)
+        try:
+            await sc.try_autofill_soundcloud_user_id_for_artist(artist_id)
+        except (SoundCloudRateLimitError, OutboundExhaustedError) as exc:
+            logger.warning(
+                "admin_autofill_sc_unavailable",
+                artist_id=artist_id,
+                error=str(exc)[:200],
+            )
 
     async def _ensure_catalog_sync_enqueue_allowed(
         self,
