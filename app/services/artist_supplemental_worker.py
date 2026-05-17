@@ -61,9 +61,23 @@ async def enrich_artist_supplemental_task(
     t_start = time.monotonic()
     async with AsyncSessionLocal() as session:
         repo = ArtistSupplementalInfoRepository(session)
+        from app.models.artist import Artist
+
+        artist = await session.get(Artist, artist_id)
+        if artist is None:
+            logger.warning(
+                "artist_supplemental_artist_not_found",
+                artist_id=artist_id,
+            )
+            return {"status": "not_found"}
 
         existing = await repo.get_by_artist_id(artist_id)
-        if not force and existing and existing.status == "done" and existing.fetched_at:
+        if (
+            not force
+            and existing
+            and existing.status == "done"
+            and existing.fetched_at
+        ):
             ttl = await _get_ttl(session)
             age = (datetime.now(UTC) - existing.fetched_at).days
             if age < ttl:
@@ -73,18 +87,6 @@ async def enrich_artist_supplemental_task(
                     age_days=age,
                 )
                 return {"status": "cached"}
-
-        from sqlalchemy import select
-
-        from app.models.artist import Artist
-
-        result = await session.execute(
-            select(Artist).where(Artist.id == artist_id)
-        )
-        artist = result.scalar_one_or_none()
-        if artist is None:
-            logger.warning("artist_supplemental_artist_not_found", artist_id=artist_id)
-            return {"status": "not_found"}
 
         hints: dict = {}
         if artist.country:

@@ -14,6 +14,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.redis import get_redis_client
 from app.models.admin_action_log import AdminActionLog
+from app.models.background_job import BackgroundJob
 from app.models.complaint import Complaint
 from app.models.compute_job import ComputeJob
 from app.models.listen_event import ListenEvent
@@ -239,8 +240,7 @@ async def collect_compute_job_stats(
         ).group_by(ComputeJob.status)
     )
     by_status = {
-        str(status): int(count or 0)
-        for status, count in status_rows.all()
+        str(status): int(count or 0) for status, count in status_rows.all()
     }
     total = sum(by_status.values())
     succeeded_total = by_status.get("succeeded", 0)
@@ -265,7 +265,8 @@ async def collect_compute_job_stats(
 
     bucket_count = max(1, ((end_ts - start_ts) // bucket_seconds) + 1)
     buckets: dict[int, dict[str, int]] = {
-        start_ts + (idx * bucket_seconds): {
+        start_ts
+        + (idx * bucket_seconds): {
             "created": 0,
             "succeeded": 0,
             "failed": 0,
@@ -333,6 +334,214 @@ async def collect_compute_job_stats(
             }
             for ts, values in sorted(buckets.items())
         ],
+    }
+
+
+_TASKIQ_ACTIVE_STATUSES: tuple[str, ...] = ("queued", "running", "cancelling")
+_TASKIQ_DONE_STATUS = "done"
+_TASKIQ_FAILED_STATUSES: tuple[str, ...] = ("failed", "failed_terminal")
+_TASKIQ_CANCELLED_STATUS = "cancelled"
+
+
+async def _taskiq_queue_lengths() -> dict[str, int]:
+    """Return Redis queue length per Taskiq queue key.
+
+    Reads ``taskiq:*`` lists. Falls back to empty mapping if Redis is
+    unavailable; the dashboard then shows zero queues rather than 500.
+    """
+    out: dict[str, int] = {}
+    try:
+        redis = get_redis_client()
+        keys = await redis.keys("taskiq:*")
+        for raw in keys:
+            key = raw.decode() if isinstance(raw, bytes) else str(raw)
+            try:
+                length = int(await redis.llen(key) or 0)
+            except Exception:
+                length = 0
+            out[key] = length
+    except Exception:
+        logger.warning("admin_dashboard_taskiq_queues_unavailable")
+    return out
+
+
+async def collect_taskiq_stats(
+    session: AsyncSession,
+    *,
+    period_hours: int,
+    bucket_minutes: int,
+) -> dict[str, Any]:
+    """Mirror of :func:`collect_compute_job_stats` but for ``background_jobs``.
+
+    Source of truth is the unified ``background_jobs`` table (one row per
+    ``enqueue()`` call, status updated by the Taskiq lifecycle middleware).
+    Adds Redis queue lengths so the panel can show ``in_queue`` vs
+    ``running`` separately — ``queued`` rows whose Taskiq message was lost
+    are still counted in ``queued`` here.
+    """
+    now = datetime.now(UTC)
+    hours = max(1, min(720, int(period_hours)))
+    minutes = max(5, min(1440, int(bucket_minutes)))
+    start = now - timedelta(hours=hours)
+    start_ts = int(start.timestamp())
+    end_ts = int(now.timestamp())
+    bucket_seconds = minutes * 60
+
+    status_rows = await session.execute(
+        select(
+            BackgroundJob.status,
+            func.count(BackgroundJob.id),
+        ).group_by(BackgroundJob.status)
+    )
+    by_status = {
+        str(status): int(count or 0) for status, count in status_rows.all()
+    }
+    total = sum(by_status.values())
+    queued = by_status.get("queued", 0)
+    running = by_status.get("running", 0)
+    cancelling = by_status.get("cancelling", 0)
+    succeeded_total = by_status.get(_TASKIQ_DONE_STATUS, 0)
+    failed_total = sum(by_status.get(s, 0) for s in _TASKIQ_FAILED_STATUSES)
+    cancelled_total = by_status.get(_TASKIQ_CANCELLED_STATUS, 0)
+
+    succeeded_period = await _safe_count(
+        session,
+        select(func.count(BackgroundJob.id)).where(
+            BackgroundJob.status == _TASKIQ_DONE_STATUS,
+            BackgroundJob.finished_at >= start,
+        ),
+    )
+    failed_period = await _safe_count(
+        session,
+        select(func.count(BackgroundJob.id)).where(
+            BackgroundJob.status.in_(_TASKIQ_FAILED_STATUSES),
+            BackgroundJob.finished_at >= start,
+        ),
+    )
+
+    bucket_count = max(1, ((end_ts - start_ts) // bucket_seconds) + 1)
+    buckets: dict[int, dict[str, int]] = {
+        start_ts
+        + (idx * bucket_seconds): {
+            "created": 0,
+            "succeeded": 0,
+            "failed": 0,
+            "resolved": 0,
+        }
+        for idx in range(bucket_count)
+    }
+    rows = await session.execute(
+        select(
+            BackgroundJob.status,
+            BackgroundJob.created_at,
+            BackgroundJob.finished_at,
+        )
+        .where(
+            or_(
+                BackgroundJob.created_at >= start,
+                BackgroundJob.finished_at >= start,
+            )
+        )
+        .limit(100_000)
+    )
+    for status, created_at, finished_at in rows.all():
+        if isinstance(created_at, datetime):
+            bucket = _bucket_timestamp(
+                created_at,
+                start_ts=start_ts,
+                bucket_seconds=bucket_seconds,
+            )
+            if bucket in buckets:
+                buckets[bucket]["created"] += 1
+        if not isinstance(finished_at, datetime):
+            continue
+        bucket = _bucket_timestamp(
+            finished_at,
+            start_ts=start_ts,
+            bucket_seconds=bucket_seconds,
+        )
+        if bucket not in buckets:
+            continue
+        if status == _TASKIQ_DONE_STATUS:
+            buckets[bucket]["succeeded"] += 1
+            buckets[bucket]["resolved"] += 1
+        elif status in _TASKIQ_FAILED_STATUSES:
+            buckets[bucket]["failed"] += 1
+            buckets[bucket]["resolved"] += 1
+
+    queue_lengths = await _taskiq_queue_lengths()
+    in_redis_total = sum(queue_lengths.values())
+
+    return {
+        "generated_at": int(now.timestamp()),
+        "period_hours": hours,
+        "bucket_minutes": minutes,
+        "total": total,
+        "by_status": by_status,
+        "queued": queued,
+        "running": running,
+        "cancelling": cancelling,
+        "cancelled_total": cancelled_total,
+        "in_redis_total": in_redis_total,
+        "queue_lengths": queue_lengths,
+        "succeeded_total": succeeded_total,
+        "failed_total": failed_total,
+        "resolved_total": succeeded_total + failed_total,
+        "succeeded_period": succeeded_period,
+        "failed_period": failed_period,
+        "resolved_period": succeeded_period + failed_period,
+        "buckets": [
+            {
+                "ts": ts,
+                **values,
+            }
+            for ts, values in sorted(buckets.items())
+        ],
+    }
+
+
+async def purge_pending_compute_jobs(
+    session: AsyncSession,
+    *,
+    older_than_hours: int,
+) -> dict[str, int]:
+    """Hard-delete ``pending`` ComputeJob rows older than the cutoff.
+
+    Used as an admin escape hatch when the offload worker is offline
+    and pending jobs accumulate beyond what the reaper can drain. Only
+    affects ``status='pending'`` rows; claimed/succeeded/failed are
+    left untouched. Returns ``{"deleted": N, "remaining_pending": M}``.
+    """
+    from sqlalchemy import delete
+
+    hours = max(1, int(older_than_hours))
+    cutoff = datetime.now(UTC) - timedelta(hours=hours)
+
+    result = await session.execute(
+        delete(ComputeJob).where(
+            ComputeJob.status == "pending",
+            ComputeJob.created_at < cutoff,
+        )
+    )
+    await session.commit()
+    deleted = int(result.rowcount or 0)
+
+    remaining = await _safe_count(
+        session,
+        select(func.count(ComputeJob.id)).where(
+            ComputeJob.status == "pending"
+        ),
+    )
+    logger.warning(
+        "admin_dashboard_compute_jobs_purged",
+        deleted=deleted,
+        older_than_hours=hours,
+        remaining_pending=remaining,
+    )
+    return {
+        "deleted": deleted,
+        "older_than_hours": hours,
+        "remaining_pending": remaining,
     }
 
 
@@ -471,9 +680,9 @@ async def collect_track_stats(
     ).group_by(ListenEvent.track_id)
     if start is not None:
         base_listen = base_listen.where(ListenEvent.created_at >= start)
-    top_stmt = base_listen.order_by(
-        func.count(ListenEvent.id).desc()
-    ).limit(15)
+    top_stmt = base_listen.order_by(func.count(ListenEvent.id).desc()).limit(
+        15
+    )
     top_rows = await session.execute(top_stmt)
     top_raw = list(top_rows.all())
 
@@ -672,9 +881,7 @@ async def collect_activation_funnel(
         UserPreference.first_play_at.is_not(None),
     )
     if start is not None:
-        time_stmt = time_stmt.where(
-            UserPreference.auth_first_seen_at >= start
-        )
+        time_stmt = time_stmt.where(UserPreference.auth_first_seen_at >= start)
     avg_seconds_res = await session.execute(time_stmt)
     avg_seconds_raw = avg_seconds_res.scalar_one_or_none()
     avg_seconds = float(avg_seconds_raw or 0.0)

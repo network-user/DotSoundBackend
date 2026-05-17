@@ -1,12 +1,11 @@
 from datetime import UTC
 
 import structlog
-from sqlalchemy import delete, func, select
+from dotsound_private_core import censor_synced_lines, censor_text
+from sqlalchemy import delete, func, select, update
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
-
-from dotsound_private_core import censor_synced_lines, censor_text
 
 from app.models.lyrics import TrackLyrics
 from app.models.lyrics_translation import (
@@ -116,9 +115,14 @@ class LyricsRepository:
         lyrics = result.scalar_one()
         logger.debug("db_lyrics_upserted", track_id=track_id)
         if plain_text.strip():
-            row = await self._session.get(Track, track_id)
-            if row is not None:
-                row.lyrics_catalog_miss_at = None
+            await self._session.execute(
+                update(Track)
+                .where(
+                    Track.id == track_id,
+                    Track.lyrics_catalog_miss_at.is_not(None),
+                )
+                .values(lyrics_catalog_miss_at=None)
+            )
             try:
                 from app.services.lyrics_derived_genre_mood_service import (
                     apply_after_lyrics_saved,
@@ -135,9 +139,7 @@ class LyricsRepository:
                     track_id=track_id,
                     exc_info=True,
                 )
-        await self._session.refresh(
-            lyrics, attribute_names=["translations"]
-        )
+        await self._session.refresh(lyrics, attribute_names=["translations"])
         return lyrics
 
     async def update_sync(
@@ -148,9 +150,7 @@ class LyricsRepository:
             return None
         existing.synced_lines = censor_synced_lines(synced_lines)
         await self._session.flush()
-        await self._session.refresh(
-            existing, attribute_names=["translations"]
-        )
+        await self._session.refresh(existing, attribute_names=["translations"])
         logger.debug("db_lyrics_sync_updated", track_id=track_id)
         return existing
 

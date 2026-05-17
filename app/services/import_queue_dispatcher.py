@@ -199,17 +199,18 @@ async def _dispatcher_loop() -> None:
     interval = float(settings.import_queue_dispatch_interval_seconds)
     while True:
         try:
-            await asyncio.sleep(interval)
             count = await dispatch_once()
             if count:
                 logger.info(
                     "import_dispatcher_tick",
                     promoted=count,
                 )
+            await asyncio.sleep(interval)
         except asyncio.CancelledError:
             raise
         except Exception:
             logger.exception("import_dispatcher_failed")
+            await asyncio.sleep(interval)
 
 
 async def stop_dispatcher_task() -> None:

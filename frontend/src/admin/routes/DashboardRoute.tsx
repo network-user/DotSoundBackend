@@ -281,6 +281,62 @@ export function DashboardRoute() {
     refetchInterval: live ? 10_000 : false,
     refetchIntervalInBackground: false,
   })
+  const taskiqJobs = useQuery({
+    queryKey: [
+      'admin',
+      'dashboard',
+      'taskiq',
+      computePeriodHours,
+      computeBucketMinutes,
+    ],
+    queryFn: () =>
+      adminApi.dashboardTaskiq(
+        computePeriodHours,
+        computeBucketMinutes,
+      ),
+    refetchInterval: live ? 10_000 : false,
+    refetchIntervalInBackground: false,
+  })
+  const [purgeOlderHours, setPurgeOlderHours] = useState(24)
+  const [purgeBusy, setPurgeBusy] = useState(false)
+  const [purgeResult, setPurgeResult] = useState<
+    | {
+        deleted: number
+        remaining_pending: number
+      }
+    | null
+  >(null)
+  const handlePurgePending = async () => {
+    if (purgeBusy) return
+    const confirmed = window.confirm(
+      t(
+        'admin.dashboard.computeJobs.purgeConfirm',
+        `Удалить все pending compute-задачи старше ${purgeOlderHours} ч? Действие необратимо.`,
+        { hours: purgeOlderHours },
+      ),
+    )
+    if (!confirmed) return
+    setPurgeBusy(true)
+    try {
+      const res = await adminApi.purgePendingComputeJobs(
+        purgeOlderHours,
+      )
+      setPurgeResult({
+        deleted: res.deleted,
+        remaining_pending: res.remaining_pending,
+      })
+      await computeJobs.refetch()
+    } catch (err) {
+      window.alert(
+        t(
+          'admin.dashboard.computeJobs.purgeFailed',
+          'Не удалось очистить очередь',
+        ) + `: ${String(err)}`,
+      )
+    } finally {
+      setPurgeBusy(false)
+    }
+  }
   useEffect(() => {
     if (!data?.generated_at) return
     setOnlineFallback((prev) => {
@@ -350,6 +406,19 @@ export function DashboardRoute() {
     }),
   )
   const computeResolvedPoints: ChartPoint[] = computeJobBuckets.map(
+    (item) => ({
+      ts: item.ts,
+      value: item.resolved,
+    }),
+  )
+  const taskiqJobBuckets = taskiqJobs.data?.buckets ?? []
+  const taskiqCreatedPoints: ChartPoint[] = taskiqJobBuckets.map(
+    (item) => ({
+      ts: item.ts,
+      value: item.created,
+    }),
+  )
+  const taskiqResolvedPoints: ChartPoint[] = taskiqJobBuckets.map(
     (item) => ({
       ts: item.ts,
       value: item.resolved,
@@ -928,17 +997,20 @@ export function DashboardRoute() {
         <div className="admin-dashboard__chart-head">
           <div>
             <h2>
-              {t('admin.dashboard.computeJobs.title', 'Задачи')}
+              {t(
+                'admin.dashboard.taskiqJobs.title',
+                'Backend Taskiq (сервер)',
+              )}
             </h2>
             <p className="admin-card__sub">
               {t(
-                'admin.dashboard.computeJobs.subtitle',
-                'Live-срез persistent compute_jobs и результатов воркера',
+                'admin.dashboard.taskiqJobs.subtitle',
+                'Задачи, выполняемые в Backend-воркере: import, lyrics, enrichment, catalog sync, индексация',
               )}
             </p>
           </div>
           <AdminRangeSwitch<number>
-            groupId="dash-compute-jobs-period"
+            groupId="dash-taskiq-jobs-period"
             value={computePeriodHours}
             onChange={setComputePeriodHours}
             options={[
@@ -949,6 +1021,181 @@ export function DashboardRoute() {
             ]}
           />
         </div>
+        {taskiqJobs.isLoading || !taskiqJobs.data ? (
+          <div className="admin-skeleton admin-skeleton--card" />
+        ) : (
+          <>
+            <section className="kpi-grid">
+              <KpiCard
+                label={t(
+                  'admin.dashboard.taskiqJobs.total',
+                  'Всего задач',
+                )}
+                value={taskiqJobs.data.total}
+                hint={`queued ${taskiqJobs.data.queued} / running ${taskiqJobs.data.running}${
+                  taskiqJobs.data.cancelling
+                    ? ` / cancelling ${taskiqJobs.data.cancelling}`
+                    : ''
+                }`}
+              />
+              <KpiCard
+                label={t(
+                  'admin.dashboard.taskiqJobs.inFlight',
+                  'В работе сейчас',
+                )}
+                value={taskiqJobs.data.running}
+                hint={t(
+                  'admin.dashboard.taskiqJobs.inFlightHint',
+                  'Реально занятые слоты воркера',
+                )}
+              />
+              <KpiCard
+                label={t(
+                  'admin.dashboard.taskiqJobs.inQueue',
+                  'В очереди Redis',
+                )}
+                value={taskiqJobs.data.in_redis_total}
+                hint={t(
+                  'admin.dashboard.taskiqJobs.inQueueHint',
+                  'LLEN taskiq:* — ждут забора воркером',
+                )}
+                accent={
+                  taskiqJobs.data.in_redis_total > 1000
+                    ? 'warn'
+                    : 'default'
+                }
+              />
+              <KpiCard
+                label={t(
+                  'admin.dashboard.taskiqJobs.resolvedPeriod',
+                  'Решено за период',
+                )}
+                value={taskiqJobs.data.resolved_period}
+                hint={`ok ${taskiqJobs.data.succeeded_period} / failed ${taskiqJobs.data.failed_period}`}
+                accent={
+                  taskiqJobs.data.failed_period > 0
+                    ? 'warn'
+                    : 'default'
+                }
+              />
+            </section>
+            <section className="kpi-grid kpi-grid--charts">
+              <article>
+                <h3>
+                  {t(
+                    'admin.dashboard.taskiqJobs.createdChart',
+                    'Создано',
+                  )}
+                </h3>
+                <LineChart
+                  data={taskiqCreatedPoints}
+                  height={180}
+                  ariaLabel={t(
+                    'admin.dashboard.taskiqJobs.createdChart',
+                    'Создано',
+                  )}
+                />
+              </article>
+              <article>
+                <h3>
+                  {t(
+                    'admin.dashboard.taskiqJobs.resolvedChart',
+                    'Решено',
+                  )}
+                </h3>
+                <LineChart
+                  data={taskiqResolvedPoints}
+                  height={180}
+                  ariaLabel={t(
+                    'admin.dashboard.taskiqJobs.resolvedChart',
+                    'Решено',
+                  )}
+                />
+              </article>
+            </section>
+          </>
+        )}
+      </section>
+
+      <section className="admin-card">
+        <div className="admin-dashboard__chart-head">
+          <div>
+            <h2>
+              {t(
+                'admin.dashboard.computeJobs.title',
+                'Compute Worker (внешний воркер)',
+              )}
+            </h2>
+            <p className="admin-card__sub">
+              {t(
+                'admin.dashboard.computeJobs.subtitle',
+                'Persistent compute_jobs — забирает DotSoundComputeWorker по HTTP (ASR, Demucs, тяжёлый SC fetch). Если воркер выключен — задачи накапливаются как pending.',
+              )}
+            </p>
+          </div>
+          <div className="admin-dashboard__chart-actions">
+            <label
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: 6,
+              }}
+            >
+              <span className="admin-card__sub">
+                {t(
+                  'admin.dashboard.computeJobs.purgeOlderLabel',
+                  'старше (ч):',
+                )}
+              </span>
+              <input
+                type="number"
+                min={1}
+                max={720}
+                value={purgeOlderHours}
+                onChange={(e) =>
+                  setPurgeOlderHours(
+                    Math.max(
+                      1,
+                      Math.min(720, Number(e.target.value || 24)),
+                    ),
+                  )
+                }
+                style={{
+                  width: 64,
+                  padding: '4px 6px',
+                }}
+              />
+            </label>
+            <MotionPress
+              type="button"
+              variant="danger"
+              onClick={handlePurgePending}
+              disabled={purgeBusy}
+            >
+              {purgeBusy
+                ? t(
+                    'admin.dashboard.computeJobs.purgeBusy',
+                    'Удаление…',
+                  )
+                : t(
+                    'admin.dashboard.computeJobs.purgePending',
+                    'Очистить старые pending',
+                  )}
+            </MotionPress>
+          </div>
+        </div>
+        {purgeResult && (
+          <p className="admin-card__sub">
+            {t(
+              'admin.dashboard.computeJobs.purgeResult',
+              `Удалено ${purgeResult.deleted}, осталось pending: ${purgeResult.remaining_pending}`,
+              {
+                deleted: purgeResult.deleted,
+                remaining: purgeResult.remaining_pending,
+              },
+            )}
+          </p>
+        )}
         {computeJobs.isLoading || !computeJobs.data ? (
           <div className="admin-skeleton admin-skeleton--card" />
         ) : (
@@ -961,16 +1208,35 @@ export function DashboardRoute() {
                 )}
                 value={computeJobs.data.total}
                 hint={`pending ${computeJobs.data.pending} / claimed ${computeJobs.data.claimed}`}
+                accent={
+                  computeJobs.data.pending > 1000
+                    ? 'warn'
+                    : 'default'
+                }
               />
               <KpiCard
                 label={t(
-                  'admin.dashboard.computeJobs.resolvedTotal',
-                  'Решено всего',
+                  'admin.dashboard.computeJobs.inFlight',
+                  'В работе у воркера',
                 )}
-                value={computeJobs.data.resolved_total}
-                hint={`ok ${computeJobs.data.succeeded_total} / failed ${computeJobs.data.failed_total}`}
+                value={computeJobs.data.claimed}
+                hint={t(
+                  'admin.dashboard.computeJobs.inFlightHint',
+                  'claimed_by != null — реально забрал воркер',
+                )}
+              />
+              <KpiCard
+                label={t(
+                  'admin.dashboard.computeJobs.pending',
+                  'Ожидают воркера',
+                )}
+                value={computeJobs.data.pending}
+                hint={t(
+                  'admin.dashboard.computeJobs.pendingHint',
+                  'Лежат в PG, никто не забрал',
+                )}
                 accent={
-                  computeJobs.data.failed_total > 0
+                  computeJobs.data.pending > 1000
                     ? 'warn'
                     : 'default'
                 }
@@ -987,16 +1253,6 @@ export function DashboardRoute() {
                     ? 'warn'
                     : 'default'
                 }
-              />
-              <KpiCard
-                label={t(
-                  'admin.dashboard.computeJobs.inFlight',
-                  'В работе',
-                )}
-                value={
-                  computeJobs.data.pending + computeJobs.data.claimed
-                }
-                hint={`${computeJobs.data.bucket_minutes}m buckets`}
               />
             </section>
             <section className="kpi-grid kpi-grid--charts">

@@ -536,6 +536,50 @@ export const adminApi = {
         bucket_minutes: bucketMinutes,
       },
     }),
+  dashboardTaskiq: (
+    periodHours: number,
+    bucketMinutes: number,
+  ) =>
+    adminFetch<{
+      generated_at: number
+      period_hours: number
+      bucket_minutes: number
+      total: number
+      by_status: Record<string, number>
+      queued: number
+      running: number
+      cancelling: number
+      cancelled_total: number
+      in_redis_total: number
+      queue_lengths: Record<string, number>
+      succeeded_total: number
+      failed_total: number
+      resolved_total: number
+      succeeded_period: number
+      failed_period: number
+      resolved_period: number
+      buckets: Array<{
+        ts: number
+        created: number
+        succeeded: number
+        failed: number
+        resolved: number
+      }>
+    }>('/dashboard/taskiq', {
+      query: {
+        period_hours: periodHours,
+        bucket_minutes: bucketMinutes,
+      },
+    }),
+  purgePendingComputeJobs: (olderThanHours: number) =>
+    adminFetch<{
+      deleted: number
+      older_than_hours: number
+      remaining_pending: number
+    }>('/dashboard/compute-jobs/purge-pending', {
+      method: 'POST',
+      body: { older_than_hours: olderThanHours },
+    }),
   dashboardStats: (period: 'today' | '7d' | '30d' | 'all') =>
     adminFetch<{
       period: 'today' | '7d' | '30d' | 'all'

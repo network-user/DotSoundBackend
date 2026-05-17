@@ -119,14 +119,23 @@ class ArtistCatalogRepository(BaseRepository[ArtistCatalogRelease]):
                 ArtistCatalogReleaseTrack.release_id == release_id
             )
         )
-        for pos, tid in enumerate(ordered_track_ids):
-            self._session.add(
-                ArtistCatalogReleaseTrack(
-                    release_id=release_id,
-                    track_id=tid,
-                    position=pos,
-                )
-            )
+        if not ordered_track_ids:
+            await self._session.flush()
+            return
+        from sqlalchemy import insert as sa_insert
+
+        values = [
+            {
+                "release_id": release_id,
+                "track_id": tid,
+                "position": pos,
+            }
+            for pos, tid in enumerate(ordered_track_ids)
+        ]
+        await self._session.execute(
+            sa_insert(ArtistCatalogReleaseTrack),
+            values,
+        )
         await self._session.flush()
 
     async def list_releases_with_track_counts(
@@ -260,8 +269,7 @@ class ArtistCatalogRepository(BaseRepository[ArtistCatalogRelease]):
     ) -> datetime | None:
         stmt = select(ArtistCatalogRelease.synced_at).where(
             ArtistCatalogRelease.artist_id == artist_id,
-            ArtistCatalogRelease.release_kind
-            == _ARTIST_STATION_KIND,
+            ArtistCatalogRelease.release_kind == _ARTIST_STATION_KIND,
         )
         return await self._session.scalar(stmt)
 
@@ -280,9 +288,7 @@ class ArtistCatalogRepository(BaseRepository[ArtistCatalogRelease]):
             ArtistCatalogRelease.release_kind.is_(None),
             ArtistCatalogRelease.release_kind != _ARTIST_STATION_KIND,
         )
-        scope_clause = (
-            release_station if scope == "station" else release_album
-        )
+        scope_clause = release_station if scope == "station" else release_album
         cnt = func.count(
             distinct(ArtistCatalogReleaseTrack.track_id),
         ).label("overlap_cnt")
@@ -293,8 +299,7 @@ class ArtistCatalogRepository(BaseRepository[ArtistCatalogRelease]):
             )
             .join(
                 ArtistCatalogReleaseTrack,
-                ArtistCatalogReleaseTrack.track_id
-                == TrackArtist.track_id,
+                ArtistCatalogReleaseTrack.track_id == TrackArtist.track_id,
             )
             .join(
                 ArtistCatalogRelease,
@@ -302,12 +307,8 @@ class ArtistCatalogRepository(BaseRepository[ArtistCatalogRelease]):
                 == ArtistCatalogReleaseTrack.release_id,
             )
             .where(
-                ArtistCatalogRelease.artist_id.in_(
-                    seed_artist_ids
-                ),
-                TrackArtist.artist_id.not_in(
-                    seed_artist_ids
-                ),
+                ArtistCatalogRelease.artist_id.in_(seed_artist_ids),
+                TrackArtist.artist_id.not_in(seed_artist_ids),
                 scope_clause,
             )
             .group_by(TrackArtist.artist_id)
@@ -336,20 +337,15 @@ class ArtistCatalogRepository(BaseRepository[ArtistCatalogRelease]):
                 == ArtistCatalogReleaseTrack.release_id,
             )
             .where(
-                ArtistCatalogRelease.artist_id.in_(
-                    seed_artist_ids
-                ),
-                ArtistCatalogRelease.release_kind
-                == _ARTIST_STATION_KIND,
+                ArtistCatalogRelease.artist_id.in_(seed_artist_ids),
+                ArtistCatalogRelease.release_kind == _ARTIST_STATION_KIND,
             )
             .distinct()
             .limit(limit)
         )
         if exclude_track_ids:
             stmt = stmt.where(
-                ArtistCatalogReleaseTrack.track_id.not_in(
-                    exclude_track_ids
-                )
+                ArtistCatalogReleaseTrack.track_id.not_in(exclude_track_ids)
             )
         rows = await self._session.execute(stmt)
         return [int(r) for (r,) in rows.all() if r is not None]
@@ -397,8 +393,7 @@ class ArtistCatalogRepository(BaseRepository[ArtistCatalogRelease]):
                 Artist.id == ArtistCatalogRelease.artist_id,
             )
             .where(
-                ArtistCatalogRelease.release_kind
-                == _ARTIST_STATION_KIND,
+                ArtistCatalogRelease.release_kind == _ARTIST_STATION_KIND,
                 (ArtistCatalogRelease.synced_at.is_(None))
                 | (ArtistCatalogRelease.synced_at < cutoff),
                 Artist.catalog_sync_enabled.is_(True),
@@ -423,13 +418,10 @@ class ArtistCatalogRepository(BaseRepository[ArtistCatalogRelease]):
         last_sync_sq = (
             select(
                 ArtistCatalogRelease.artist_id.label("artist_id"),
-                func.max(ArtistCatalogRelease.synced_at).label(
-                    "last_sync"
-                ),
+                func.max(ArtistCatalogRelease.synced_at).label("last_sync"),
             )
             .where(
-                ArtistCatalogRelease.release_kind
-                != _ARTIST_STATION_KIND,
+                ArtistCatalogRelease.release_kind != _ARTIST_STATION_KIND,
                 ArtistCatalogRelease.soundcloud_album_id.isnot(None),
             )
             .group_by(ArtistCatalogRelease.artist_id)

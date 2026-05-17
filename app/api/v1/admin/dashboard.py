@@ -5,7 +5,8 @@ from __future__ import annotations
 import time
 from typing import Any
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Body, Depends, HTTPException, Query
+from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.dependencies import (
@@ -19,7 +20,9 @@ from app.services.admin_dashboard_service import (
     collect_compute_job_stats,
     collect_overview,
     collect_stats,
+    collect_taskiq_stats,
     collect_track_stats,
+    purge_pending_compute_jobs,
 )
 from app.services.container_health_service import (
     get_container_summary,
@@ -94,6 +97,44 @@ async def compute_job_stats(
         session,
         period_hours=period_hours,
         bucket_minutes=bucket_minutes,
+    )
+
+
+@router.get("/taskiq")
+async def taskiq_stats(
+    period_hours: int = Query(24, ge=1, le=720),
+    bucket_minutes: int = Query(60, ge=5, le=1440),
+    _admin: User = Depends(require_admin_session),
+    session: AsyncSession = Depends(get_db),
+) -> dict[str, Any]:
+    """Live snapshot of Backend Taskiq jobs (``background_jobs`` table)."""
+    return await collect_taskiq_stats(
+        session,
+        period_hours=period_hours,
+        bucket_minutes=bucket_minutes,
+    )
+
+
+class PurgePendingComputeJobsRequest(BaseModel):
+    older_than_hours: int = Field(default=24, ge=1, le=24 * 30)
+
+
+@router.post("/compute-jobs/purge-pending")
+async def purge_pending_compute_jobs_endpoint(
+    body: PurgePendingComputeJobsRequest = Body(
+        default_factory=PurgePendingComputeJobsRequest,
+    ),
+    _admin: User = Depends(require_admin_session),
+    session: AsyncSession = Depends(get_db),
+) -> dict[str, Any]:
+    """Hard-delete pending ComputeJob rows older than the given window.
+
+    Admin escape hatch for the case when the offload worker has been
+    offline and the queue has grown beyond what the reaper can drain.
+    """
+    return await purge_pending_compute_jobs(
+        session,
+        older_than_hours=body.older_than_hours,
     )
 
 

@@ -329,25 +329,20 @@ async def process_import_job(job_id: int) -> None:
                                 "import_artist_link_failed",
                                 track_id=track.id,
                             )
-                    async with AsyncSessionLocal() as ingest_session:
-                        from app.services import (
-                            track_ingest_schedule_service as _ingest,
-                        )
+                    from app.services import (
+                        track_ingest_schedule_service as _ingest,
+                    )
 
-                        schedule_new_track_background_jobs = (
-                            _ingest.schedule_new_track_background_jobs
-                        )
-
-                        await schedule_new_track_background_jobs(
-                            ingest_session,
-                            track.id,
-                            skip_lyrics=False,
-                            catalog_payload={
-                                "title": title,
-                                "artist": performer,
-                                "genre": None,
-                            },
-                        )
+                    await _ingest.schedule_new_track_background_jobs(
+                        session,
+                        track.id,
+                        skip_lyrics=False,
+                        catalog_payload={
+                            "title": title,
+                            "artist": performer,
+                            "genre": None,
+                        },
+                    )
                 except Exception as exc:
                     job.failed_tracks += 1
                     await items_repo.mark_failed(

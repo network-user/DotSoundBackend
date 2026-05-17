@@ -78,6 +78,25 @@ async def _pending_task_queue_length() -> int:
         return -1
 
 
+async def _batch_exists(redis: object, keys: list[str]) -> set[str]:
+    """Return the subset of ``keys`` that already exist in Redis.
+
+    Uses a single non-transactional pipeline so the sweep makes ONE
+    network round-trip per batch instead of N. Fails open: returns
+    empty set on any Redis problem so the caller proceeds.
+    """
+    if redis is None or not keys:
+        return set()
+    try:
+        pipe = redis.pipeline(transaction=False)  # type: ignore[attr-defined]
+        for key in keys:
+            pipe.exists(key)
+        results = await pipe.execute()
+    except Exception:
+        return set()
+    return {key for key, res in zip(keys, results, strict=False) if res}
+
+
 def _payload_int(
     job: LocalComputeJob,
     key: str,
@@ -508,6 +527,16 @@ async def sync_stale_stations_batch_task() -> dict[str, Any]:
     if not settings.catalog_auto_sync_enabled:
         logger.info("station_sweep_skipped_auto_sync_disabled")
         return {"status": "skipped_auto_sync_disabled"}
+    sweep_limit = _bounded_positive_int(
+        settings.catalog_station_sweep_limit,
+        default=20,
+        upper=STATION_SWEEP_MAX_ARTISTS_PER_RUN,
+    )
+    batch_size = _bounded_positive_int(
+        settings.catalog_station_sweep_batch_size,
+        default=_STATION_BATCH_SIZE,
+        upper=sweep_limit,
+    )
 
     queue_len = await _pending_task_queue_length()
     if queue_len >= 0 and should_backpressure(queue_len):
@@ -525,22 +554,28 @@ async def sync_stale_stations_batch_task() -> dict[str, Any]:
         repo = ArtistCatalogRepository(session)
         artist_ids = await repo.find_stale_station_artist_ids(
             settings.artist_station_stale_threshold_days,
-            limit=STATION_SWEEP_MAX_ARTISTS_PER_RUN,
+            limit=sweep_limit,
         )
 
     enqueued = 0
     skipped_idempotent = 0
-    for i in range(0, len(artist_ids), _STATION_BATCH_SIZE):
-        batch = artist_ids[i : i + _STATION_BATCH_SIZE]
+    from app.core.redis import get_redis_client
+
+    redis = None
+    with contextlib.suppress(Exception):
+        redis = get_redis_client()
+
+    for i in range(0, len(artist_ids), batch_size):
+        batch = artist_ids[i : i + batch_size]
+        existing_keys = await _batch_exists(
+            redis,
+            [_IDEMPOTENCY_KEY_STATION.format(artist_id=aid) for aid in batch],
+        )
         for artist_id in batch:
             key = _IDEMPOTENCY_KEY_STATION.format(artist_id=artist_id)
-            from app.core.redis import get_redis_client
-
-            with contextlib.suppress(Exception):
-                redis = get_redis_client()
-                if await redis.exists(key):
-                    skipped_idempotent += 1
-                    continue
+            if key in existing_keys:
+                skipped_idempotent += 1
+                continue
             await sync_artist_similar_station_task.kiq(artist_id)
             enqueued += 1
 
@@ -549,16 +584,36 @@ async def sync_stale_stations_batch_task() -> dict[str, Any]:
         enqueued=enqueued,
         skipped_idempotent=skipped_idempotent,
         total_stale=len(artist_ids),
-        cap=STATION_SWEEP_MAX_ARTISTS_PER_RUN,
+        cap=sweep_limit,
+        policy_cap=STATION_SWEEP_MAX_ARTISTS_PER_RUN,
+        batch_size=batch_size,
     )
     return {
         "enqueued": enqueued,
         "skipped_idempotent": skipped_idempotent,
+        "sweep_limit": sweep_limit,
+        "batch_size": batch_size,
     }
 
 
 _CATALOG_FULL_BATCH_SIZE = 10
 _CATALOG_FULL_SWEEP_LIMIT = 50
+
+
+def _bounded_positive_int(
+    raw: object,
+    *,
+    default: int,
+    upper: int | None = None,
+) -> int:
+    try:
+        value = int(raw)
+    except (TypeError, ValueError):
+        value = default
+    value = max(1, value)
+    if upper is not None:
+        value = min(value, upper)
+    return value
 
 
 @broker.task
@@ -570,6 +625,15 @@ async def sync_stale_catalogs_batch_task() -> dict[str, Any]:
     if not settings.catalog_auto_sync_enabled:
         logger.info("catalog_sweep_skipped_auto_sync_disabled")
         return {"status": "skipped_auto_sync_disabled"}
+    sweep_limit = _bounded_positive_int(
+        settings.catalog_full_sweep_limit,
+        default=_CATALOG_FULL_SWEEP_LIMIT,
+    )
+    batch_size = _bounded_positive_int(
+        settings.catalog_full_sweep_batch_size,
+        default=_CATALOG_FULL_BATCH_SIZE,
+        upper=sweep_limit,
+    )
 
     queue_len = await _pending_task_queue_length()
     if queue_len >= 0 and should_backpressure(queue_len):
@@ -587,22 +651,28 @@ async def sync_stale_catalogs_batch_task() -> dict[str, Any]:
         repo = ArtistCatalogRepository(session)
         artist_ids = await repo.find_stale_full_catalog_artist_ids(
             settings.artist_catalog_full_sync_stale_threshold_days,
-            limit=_CATALOG_FULL_SWEEP_LIMIT,
+            limit=sweep_limit,
         )
 
     enqueued = 0
     skipped_idempotent = 0
-    for i in range(0, len(artist_ids), _CATALOG_FULL_BATCH_SIZE):
-        batch = artist_ids[i : i + _CATALOG_FULL_BATCH_SIZE]
+    from app.core.redis import get_redis_client
+
+    redis = None
+    with contextlib.suppress(Exception):
+        redis = get_redis_client()
+
+    for i in range(0, len(artist_ids), batch_size):
+        batch = artist_ids[i : i + batch_size]
+        existing_keys = await _batch_exists(
+            redis,
+            [_IDEMPOTENCY_KEY_FULL.format(artist_id=aid) for aid in batch],
+        )
         for artist_id in batch:
             key = _IDEMPOTENCY_KEY_FULL.format(artist_id=artist_id)
-            from app.core.redis import get_redis_client
-
-            with contextlib.suppress(Exception):
-                redis = get_redis_client()
-                if await redis.exists(key):
-                    skipped_idempotent += 1
-                    continue
+            if key in existing_keys:
+                skipped_idempotent += 1
+                continue
             await sync_artist_catalog_task.kiq(artist_id)
             enqueued += 1
 
@@ -611,10 +681,14 @@ async def sync_stale_catalogs_batch_task() -> dict[str, Any]:
         enqueued=enqueued,
         skipped_idempotent=skipped_idempotent,
         total_stale=len(artist_ids),
+        cap=sweep_limit,
+        batch_size=batch_size,
     )
     return {
         "enqueued": enqueued,
         "skipped_idempotent": skipped_idempotent,
+        "sweep_limit": sweep_limit,
+        "batch_size": batch_size,
     }
 
 

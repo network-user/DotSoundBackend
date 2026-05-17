@@ -42,6 +42,7 @@ from app.services.worker_job_control import (
 log: structlog.stdlib.BoundLogger = structlog.get_logger(__name__)
 
 _CLAIM_PACE_KEY_PREFIX = "worker:compute_claim_pace:"
+_JOB_TYPE_PACE_KEY_PREFIX = "worker:compute_job_type_pace:"
 
 router = APIRouter(
     prefix="/internal/compute",
@@ -128,6 +129,124 @@ async def _record_claim_pace(worker_id: str) -> None:
         log.warning(
             "compute_claim_pace_write_failed",
             worker_id=worker_id,
+            error=str(exc)[:200],
+        )
+
+
+def _job_type_pace_intervals() -> dict[str, float]:
+    raw = (settings.compute_job_type_pace_seconds or "").strip()
+    if not raw:
+        return {}
+    out: dict[str, float] = {}
+    if raw.startswith("{"):
+        try:
+            blob = json.loads(raw)
+        except json.JSONDecodeError:
+            blob = None
+        if isinstance(blob, dict):
+            for key, val in blob.items():
+                if not isinstance(key, str):
+                    continue
+                try:
+                    interval = float(val)
+                except (TypeError, ValueError):
+                    continue
+                out[q.canonical_job_type(key.strip())] = max(0.0, interval)
+            return out
+
+    normalized = raw.replace("\n", ",").replace(";", ",")
+    for piece in normalized.split(","):
+        item = piece.strip()
+        if not item:
+            continue
+        sep = "=" if "=" in item else ":"
+        if sep not in item:
+            continue
+        key, value = item.split(sep, 1)
+        key = key.strip()
+        if not key:
+            continue
+        try:
+            interval = float(value.strip())
+        except (TypeError, ValueError):
+            continue
+        out[q.canonical_job_type(key)] = max(0.0, interval)
+    return out
+
+
+def _job_type_pace_interval(job_type: str) -> float:
+    return _job_type_pace_intervals().get(
+        q.canonical_job_type(job_type),
+        0.0,
+    )
+
+
+def _job_type_pace_key(worker_id: str, job_type: str) -> str:
+    return (
+        f"{_JOB_TYPE_PACE_KEY_PREFIX}{worker_id}:"
+        f"{q.canonical_job_type(job_type)}"
+    )
+
+
+async def _job_type_pace_allows(worker_id: str, job_type: str) -> bool:
+    interval = _job_type_pace_interval(job_type)
+    if interval <= 0.0:
+        return True
+    redis = get_redis_client()
+    key = _job_type_pace_key(worker_id, job_type)
+    try:
+        raw = await redis.get(key)
+    except Exception as exc:
+        log.warning(
+            "compute_job_type_pace_read_failed",
+            worker_id=worker_id,
+            job_type=q.canonical_job_type(job_type),
+            error=str(exc)[:200],
+        )
+        return True
+    if not raw:
+        return True
+    try:
+        deadline = float(raw)
+    except (TypeError, ValueError):
+        return True
+    return deadline <= time.time()
+
+
+async def _claimable_job_types_by_pace(
+    worker_id: str,
+    job_types: list[str],
+) -> list[str]:
+    out: list[str] = []
+    for job_type in job_types:
+        if await _job_type_pace_allows(worker_id, job_type):
+            out.append(job_type)
+    return out
+
+
+async def _record_job_type_pace(
+    worker_id: str,
+    job_type: str,
+    *,
+    source: str,
+) -> None:
+    interval = _job_type_pace_interval(job_type)
+    if interval <= 0.0:
+        return
+    redis = get_redis_client()
+    canonical = q.canonical_job_type(job_type)
+    try:
+        await redis.set(
+            _job_type_pace_key(worker_id, canonical),
+            str(time.time() + interval),
+            ex=max(1, int(interval) + 1),
+        )
+    except Exception as exc:
+        log.warning(
+            "compute_job_type_pace_write_failed",
+            worker_id=worker_id,
+            job_type=canonical,
+            source=source,
             error=str(exc)[:200],
         )
 
@@ -219,6 +338,17 @@ async def claim(
         )
         await session.commit()
         return Response(status_code=204)
+    job_types = await _claimable_job_types_by_pace(worker.id, job_types)
+    if not job_types:
+        await cws._log_audit(
+            session,
+            worker_id=worker.id,
+            ip=client_ip(request),
+            action="compute_claim_type_paced",
+            status_code=204,
+        )
+        await session.commit()
+        return Response(status_code=204)
     job = await q.claim_next(
         session,
         worker_id=worker.id,
@@ -266,6 +396,11 @@ async def claim(
         status_code=200,
     )
     await _record_claim_pace(worker.id)
+    await _record_job_type_pace(
+        worker.id,
+        q.canonical_job_type(job.job_type),
+        source="claim",
+    )
     await session.commit()
     return JSONResponse(
         status_code=200,
@@ -544,6 +679,11 @@ async def job_result(
                 payload.get("error") or payload.get("reason") or error_kind
             ),
         )
+        await _record_job_type_pace(
+            worker.id,
+            q.canonical_job_type(j.job_type),
+            source="result_error",
+        )
         await cws._log_audit(
             session,
             worker_id=worker.id,
@@ -577,6 +717,11 @@ async def job_result(
         session,
         job=j,
         result=payload,
+    )
+    await _record_job_type_pace(
+        worker.id,
+        q.canonical_job_type(j.job_type),
+        source="result",
     )
     await cws._log_audit(
         session,
@@ -636,6 +781,11 @@ async def job_fail(
         job=j,
         error_kind=error_kind,
         reason=reason,
+    )
+    await _record_job_type_pace(
+        worker.id,
+        q.canonical_job_type(j.job_type),
+        source="fail",
     )
     await cws._log_audit(
         session,

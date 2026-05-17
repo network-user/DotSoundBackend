@@ -75,6 +75,11 @@
     worker can drain a wider safe pool without opening every stubbed
     handler. Admin dashboard now has live compute job totals, resolved
     counters for a selected window, and created/resolved charts.
+  - Hotfix: compute claim pacing now also supports per-job-type
+    shaping via `COMPUTE_JOB_TYPE_PACE_SECONDS`, and catalog auto-sync
+    re-enable is guarded by env-driven station/full/re-enrich sweep
+    limits so `CATALOG_AUTO_SYNC_ENABLED=true` can be rolled out in
+    small batches.
 
 - [x] **Playback buffering / fast seek overhaul (2026-05-16)**
   - Симптом: первое воспроизведение и переключение трека «висели» 20–30 c,

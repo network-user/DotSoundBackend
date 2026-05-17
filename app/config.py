@@ -168,6 +168,13 @@ class AppSettings(BaseSettings):
     # Prevents one fast worker from draining thousands of tiny jobs
     # and then tripping result/fail rate limits with retry storms.
     compute_claim_min_interval_seconds: float = 0.5
+    # Per-job-type pacing applied after claim/result/fail. Format:
+    # ``job_type=seconds`` separated by comma or newline. This is a
+    # server-side shaper: result/fail are still accepted, but the next
+    # claim for that same worker+job_type is delayed.
+    compute_job_type_pace_seconds: str = (
+        "catalog_normalize=1.0,soundcloud_rpc=0.5"
+    )
 
     # Аварийный переключатель воспроизведения для SoundCloud-треков:
     #   "stream"    — текущая модель (наш плеер поверх stream URL);
@@ -179,6 +186,11 @@ class AppSettings(BaseSettings):
     # отдельно разбираться. См. план Фазы 7.
     sc_playback_mode: str = "stream"
     catalog_auto_sync_enabled: bool = False
+    catalog_station_sweep_limit: int = 20
+    catalog_station_sweep_batch_size: int = 5
+    catalog_full_sweep_limit: int = 10
+    catalog_full_sweep_batch_size: int = 5
+    catalog_reenrich_sweep_limit: int = 25
     artist_station_stale_threshold_days: int = 7
     artist_catalog_full_sync_stale_threshold_days: int = 30
     artist_catalog_enqueue_lock_ttl_seconds: int = 300

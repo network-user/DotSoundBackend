@@ -86,14 +86,17 @@ async def _enqueue_to_global_queue(
     """
     from app.services.lyrics_global_orchestrator import enqueue
 
-    enqueued_total = 0
-    skipped_total = 0
+    track_ids: list[int] = []
     for item in imported_items:
         track_id = item.get("track_id") if isinstance(item, dict) else None
-        if not isinstance(track_id, int):
-            continue
-        existing = await repo.get_by_track_id(track_id)
-        if existing is not None and (existing.plain_text or "").strip():
+        if isinstance(track_id, int):
+            track_ids.append(track_id)
+    already_have_lyrics = await repo.nonempty_plain_track_ids(track_ids)
+
+    enqueued_total = 0
+    skipped_total = 0
+    for track_id in track_ids:
+        if track_id in already_have_lyrics:
             skipped_total += 1
             continue
         try:
@@ -162,13 +165,21 @@ async def process_import_lyrics_task(job_id: int) -> None:
         enqueued_total = 0
         skipped_total = 0
 
+        candidate_track_ids: list[int] = []
+        for item in imported:
+            tid = item.get("track_id") if isinstance(item, dict) else None
+            if isinstance(tid, int):
+                candidate_track_ids.append(tid)
+        already_have_lyrics = await repo.nonempty_plain_track_ids(
+            candidate_track_ids
+        )
+
         for idx, item in enumerate(imported):
             track_id = item.get("track_id") if isinstance(item, dict) else None
             if not isinstance(track_id, int):
                 continue
 
-            existing = await repo.get_by_track_id(track_id)
-            if existing is not None and (existing.plain_text or "").strip():
+            if track_id in already_have_lyrics:
                 skipped_total += 1
                 logger.debug(
                     "import_lyrics_skip_existing",

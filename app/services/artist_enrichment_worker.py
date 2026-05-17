@@ -33,6 +33,14 @@ _STUCK_THRESHOLD_HOURS = 2
 _REENRICH_BATCH_LIMIT = 200
 
 
+def _positive_int(raw: object, *, default: int) -> int:
+    try:
+        value = int(raw)
+    except (TypeError, ValueError):
+        value = default
+    return max(1, value)
+
+
 @broker.on_event(TaskiqEvents.WORKER_STARTUP)
 async def _preload_artist_info_provider(
     _state: TaskiqState,
@@ -141,6 +149,10 @@ async def re_enrich_pending_artists_task() -> dict:
     if not settings.catalog_auto_sync_enabled:
         logger.info("re_enrich_sweep_skipped_auto_sync_disabled")
         return {"status": "skipped_auto_sync_disabled"}
+    sweep_limit = _positive_int(
+        settings.catalog_reenrich_sweep_limit,
+        default=_REENRICH_BATCH_LIMIT,
+    )
 
     cutoff = datetime.now(UTC) - timedelta(hours=_STUCK_THRESHOLD_HOURS)
 
@@ -154,7 +166,7 @@ async def re_enrich_pending_artists_task() -> dict:
                 ),
                 Artist.updated_at < cutoff,
             )
-            .limit(_REENRICH_BATCH_LIMIT)
+            .limit(sweep_limit)
         )
         artist_ids = list(result.scalars().all())
 
@@ -181,9 +193,11 @@ async def re_enrich_pending_artists_task() -> dict:
         enqueued=enqueued,
         skipped=skipped,
         total_found=len(artist_ids),
+        cap=sweep_limit,
     )
     return {
         "enqueued": enqueued,
         "skipped": skipped,
         "total_found": len(artist_ids),
+        "sweep_limit": sweep_limit,
     }
