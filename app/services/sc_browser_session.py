@@ -33,6 +33,9 @@ from typing import Any
 
 import structlog
 from dotsound_private_core.services.outbound import OutboundClient
+from dotsound_private_core.services.outbound.errors import (
+    OutboundExhaustedError,
+)
 from dotsound_private_core.services.sc_anti_block_policy import (
     ScAction,
     ScErrorKind,
@@ -213,6 +216,17 @@ async def sc_get_with_anti_block(
                     headers=headers,
                     timeout_s=timeout_s,
                     sticky_key=sticky,
+                )
+            except OutboundExhaustedError:
+                logger.warning(
+                    "sc_outbound_all_identities_quarantined",
+                    url=url,
+                    attempts=attempts,
+                )
+                return ScCallOutcome(
+                    response=None,
+                    error_kind=ScErrorKind.CIRCUIT_BURNED,
+                    attempts=attempts,
                 )
             except Exception as exc:
                 if attempts >= max_attempts:

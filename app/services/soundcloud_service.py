@@ -1312,6 +1312,8 @@ class SoundCloudService:
                             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
                             detail=_SC_AUTH_FAILED_MSG,
                         )
+                    if r.status_code in (403, 451):
+                        raise SoundCloudRateLimitError(r.status_code)
                     r.raise_for_status()
                     data = r.json()
                 chunk = data.get("collection", [])

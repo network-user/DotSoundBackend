@@ -410,6 +410,14 @@ class ArtistEnrichmentService:
         *,
         skip: bool,
     ) -> None:
+        from app.config import settings
+
+        if not settings.catalog_auto_sync_enabled:
+            logger.info(
+                "artist_catalog_auto_sync_skipped_disabled",
+                artist_id=artist_id,
+            )
+            return
         if skip:
             logger.info(
                 "artist_catalog_auto_sync_skipped_station_artist",

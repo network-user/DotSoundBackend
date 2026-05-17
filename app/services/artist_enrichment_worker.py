@@ -135,7 +135,12 @@ async def re_enrich_pending_artists_task() -> dict:
     ``enrich_artist_task`` was lost (Redis temporarily unavailable at
     creation time) or whose worker process died mid-enrichment.
     """
+    from app.config import settings
     from app.services.background_jobs import IdempotencySkipped, enqueue
+
+    if not settings.catalog_auto_sync_enabled:
+        logger.info("re_enrich_sweep_skipped_auto_sync_disabled")
+        return {"status": "skipped_auto_sync_disabled"}
 
     cutoff = datetime.now(UTC) - timedelta(hours=_STUCK_THRESHOLD_HOURS)
 

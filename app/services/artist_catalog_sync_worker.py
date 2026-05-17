@@ -4,10 +4,14 @@ import contextlib
 from typing import Any
 
 import structlog
+from dotsound_private_core.services.outbound.errors import (
+    OutboundExhaustedError,
+)
 from dotsound_private_core.services.sc_anti_block_policy import (
     SC_CATALOG_SYNC_MIN_INTERVAL_SECONDS,
     should_backpressure,
 )
+from fastapi import HTTPException
 
 from app.core.db import AsyncSessionLocal
 from app.core.tkq import broker
@@ -20,7 +24,10 @@ from app.services.compute_job_dispatcher import (
     LocalComputeJob,
     dispatch_compute_job,
 )
-from app.services.soundcloud_service import SoundCloudTrackUnavailable
+from app.services.soundcloud_service import (
+    SoundCloudRateLimitError,
+    SoundCloudTrackUnavailable,
+)
 
 logger: structlog.stdlib.BoundLogger = structlog.get_logger(__name__)
 
@@ -122,6 +129,51 @@ async def run_sync_artist_catalog_local(
             "artist_id": artist_id,
             "skipped_track_ref": str(exc.track_ref),
         }
+    except (OutboundExhaustedError, SoundCloudRateLimitError) as exc:
+        logger.warning(
+            "sc_catalog_sync_deferred_outbound",
+            artist_id=artist_id,
+            mode="full",
+            error=str(exc)[:200],
+        )
+        await acsp.set_error(
+            artist_id,
+            mode="full",
+            soundcloud_album_id=None,
+            message=f"deferred:{repr(exc)[:180]}",
+        )
+        return {
+            "status": "deferred_outbound_exhausted",
+            "artist_id": artist_id,
+        }
+    except HTTPException as exc:
+        _detail = exc.detail if isinstance(exc.detail, dict) else {}
+        if (
+            exc.status_code == 503
+            and _detail.get("code") == "soundcloud_circuit_burned"
+        ):
+            logger.warning(
+                "sc_catalog_sync_deferred_circuit_burned",
+                artist_id=artist_id,
+                mode="full",
+            )
+            await acsp.set_error(
+                artist_id,
+                mode="full",
+                soundcloud_album_id=None,
+                message="deferred:soundcloud_circuit_burned",
+            )
+            return {
+                "status": "deferred_circuit_burned",
+                "artist_id": artist_id,
+            }
+        await acsp.set_error(
+            artist_id,
+            mode="full",
+            soundcloud_album_id=None,
+            message=repr(exc),
+        )
+        raise
     except Exception as exc:
         await acsp.set_error(
             artist_id,
@@ -179,6 +231,51 @@ async def run_sync_artist_similar_station_local(
             detail=detail,
         )
         return detail
+    except (OutboundExhaustedError, SoundCloudRateLimitError) as exc:
+        logger.warning(
+            "sc_catalog_sync_deferred_outbound",
+            artist_id=artist_id,
+            mode="station",
+            error=str(exc)[:200],
+        )
+        await acsp.set_error(
+            artist_id,
+            mode="station",
+            soundcloud_album_id=None,
+            message=f"deferred:{repr(exc)[:180]}",
+        )
+        return {
+            "status": "deferred_outbound_exhausted",
+            "artist_id": artist_id,
+        }
+    except HTTPException as exc:
+        _detail = exc.detail if isinstance(exc.detail, dict) else {}
+        if (
+            exc.status_code == 503
+            and _detail.get("code") == "soundcloud_circuit_burned"
+        ):
+            logger.warning(
+                "sc_catalog_sync_deferred_circuit_burned",
+                artist_id=artist_id,
+                mode="station",
+            )
+            await acsp.set_error(
+                artist_id,
+                mode="station",
+                soundcloud_album_id=None,
+                message="deferred:soundcloud_circuit_burned",
+            )
+            return {
+                "status": "deferred_circuit_burned",
+                "artist_id": artist_id,
+            }
+        await acsp.set_error(
+            artist_id,
+            mode="station",
+            soundcloud_album_id=None,
+            message=repr(exc),
+        )
+        raise
     except Exception as exc:
         await acsp.set_error(
             artist_id,
@@ -334,6 +431,55 @@ async def run_sync_artist_release_local(
             "artist_id": artist_id,
             "soundcloud_album_id": soundcloud_album_id,
         }
+    except (OutboundExhaustedError, SoundCloudRateLimitError) as exc:
+        logger.warning(
+            "sc_catalog_sync_deferred_outbound",
+            artist_id=artist_id,
+            mode="release",
+            soundcloud_album_id=soundcloud_album_id,
+            error=str(exc)[:200],
+        )
+        await acsp.set_error(
+            artist_id,
+            mode="release",
+            soundcloud_album_id=soundcloud_album_id,
+            message=f"deferred:{repr(exc)[:180]}",
+        )
+        return {
+            "status": "deferred_outbound_exhausted",
+            "artist_id": artist_id,
+            "soundcloud_album_id": soundcloud_album_id,
+        }
+    except HTTPException as exc:
+        _detail = exc.detail if isinstance(exc.detail, dict) else {}
+        if (
+            exc.status_code == 503
+            and _detail.get("code") == "soundcloud_circuit_burned"
+        ):
+            logger.warning(
+                "sc_catalog_sync_deferred_circuit_burned",
+                artist_id=artist_id,
+                mode="release",
+                soundcloud_album_id=soundcloud_album_id,
+            )
+            await acsp.set_error(
+                artist_id,
+                mode="release",
+                soundcloud_album_id=soundcloud_album_id,
+                message="deferred:soundcloud_circuit_burned",
+            )
+            return {
+                "status": "deferred_circuit_burned",
+                "artist_id": artist_id,
+                "soundcloud_album_id": soundcloud_album_id,
+            }
+        await acsp.set_error(
+            artist_id,
+            mode="release",
+            soundcloud_album_id=soundcloud_album_id,
+            message=repr(exc),
+        )
+        raise
     except Exception as exc:
         await acsp.set_error(
             artist_id,
@@ -358,6 +504,10 @@ async def sync_stale_stations_batch_task() -> dict[str, Any]:
     )
 
     from app.config import settings
+
+    if not settings.catalog_auto_sync_enabled:
+        logger.info("station_sweep_skipped_auto_sync_disabled")
+        return {"status": "skipped_auto_sync_disabled"}
 
     queue_len = await _pending_task_queue_length()
     if queue_len >= 0 and should_backpressure(queue_len):
@@ -416,6 +566,10 @@ async def sync_stale_catalogs_batch_task() -> dict[str, Any]:
     """Bi-weekly sweep: enqueue full catalog sync for artists with
     stale or missing non-station catalog."""
     from app.config import settings
+
+    if not settings.catalog_auto_sync_enabled:
+        logger.info("catalog_sweep_skipped_auto_sync_disabled")
+        return {"status": "skipped_auto_sync_disabled"}
 
     queue_len = await _pending_task_queue_length()
     if queue_len >= 0 and should_backpressure(queue_len):

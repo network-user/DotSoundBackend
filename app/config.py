@@ -178,6 +178,7 @@ class AppSettings(BaseSettings):
     # правообладателя или SoundCloud перевести в "reference" и
     # отдельно разбираться. См. план Фазы 7.
     sc_playback_mode: str = "stream"
+    catalog_auto_sync_enabled: bool = False
     artist_station_stale_threshold_days: int = 7
     artist_catalog_full_sync_stale_threshold_days: int = 30
     artist_catalog_enqueue_lock_ttl_seconds: int = 300
