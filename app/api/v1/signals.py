@@ -111,6 +111,7 @@ async def record_client_playback_event(
         hls_url=body.hls_url,
         chosen_source=body.chosen_source,
         tt_canplay_ms=body.tt_canplay_ms,
+        tt_first_play_ms=body.tt_first_play_ms,
         effective_type=body.effective_type,
         save_data=body.save_data,
         downlink_mbps=body.downlink_mbps,

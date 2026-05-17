@@ -366,6 +366,51 @@ export default defineConfig({
             },
           },
           {
+            // Radio: SWR with a short TTL so the player can lay
+            // hands on a queue refill even when the OS has frozen
+            // network in the background. The exact-URL match means
+            // we only get a cache hit when the same (seed, exclude
+            // set) is asked for twice -- usually fine because the
+            // pro-active refill in PlayerContext fires the same
+            // request once before the queue empties (warm-up) and
+            // once when it actually empties (consume the warmed
+            // entry). 100 entries is enough to cover 1-2 weeks of
+            // listening across multiple seeds; 5-minute TTL is
+            // short enough that the user does not get yesterday's
+            // recommendations on a fresh tap.
+            urlPattern:
+              /\/api\/v1\/recommendations\/radio(?:\?.*)?$/,
+            handler: 'StaleWhileRevalidate',
+            options: {
+              cacheName: 'radio-cache',
+              expiration: {
+                maxEntries: 100,
+                maxAgeSeconds: 300,
+                purgeOnQuotaError: true,
+              },
+              cacheableResponse: { statuses: [200] },
+            },
+          },
+          {
+            // The track-queue endpoint is the fallback path for
+            // ``preloadFirst`` when ``getRadio`` returns nothing.
+            // Caching it with the same SWR strategy means the next
+            // track switch after a flaky network gets resolved
+            // immediately from cache instead of stalling.
+            urlPattern:
+              /\/api\/v1\/tracks\/\d+\/queue(?:\?.*)?$/,
+            handler: 'StaleWhileRevalidate',
+            options: {
+              cacheName: 'track-queue-cache',
+              expiration: {
+                maxEntries: 100,
+                maxAgeSeconds: 300,
+                purgeOnQuotaError: true,
+              },
+              cacheableResponse: { statuses: [200] },
+            },
+          },
+          {
             urlPattern: /\/api\/v1\/users\/me(?:\?.*)?$/,
             handler: 'NetworkOnly',
           },

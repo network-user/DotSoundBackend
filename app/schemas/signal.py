@@ -28,6 +28,7 @@ class ClientPlaybackEventRequest(BaseModel):
         "radio_auto_skip_exhausted",
         "hls_fatal_error",
         "playback_source_chosen",
+        "track_switch_latency",
     ]
     surface: Literal["player", "radio"]
     current_track_id: int | None = Field(default=None, ge=1)
@@ -48,6 +49,9 @@ class ClientPlaybackEventRequest(BaseModel):
         | None
     ) = None
     tt_canplay_ms: int | None = Field(default=None, ge=0, le=120_000)
+    tt_first_play_ms: int | None = Field(
+        default=None, ge=0, le=120_000
+    )
     effective_type: str | None = Field(default=None, max_length=24)
     save_data: bool | None = None
     downlink_mbps: float | None = Field(default=None, ge=0, le=10_000)

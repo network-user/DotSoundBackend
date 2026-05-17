@@ -1,5 +1,77 @@
 # DotSound - TODO Tracker
 
+- [ ] **Унификация prefetch-подсистем плеера (2026-05-17)**
+  - В `frontend/src/store/PlayerContext.tsx` живут пять
+    параллельных prefetch-механизмов: `prefetchAudioRef`,
+    `preloadHlsRef`, `prefetchedStreamsRef`,
+    `swCachePrefetchAbortRef`*, `getPrefetchManager()`. Каждый
+    отвечает за свой слой стека (см. развёрнутый
+    "PREFETCH SUBSYSTEMS MAP" коментарий в самом файле).
+  - Текущий релиз отгрузил **карту-документацию** ответственностей,
+    но не сам refactor. План на реальную унификацию:
+    1. Завести единый сервис `NextCandidateResolver`, который
+       принимает текущий track + queue + radio mode и возвращает
+       список `next[3]` — единая «истина», что считать следующим
+       треком. Сейчас каждый из пяти механизмов выводит next
+       guess сам.
+    2. Перевести pre-resolution stream URL в общий API
+       `PrefetchManager.resolveStream(trackId)` с тем же
+       внутренним TTL и map-кешем, что сейчас в
+       `prefetchedStreamsRef`.
+    3. Перевести HLS warm и progressive warm в
+       `PrefetchManager.warmMedia(track, kind: 'hls' | 'direct')`,
+       а текущие `preloadHlsRef` / `prefetchAudioRef` оставить
+       как реализационную деталь манагера.
+    4. Service-worker cache priming перенести в
+       `PrefetchManager.warmServiceWorker(track)`.
+    5. В `PlayerContext` оставить ровно один `useEffect`,
+       вызывающий `prefetchManager.warmNextCandidates(...)`.
+  - Зачем ждать: текущий вариант работает; задача — чисто
+    архитектурная (упрощение, тестируемость), не блокирует
+    пользовательские сценарии.
+
+- [ ] **True dual-audio crossfade (overlap) — follow-up to track-switch
+      optimization (2026-05-17)**
+  - Текущий релиз отгрузил «pseudo-crossfade» в `PlayerContext.tsx`:
+    `CROSSFADE_LEAD_MS = 2000`, `_maybeTriggerPseudoCrossfade` стартует
+    `playNext` за 2 с до конца трека, что даёт overlap-feeling без
+    реального overlap двух источников.
+  - Чтобы перейти к настоящему DJ-mix крос-фейду нужен следующий объём
+    работ (по оценке — 1-2 дня focused refactor):
+    1. Завести второй элемент `<audio ref={audioBRef}>` в JSX, плюс
+       состояние `activeAudioKey: 'A' | 'B'` в `PlayerContext`.
+    2. Проксировать существующий `audioRef.current` через геттер,
+       возвращающий `audio[A|B]Ref.current` в зависимости от
+       `activeAudioKey`, чтобы не переписывать сотни обращений.
+    3. В `_initAudioCtx` вызвать `createMediaElementSource` для
+       обоих audio (каждый только один раз) и подключить оба к
+       первому фильтру цепочки EQ — общий граф, EQ применяется ко
+       всему миксу во время фейда.
+    4. Перенаправить listener-`useEffect` (timeupdate / play / pause /
+       ended / error / stalled) на active audio через зависимость от
+       `activeAudioKey`. Он должен сниматься со старого активного и
+       вешаться на новый при swap.
+    5. Дописать функцию `runCrossfade(nextTrack)`: грузит next в
+       inactive audio, играет с volume=0, fade-in (sin curve) одновременно
+       с fade-out active (cos curve) длиной ~2000 мс, по завершении
+       вызывает `setActiveAudioKey(other)` и паузит «бывший active».
+    6. HLS attach/detach: сейчас `hlsRef` один на player. Нужны
+       `hlsRefA` и `hlsRefB` либо `hlsRef` + переинициализация при
+       swap; на crossfade audio source может быть direct (progressive),
+       в этом случае hls для inactive не нужен.
+    7. Обновить `_consumePrefetchedStream` / `prefetchedStreamsRef`
+       так, чтобы pre-resolve URL подавался именно в inactive audio
+       за `CROSSFADE_LEAD_MS` до конца текущего.
+    8. Регрессионные тесты: ручной чек на «свайп между треками» (без
+       crossfade), «естественный конец трека в radio-mode» (с
+       crossfade), мобильный Android Chrome PWA / iOS Safari 18 PWA,
+       режим экономии трафика (`save_data=true` — по политике должны
+       выключать crossfade).
+  - Когда будем браться: вырезать pseudo-crossfade trigger и
+    заменить на `runCrossfade` overlap-вариант. Telemetry-event
+    `track_switch_latency` останется тем же, цель — снизить медиану
+    дополнительно.
+
 - [x] **SC catalog-sync: comprehensive error deferral, no more failed_terminal (2026-05-17)**
   - Backend `soundcloud_service.py`: добавлен `_sc_guard_status()` helper —
     преобразует HTTP 403/451 в `SoundCloudRateLimitError` до вызова

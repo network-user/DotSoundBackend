@@ -246,6 +246,46 @@ async def test_record_client_playback_source_chosen(
     assert observed == [("playback_source_chosen", "player")]
 
 
+async def test_record_client_track_switch_latency(
+    client: AsyncClient,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    await create_test_user(client, 9007)
+    headers = await auth_headers(client, 9007)
+
+    observed: list[tuple[str, str]] = []
+
+    def fake_observed(
+        *,
+        event_name: str,
+        surface: str,
+    ) -> None:
+        observed.append((event_name, surface))
+
+    monkeypatch.setattr(
+        "app.api.v1.signals.client_playback_event_observed",
+        fake_observed,
+    )
+
+    r = await client.post(
+        "/api/v1/signals/client/playback-event",
+        json={
+            "event_name": "track_switch_latency",
+            "surface": "radio",
+            "current_track_id": 42,
+            "tt_first_play_ms": 320,
+            "effective_type": "4g",
+            "save_data": False,
+            "downlink_mbps": 12.5,
+        },
+        headers=headers,
+    )
+
+    assert r.status_code == 200
+    assert r.json()["status"] == "ok"
+    assert observed == [("track_switch_latency", "radio")]
+
+
 async def test_record_listen_invalid(
     client: AsyncClient,
 ) -> None:

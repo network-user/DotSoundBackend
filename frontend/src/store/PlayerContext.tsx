@@ -36,7 +36,11 @@ import {
   COVER_RENDER_WIDTHS,
   coverProxyUrl,
 } from '@/lib/coverProxy'
-import type { Track } from '@/types/api'
+import type { StreamResponse, Track } from '@/types/api'
+import {
+  consumePrefetchedStream as _consumePrefetchedStream,
+  tweenVolume as _tweenVolume,
+} from '@/store/playerAudioHelpers'
 
 const EQ_FREQUENCIES = [
   32, 64, 125, 250, 500, 1000, 4000, 16000,
@@ -44,7 +48,54 @@ const EQ_FREQUENCIES = [
 const EQ_DEFAULT = [0, 0, 0, 0, 0, 0, 0, 0]
 const HLS_READY_TIMEOUT_MS = 15000
 const MEDIA_SESSION_PLACEHOLDER_SIZES = [192, 512] as const
-const MEDIA_SESSION_SWITCH_HOLD_MS = 8000
+// Hold the Android system notification "drawer" in the playing state
+// across a track switch even if the new audio takes a while to reach
+// canplay (cold third_party_stream resolve, slow CDN, large first
+// segment). 15s comfortably covers the worst case on 3G while still
+// letting a true playback failure surface as paused within reasonable
+// time. Prior value 8s was tight and caused the drawer to "blink" on
+// metro / weak Wi-Fi when the new track took >5s to start.
+const MEDIA_SESSION_SWITCH_HOLD_MS = 15000
+// Time-to-live for a pre-resolved stream URL (third_party_stream or
+// private). Keeps the URL usable as long as the upstream signed link
+// has not expired; we still cross-check ``expires_at`` per item.
+const PREFETCHED_STREAM_TTL_MS = 60_000
+// How many upcoming tracks we eagerly resolve a stream URL for. 3 is
+// the smallest number that survives the typical Android background
+// fetch deadline (~30-60 s of suspended network) for two consecutive
+// gapless track switches while the screen is locked.
+const PREFETCH_STREAM_AHEAD = 3
+// Volume tween durations for soft track transitions. 80 ms fade-out
+// before src swap removes the click that some Chromium builds emit
+// when the audio engine cuts off mid-buffer. 180 ms fade-in after
+// canplay smooths the new track in without the abrupt full-volume
+// kick that feels like a "jump" between tracks.
+const TRACK_FADE_OUT_MS = 80
+const TRACK_FADE_IN_MS = 180
+// Pro-active refill threshold for the radio queue. When the manual
+// queue drops below this many remaining tracks we fire a background
+// ``api.getRadio`` to top it up, so the next-track tap never has to
+// wait for a fresh network round-trip.
+const RADIO_REFILL_THRESHOLD = 5
+// "Pseudo-crossfade" lead time. In radio mode, this many ms before
+// the current track ends we proactively trigger ``playNext`` so the
+// new track starts playing while the previous one is still in its
+// fade-out tail. The user perceives an overlap-style transition
+// (~1 s) instead of an abrupt onEnded boundary.
+//
+// NOTE on a *true* crossfade (overlapping two audio sources):
+// requires (a) a second ``<audio>`` element, (b) a second
+// ``MediaElementAudioSourceNode`` wired into the same EQ chain, and
+// (c) listener-set rebinding on every active-audio swap. That is a
+// real rewrite of the playback core (1-2 days) and was scoped out
+// of this change. Documented under TODO so a follow-up sprint can
+// pick it up without re-deriving the design.
+const CROSSFADE_LEAD_MS = 2000
+// Initial batch size for radio. Bumped from 15 to 25 so a typical
+// ~30-minute background listening session can stay self-sufficient
+// across an OS-imposed network suspension without tripping the
+// in-band refill path.
+const RADIO_BATCH_SIZE = 25
 
 type HlsErrorData = {
   type?: unknown
@@ -736,6 +787,166 @@ function _updatePositionState(
   } catch {}
 }
 
+// Push a position-state to the system notification drawer using the
+// track's known ``duration_seconds`` even before ``audio.duration``
+// becomes a real number. Without this, the first ~500 ms after a
+// track switch the drawer keeps showing the *previous* track's
+// progress (or a frozen scrubber on Android), which the user reads
+// as "the player got stuck". Called both right at the start of a
+// switch and again after the audio has metadata ready.
+function _pushPositionStateForTrack(
+  audio: HTMLAudioElement,
+  track: Track,
+) {
+  if (!('mediaSession' in navigator)) return
+  const realDuration = Number.isFinite(audio.duration)
+    ? audio.duration
+    : 0
+  const fallbackDuration =
+    typeof track.duration_seconds === 'number' &&
+    Number.isFinite(track.duration_seconds) &&
+    track.duration_seconds > 0
+      ? track.duration_seconds
+      : 0
+  const duration = realDuration > 0 ? realDuration : fallbackDuration
+  if (duration <= 0) return
+  const position = Number.isFinite(audio.currentTime)
+    ? Math.min(audio.currentTime, duration)
+    : 0
+  const playbackRate = Number.isFinite(audio.playbackRate)
+    ? audio.playbackRate
+    : 1
+  try {
+    navigator.mediaSession.setPositionState({
+      duration,
+      playbackRate,
+      position: Math.max(0, position),
+    })
+  } catch {
+    // setPositionState throws on weird inputs in some older Chromium
+    // builds; the drawer just loses the scrubber for one frame, no
+    // user-visible regression beyond what we already had.
+  }
+}
+
+// _consumePrefetchedStream / _tweenVolume / PrefetchedStreamRecord
+// are re-exported from ``@/store/playerAudioHelpers`` (imported at
+// the top of this file). They live in their own module so unit
+// tests can import them without dragging in the entire React
+// PlayerContext.
+
+// iOS audio session: tell Safari we are a playback (not transient,
+// not voice-call) audio source. This is the iOS counterpart to
+// Android's wake-lock + media foreground service. Without it Safari
+// (Mobile + iPad PWA) treats the WebView like a banner-ad audio
+// source: it ducks under voice notes, gets cut by the next ringtone,
+// and can be silently suspended once the screen locks.
+//
+// Shipped in Safari 18.4+ (March 2025); on older builds the API
+// does not exist and we no-op silently.
+type AudioSessionLike = {
+  type?: 'auto' | 'playback' | 'transient' | 'transient-solo' | 'ambient' | 'play-and-record'
+}
+function _setIosAudioSessionToPlayback() {
+  if (typeof navigator === 'undefined') return
+  const session = (
+    navigator as Navigator & { audioSession?: AudioSessionLike }
+  ).audioSession
+  if (!session) return
+  try {
+    session.type = 'playback'
+  } catch {
+    // Some webviews ship the property but throw when set; treat as
+    // a no-op so we don't crash the player on a feature-detect.
+  }
+}
+
+// Wake Lock API: ask the OS to keep the screen wake-lock acquired
+// while audio is playing. On Android Chrome PWAs (``display:
+// 'standalone'``) this is the closest we can get to a "media
+// foreground service" without an Android-native shell -- it
+// noticeably extends how long the PWA process stays alive after the
+// user locks the phone with a track playing. On iOS / older browsers
+// the API does not exist; we no-op silently.
+//
+// Why screen-type only:
+// * ``screen`` is the only type currently shipped in stable Chromium.
+// * The hypothetical ``system`` type is an experiment behind a flag
+//   and not exposed to the document. There is no safe way to ask for
+//   "keep the audio session alive" beyond what a playing
+//   ``HTMLAudioElement`` + an active ``mediaSession`` already give us.
+type WakeLockSentinelLike = {
+  released?: boolean
+  release: () => Promise<void>
+  addEventListener: (type: 'release', listener: () => void) => void
+}
+type WakeLockNavigator = Navigator & {
+  wakeLock?: {
+    request: (type: 'screen') => Promise<WakeLockSentinelLike>
+  }
+}
+
+let _wakeLockSentinel: WakeLockSentinelLike | null = null
+let _wakeLockRequestInFlight = false
+
+async function _acquireWakeLock() {
+  if (typeof navigator === 'undefined') return
+  const nav = navigator as WakeLockNavigator
+  if (!nav.wakeLock || typeof nav.wakeLock.request !== 'function') {
+    return
+  }
+  if (_wakeLockSentinel || _wakeLockRequestInFlight) return
+  _wakeLockRequestInFlight = true
+  try {
+    const sentinel = await nav.wakeLock.request('screen')
+    _wakeLockSentinel = sentinel
+    sentinel.addEventListener('release', () => {
+      if (_wakeLockSentinel === sentinel) {
+        _wakeLockSentinel = null
+      }
+    })
+  } catch {
+    // The request can fail if the page is no longer visible (the
+    // user already locked their phone before the request landed) --
+    // there is nothing we can do beyond letting the next ``play``
+    // event re-attempt the acquisition.
+  } finally {
+    _wakeLockRequestInFlight = false
+  }
+}
+
+function _releaseWakeLock() {
+  const sentinel = _wakeLockSentinel
+  if (!sentinel) return
+  _wakeLockSentinel = null
+  try {
+    void sentinel.release()
+  } catch {
+    /* sentinel already released; ignore */
+  }
+}
+
+// Kick off a pre-warm for the artwork URLs the next ``setMetadata``
+// call is going to use. The browser fetches the bitmap, the SW cache
+// (``covers-cache``) ends up populated, and by the time the actual
+// MediaSession update happens, the system UI gets a fully cached
+// image and does not flash a blank tile. Side effect only -- we do
+// not await any of this.
+function _warmCoverArtwork(track: Track) {
+  if (typeof Image === 'undefined') return
+  const artwork = _mediaSessionArtwork(track)
+  for (const item of artwork) {
+    try {
+      const img = new Image()
+      img.decoding = 'async'
+      img.loading = 'eager'
+      img.src = item.src
+    } catch {
+      // ignore -- best-effort prefetch, never block the switch
+    }
+  }
+}
+
 export function PlayerProvider({
   children,
 }: {
@@ -750,6 +961,79 @@ export function PlayerProvider({
   } | null>(null)
   const historyRef = useRef<Track[]>([])
   const wantResumeAfterCardCloseRef = useRef(false)
+  // ---------------------------------------------------------------
+  // PREFETCH SUBSYSTEMS MAP (responsibility chart)
+  //
+  // The player keeps five distinct prefetch / preload mechanisms, each
+  // pulling on a different layer of the playback stack. Until they
+  // are unified into a single PrefetchManager (TODO under "Унификация
+  // prefetch подсистем" in TODO.md), this comment is the canonical
+  // map of what owns what.
+  //
+  //  1. ``prefetchAudioRef`` (HTMLAudioElement)
+  //     - Layer: browser HTTP cache.
+  //     - Triggered by: track-change effect.
+  //     - For: progressive-audio (direct MP3) tracks of the *next*
+  //       likely track. We assign ``src = next-progressive-url`` to
+  //       a hidden ``<audio>`` element which makes the browser
+  //       issue a Range request and warm its HTTP cache. The
+  //       primary audio reuses that warm cache when the user actually
+  //       switches.
+  //     - Lifetime: 1 in-flight slot at a time.
+  //
+  //  2. ``preloadHlsRef`` + ``preloadHlsTrackIdRef``
+  //     - Layer: hls.js manifest+segment cache.
+  //     - Triggered by: track-change effect, only for HLS tracks.
+  //     - For: pre-fetching the HLS playlist + first segment of the
+  //       next likely track via a *detached* hls.js instance, so a
+  //       swap on the main audio gets canplay almost immediately.
+  //     - Lifetime: 1 detached HlsPlayer; destroyed and re-created
+  //       per next-track guess.
+  //
+  //  3. ``prefetchedStreamsRef`` (Map<trackId, PrefetchedStreamRecord>)
+  //     - Layer: backend stream resolution (the one round-trip
+  //       ``api.getStream`` we cannot avoid for ``third_party_stream``
+  //       and private tracks).
+  //     - Triggered by: track-change effect.
+  //     - For: pre-resolving the actual playable URL for the
+  //       *next* ``PREFETCH_STREAM_AHEAD`` tracks. Crucial for
+  //       background playback robustness: the OS will throttle
+  //       fetches once the screen is locked, so resolving in the
+  //       foreground means a queue of ready-to-play URLs that need
+  //       no network at switch time.
+  //     - Lifetime: per-trackId; consumed by ``_consumePrefetchedStream``.
+  //       TTL = ``PREFETCHED_STREAM_TTL_MS``.
+  //
+  //  4. ``swCachePrefetchAbortRef`` + ``swCachePrefetchSecondAbortRef``
+  //     - Layer: service-worker cache (workbox runtimeCaching).
+  //     - Triggered by: track-change effect; AbortController-based
+  //       cancellation when the next-track guess changes.
+  //     - For: explicit ``fetch()`` of upcoming HLS manifests +
+  //       first-segment URLs against the same origin so that the
+  //       service-worker route in ``vite.config.ts`` populates the
+  //       ``hls-manifest-cache`` / ``hls-segment-cache`` /
+  //       ``progressive-audio-cache`` / (added in this change)
+  //       ``radio-cache`` and ``track-queue-cache``.
+  //     - Lifetime: per next-track guess; aborted on guess change.
+  //
+  //  5. ``getPrefetchManager()`` (singleton in @/lib/prefetch)
+  //     - Layer: cross-feature prefetch orchestration (covers,
+  //       low-priority assets, hint hooks).
+  //     - Triggered by: ``markPlaybackStart``, ``enqueue`` calls
+  //       throughout the player.
+  //     - For: anything that does NOT belong to the four
+  //       ref-driven mechanisms above (cover-art warmups, queue
+  //       enqueue hints, idle-time prefetches).
+  //
+  // Why five separate mechanisms exist:
+  // each lives at a different stack layer (browser HTTP cache,
+  // hls.js memory, backend round-trip cache, service-worker cache,
+  // generic cross-feature manager) and has its own lifecycle. The
+  // intent of the unification TODO is to keep the *layers* but
+  // expose them through a single entry point with shared "next-
+  // candidate" computation, rather than four independent
+  // useEffects each guessing what the next track will be.
+  // ---------------------------------------------------------------
   const prefetchAudioRef =
     useRef<HTMLAudioElement | null>(null)
   const manualQueueRef = useRef<Track[]>([])
@@ -783,6 +1067,34 @@ export function PlayerProvider({
   const swCachePrefetchAbortRef = useRef<AbortController | null>(null)
   const swCachePrefetchTrackIdRef = useRef<number | null>(null)
   const swCachePrefetchSecondAbortRef = useRef<AbortController | null>(null)
+  // Pre-resolved stream URLs for the next ``PREFETCH_STREAM_AHEAD``
+  // probable tracks. Populated by the prefetch effect for tracks that
+  // need a backend round-trip on every play (third_party_stream and
+  // private). Keyed by trackId so playTrack can look up by id no
+  // matter which slot in the queue the user actually swiped to.
+  //
+  // Why a Map and not just "the next track":
+  // when the PWA goes to the background on Android, the OS will
+  // suspend any in-flight fetch after ~30-60 s. If the only resolved
+  // URL was for the very next track, the *second* and *third* track
+  // switch in the background hits a network request that fails or
+  // hangs, audio goes silent, the system kills the process, and the
+  // notification drawer disappears (the user-reported "plays 1-2
+  // songs in the background then dies"). Prefetching the URLs for
+  // n+1..n+3 while we are still in foreground keeps the playback
+  // chain unbroken across the OS-imposed background fetch deadline.
+  const prefetchedStreamsRef = useRef<
+    Map<
+      number,
+      {
+        trackId: number
+        url: string
+        streamType: 'direct' | 'hls'
+        expiresAt: number | null
+        resolvedAt: number
+      }
+    >
+  >(new Map())
   const audioCtxRef =
     useRef<AudioContext | null>(null)
   const filtersRef = useRef<BiquadFilterNode[]>([])
@@ -888,6 +1200,26 @@ export function PlayerProvider({
   const playTrackSlideInjectRef = useRef<1 | -1 | null>(null)
   const playNextInFlightRef = useRef(false)
   const mediaSessionSwitchHoldUntilRef = useRef(0)
+  // Tracks whether the pseudo-crossfade early ``playNext`` has
+  // already been fired for the *currently-loaded* trackId. Reset
+  // on every track change so the next track gets its own chance to
+  // trigger an early transition.
+  const crossfadeFiredForRef = useRef<number | null>(null)
+  // Records when we entered ``playTrack`` for a given trackId, so
+  // the first ``playing`` event can compute "time from user-visible
+  // tap/swipe to first audible frame" and emit it as telemetry.
+  // Distinct from ``tt_canplay_ms`` in
+  // ``recordPlaybackSourceTelemetry``: that one measures "time from
+  // src assigned to canplay", which excludes the network resolves
+  // (``api.getStream``, ``api.getRadio`` refill) that happen before
+  // ``audio.src = newUrl``. The end-to-end number is what the user
+  // actually feels, and is what the radio prefetch + wake-lock
+  // tweaks aim to bring down.
+  const playSwitchStartedAtRef = useRef<{
+    trackId: number
+    ts: number
+    surface: 'radio' | 'player'
+  } | null>(null)
   const [trackChangeSlide, setTrackChangeSlide] = useState<{
     bump: number
     dir: 0 | 1 | -1
@@ -1350,6 +1682,30 @@ export function PlayerProvider({
     window.addEventListener('beforeunload', onBeforeUnload)
     return () => window.removeEventListener('beforeunload', onBeforeUnload)
   }, [track])
+
+  // Wake Lock + AudioContext recovery on visibility change. The OS
+  // automatically releases the wake-lock the moment the document
+  // becomes hidden; when it comes back to visible (user unlocks the
+  // phone, switches back into the PWA) we have to re-request it for
+  // the lock to keep being effective. AudioContext can also slide
+  // into ``suspended`` after a long background interval -- resume it
+  // here so the EQ chain is alive again.
+  useEffect(() => {
+    if (typeof document === 'undefined') return
+    const onVisibility = () => {
+      if (document.visibilityState !== 'visible') return
+      const a = audioRef.current
+      if (!a || a.paused) return
+      void _acquireWakeLock()
+      const ctx = audioCtxRef.current
+      if (ctx && ctx.state === 'suspended') {
+        void ctx.resume().catch(() => {})
+      }
+    }
+    document.addEventListener('visibilitychange', onVisibility)
+    return () =>
+      document.removeEventListener('visibilitychange', onVisibility)
+  }, [])
 
   const toggleRepeat = useCallback(() => {
     setRepeatMode((prev) => {
@@ -2068,6 +2424,55 @@ export function PlayerProvider({
       flushUnavailableSkipBatch()
       if ('mediaSession' in navigator)
         navigator.mediaSession.playbackState = 'playing'
+      _updatePositionState(audio)
+      // Emit end-to-end track-switch latency: from the moment
+      // playTrack was invoked (typically the user gesture) to the
+      // first ``playing`` event of the new audio. Fired exactly
+      // once per switch -- the ref is consumed below so a later
+      // pause/resume on the same track does not re-trigger it.
+      const switchStart = playSwitchStartedAtRef.current
+      if (
+        switchStart &&
+        track &&
+        switchStart.trackId === track.id
+      ) {
+        playSwitchStartedAtRef.current = null
+        const nowMs =
+          typeof performance !== 'undefined' &&
+          typeof performance.now === 'function'
+            ? performance.now()
+            : Date.now()
+        const latencyMs = Math.max(
+          0,
+          Math.round(nowMs - switchStart.ts),
+        )
+        const network = readNetworkSnapshot()
+        void queueOrSend(
+          'client-telemetry',
+          '/api/v1/signals/client/playback-event',
+          {
+            event_name: 'track_switch_latency',
+            surface: switchStart.surface,
+            current_track_id: track.id,
+            tt_first_play_ms: latencyMs,
+            effective_type: network.effectiveType,
+            save_data: network.saveData,
+            downlink_mbps: network.downlinkMbps,
+          },
+          { silent: true },
+        )
+      }
+      // Hold the OS wake-lock so the PWA process stays a media-
+      // playback session for as long as we're actually playing.
+      // Without this Android can suspend the WebView ~60-90 s after
+      // the screen goes off and the notification drawer disappears
+      // with the process (the user-reported "plays 1-2 songs in the
+      // background then dies").
+      void _acquireWakeLock()
+      // iOS Safari 18+ counterpart: declare the audio session as
+      // ``playback`` so the OS treats us as a music app for ducking
+      // and lock-screen handover.
+      _setIosAudioSessionToPlayback()
       if (audioCtxRef.current?.state === 'suspended')
         audioCtxRef.current.resume()
       if (
@@ -2096,6 +2501,14 @@ export function PlayerProvider({
         navigator.mediaSession.playbackState = isMediaSessionSwitchHeld()
           ? 'playing'
           : 'paused'
+      _updatePositionState(audio)
+      // Only release the wake-lock when the pause is *real* (user
+      // pause / end-of-queue) -- a pause caused by an in-flight
+      // track switch must keep the lock so the OS does not suspend
+      // the WebView mid-swap.
+      if (!isMediaSessionSwitchHeld()) {
+        _releaseWakeLock()
+      }
       sendListenSignal()
     }
     const onEnded = () => {
@@ -2129,19 +2542,14 @@ export function PlayerProvider({
           }
         })
       }
-      if (radioModeRef.current) {
-        const nextQueued = manualQueueRef.current.find(
-          (t) => !unavailableTrackIdsRef.current.has(t.id),
-        )
-        const isBuffered =
-          nextQueued != null &&
-          (preloadHlsTrackIdRef.current === nextQueued.id ||
-            getPrefetchManager().wasWarm(nextQueued.id))
-        if (!isBuffered) {
-          setTimeout(doNext, 1500)
-          return
-        }
-      }
+      // Always advance immediately. Previously we delayed the
+      // radio advance by 1.5 s when the next track was not warm
+      // yet, which made the gap between tracks *worse* on slow
+      // networks (extra 1.5 s of silence on top of the buffering
+      // gap). With the prefetched-stream-url + cover-warm + drawer
+      // hold tweaks the new track now starts loading in parallel
+      // with the previous one ending, so the right answer is "go
+      // now and let the audio element buffer in the background".
       doNext()
     }
       const onError = () => {
@@ -2262,6 +2670,35 @@ export function PlayerProvider({
         /* never let recovery itself crash the player */
       }
     }
+    const _maybeTriggerPseudoCrossfade = (
+      a: HTMLAudioElement,
+    ) => {
+      if (!radioModeRef.current) return
+      if (a.paused) return
+      const dur = a.duration
+      if (!Number.isFinite(dur) || dur <= 0) return
+      const remainingMs = (dur - a.currentTime) * 1000
+      if (
+        remainingMs <= 0 ||
+        remainingMs > CROSSFADE_LEAD_MS
+      ) {
+        return
+      }
+      const currentId = track?.id ?? lastTrackIdRef.current ?? null
+      if (currentId == null) return
+      if (crossfadeFiredForRef.current === currentId) return
+      // Only fire if there is actually something to cross-fade to,
+      // so we don't preempt the natural ``onEnded`` for the last
+      // track of a finite queue.
+      const nextInQueue = manualQueueRef.current[0]
+      if (!nextInQueue) return
+      // Don't compete with an in-flight ``playNext`` (e.g. from a
+      // user swipe that just landed) -- that would double-advance.
+      if (playNextInFlightRef.current) return
+      crossfadeFiredForRef.current = currentId
+      void playNext({ afterNaturalEnd: true })
+    }
+
     const onTime = () => {
       const ab = abLoopRef.current
       if (
@@ -2283,19 +2720,32 @@ export function PlayerProvider({
       playerTimeUiLastRef.current = now
       const t = audio.currentTime
       setCurrentTime(t)
+      // Note: ``setPositionState`` is *not* called here per
+      // timeupdate. The browser extrapolates the scrubber from the
+      // last position+playbackRate snapshot, so feeding it 4 times
+      // per second causes drawer-side micro-stutter on Android
+      // Chromium without any UX benefit. We push fresh snapshots
+      // only on play/pause/ratechange/seeked/durationchange below.
+      _maybeTriggerPseudoCrossfade(audio)
+    }
+    const onDur = () => {
+      setDuration(audio.duration || 0)
       _updatePositionState(audio)
     }
-    const onDur = () =>
-      setDuration(audio.duration || 0)
+    const onSeeked = () => {
+      _updatePositionState(audio)
+    }
+    const onRateChange = () => {
+      _updatePositionState(audio)
+    }
 
     audio.addEventListener('play', onPlay)
     audio.addEventListener('pause', onPause)
     audio.addEventListener('ended', onEnded)
     audio.addEventListener('timeupdate', onTime)
-    audio.addEventListener(
-      'durationchange',
-      onDur,
-    )
+    audio.addEventListener('durationchange', onDur)
+    audio.addEventListener('seeked', onSeeked)
+    audio.addEventListener('ratechange', onRateChange)
     audio.addEventListener('error', onError)
     audio.addEventListener('stalled', onStalled)
 
@@ -2312,14 +2762,10 @@ export function PlayerProvider({
       audio.removeEventListener('play', onPlay)
       audio.removeEventListener('pause', onPause)
       audio.removeEventListener('ended', onEnded)
-      audio.removeEventListener(
-        'timeupdate',
-        onTime,
-      )
-      audio.removeEventListener(
-        'durationchange',
-        onDur,
-      )
+      audio.removeEventListener('timeupdate', onTime)
+      audio.removeEventListener('durationchange', onDur)
+      audio.removeEventListener('seeked', onSeeked)
+      audio.removeEventListener('ratechange', onRateChange)
       audio.removeEventListener('error', onError)
       audio.removeEventListener('stalled', onStalled)
     }
@@ -2429,6 +2875,47 @@ export function PlayerProvider({
       return
     }
     beginMediaSessionSwitchHold(audio, newTrack)
+    crossfadeFiredForRef.current = null
+    playSwitchStartedAtRef.current = {
+      trackId: newTrack.id,
+      ts:
+        typeof performance !== 'undefined' &&
+        typeof performance.now === 'function'
+          ? performance.now()
+          : Date.now(),
+      surface: radioModeRef.current ? 'radio' : 'player',
+    }
+    // Update the system notification drawer *before* the audio src
+    // swap so Android sees a continuous session: same playbackState,
+    // already-correct metadata, already-correct duration. Without
+    // this the drawer flashes blank between the previous track's
+    // pause event and the new track's first play event (the user-
+    // reported "drawer disappears on switch"). We also pre-warm the
+    // artwork URLs into the browser/SW cache so the bitmap is not
+    // fetched lazily *during* setMetadata, which is what causes the
+    // "blank tile" frame on some Chromium builds.
+    _warmCoverArtwork(newTrack)
+    if ('mediaSession' in navigator) {
+      try {
+        _updateMediaSession(
+          newTrack,
+          audio,
+          () => playNext(),
+          () => playPrev(),
+        )
+        _pushPositionStateForTrack(audio, newTrack)
+        // Force ``playing`` even though ``audio.paused`` is still
+        // true at this exact moment: the hold timer + onPause guard
+        // already keep this state until the new track actually
+        // starts playing, so the drawer does not flicker through a
+        // ``paused`` state purely as a side effect of swapping src.
+        navigator.mediaSession.playbackState = 'playing'
+      } catch {
+        // mediaSession can be unavailable in older webviews; the
+        // player still works without the system drawer, just less
+        // pretty.
+      }
+    }
     let prevForSlide: number | null = null
     setTrack((prev) => {
       prevForSlide = prev?.id ?? null
@@ -2483,16 +2970,44 @@ export function PlayerProvider({
     }
     playCountSentRef.current = false
     listenSignalSentRef.current = false
-    // Avoid the audio.pause()/src=''/load() reset trio here: on iOS
-    // Safari and some Android Chromium builds, that sequence breaks
-    // the user-gesture chain that the *previous* play() acquired.
-    // After it, the autoplay sentinel forbids the next play() until
-    // the user taps again -- which is exactly the symptom the user
-    // reports ("on track switch the player goes paused, I have to
-    // press play and wait ~5s for buffering"). Assigning the new
-    // src below cancels the in-flight network request automatically.
-    // We still snap UI state so the timeline doesn't visibly jump
-    // through the previous track's tail before the new src loads.
+    // Capture the volume the user actually wants to hear before we
+    // touch ``audio.volume`` for the cross-track fade. Falls back to
+    // the React-state ``volume`` if the audio element is currently
+    // muted to zero by an in-progress fade from the *previous*
+    // switch.
+    const targetVolume =
+      audio.volume > 0 ? audio.volume : volume
+    // Soft fade-out + explicit pause guarantees the previous source
+    // cannot keep emitting audio while the new src is loading. This
+    // is the fix for the user-reported "tracks overlap" symptom: on
+    // some Chromium-Android builds setting ``audio.src = newUrl``
+    // implicitly schedules a pause but the buffer release is async,
+    // so for ~100-300 ms both the tail of the old track and the
+    // first frames of the new one play simultaneously. We avoid the
+    // legacy ``src=''`` + ``load()`` reset trio (those break iOS
+    // Safari's user-gesture chain), but a plain ``pause()`` is safe
+    // on every platform and is exactly the missing barrier.
+    if (!audio.paused && audio.volume > 0) {
+      try {
+        await _tweenVolume(audio, 0, TRACK_FADE_OUT_MS)
+      } catch {
+        /* tweening is best-effort; never block the switch */
+      }
+    }
+    try {
+      audio.pause()
+    } catch {
+      /* ignore */
+    }
+    // Drop volume to silence so the new track fades *in* from zero
+    // instead of clipping in at full volume the moment ``canplay``
+    // fires. The fade-in is kicked off below after the audio is
+    // actually ready to play.
+    try {
+      audio.volume = 0
+    } catch {
+      /* ignore */
+    }
     setIsPlaying(false)
     setIsPlayingFromCache(false)
     setCurrentTime(0)
@@ -2501,6 +3016,48 @@ export function PlayerProvider({
     if (audio) {
       audio.playbackRate = playbackRate
       _applyPitchPreservation(audio)
+    }
+    const scheduleFadeIn = () => {
+      if (bail()) return
+      const a = audioRef.current
+      if (!a) return
+      if (lastTrackIdRef.current !== newTrack.id) return
+      const runFade = () => {
+        if (lastTrackIdRef.current !== newTrack.id) return
+        try {
+          a.volume = 0
+        } catch {
+          /* ignore */
+        }
+        void _tweenVolume(a, targetVolume, TRACK_FADE_IN_MS)
+      }
+      if (a.readyState >= 2 || !a.paused) {
+        runFade()
+        return
+      }
+      const onReady = () => {
+        a.removeEventListener('canplay', onReady)
+        a.removeEventListener('playing', onReady)
+        if (timeoutId !== null) {
+          window.clearTimeout(timeoutId)
+        }
+        runFade()
+      }
+      a.addEventListener('canplay', onReady, { once: true })
+      a.addEventListener('playing', onReady, { once: true })
+      const timeoutId = window.setTimeout(() => {
+        a.removeEventListener('canplay', onReady)
+        a.removeEventListener('playing', onReady)
+        // Even if the load stalls beyond the cap we must restore the
+        // user-visible volume; otherwise an autoplay block would
+        // leave the slider at 0 and the user would think the player
+        // muted itself.
+        try {
+          a.volume = targetVolume
+        } catch {
+          /* ignore */
+        }
+      }, 5000)
     }
 
     if (
@@ -2570,6 +3127,7 @@ export function PlayerProvider({
         if (bail()) return
         void markCachePlayed(newTrack.id).catch(() => {})
         finishMediaSessionSwitch(newTrack, audio)
+        scheduleFadeIn()
         return
       }
 
@@ -2591,10 +3149,23 @@ export function PlayerProvider({
         const ovr = getThirdPartyStreamOverride(
           newTrack.id,
         )
-        const stream =
+        // Hot path: a pre-resolved stream URL for this exact track
+        // is already in flight (or done) from the prefetch effect.
+        // Skip the ``await api.getStream`` round-trip so the audio
+        // src is assigned in the same tick as the user gesture --
+        // this is the difference between "next track plays now" and
+        // "next track sits in paused state for ~1.5 s while we wait
+        // for getStream to come back".
+        const prefetched =
           ovr === null
-            ? await api.getStream(newTrack.id)
-            : {
+            ? _consumePrefetchedStream(
+                prefetchedStreamsRef,
+                newTrack.id,
+              )
+            : null
+        const stream: StreamResponse =
+          ovr !== null
+            ? {
                 track_id: newTrack.id,
                 url: ovr,
                 stream_type: inferStreamTypeFromUrl(
@@ -2602,6 +3173,9 @@ export function PlayerProvider({
                 ),
                 expires_in: 86_400,
               }
+            : prefetched
+              ? prefetched
+              : await api.getStream(newTrack.id)
         if (bail()) return
         lastStreamUrlRef.current = stream.url
         streamExpiresAtRef.current = stream.expires_in
@@ -2633,11 +3207,18 @@ export function PlayerProvider({
         if (bail()) return
 
         finishMediaSessionSwitch(newTrack, audio)
+        scheduleFadeIn()
         return
       }
 
       if (!newTrack.is_public) {
-        const stream = await api.getStream(newTrack.id)
+        const prefetchedPrivate = _consumePrefetchedStream(
+          prefetchedStreamsRef,
+          newTrack.id,
+        )
+        const stream: StreamResponse = prefetchedPrivate
+          ? prefetchedPrivate
+          : await api.getStream(newTrack.id)
         if (bail()) return
         lastStreamUrlRef.current = stream.url
         streamExpiresAtRef.current = stream.expires_in
@@ -2651,6 +3232,7 @@ export function PlayerProvider({
         await startDirectPlayback(audio, stream.url)
         if (bail()) return
         finishMediaSessionSwitch(newTrack, audio)
+        scheduleFadeIn()
         return
       }
 
@@ -2683,7 +3265,13 @@ export function PlayerProvider({
           try {
             preloaded.detachMedia()
             preloaded.attachMedia(audio)
-            audio.volume = volume
+            // Keep the volume at 0 here -- ``scheduleFadeIn`` below
+            // takes the element from silence to ``targetVolume``
+            // once the audio is actually playing. Setting full
+            // volume right after attach would clip the start of
+            // the new track on top of the (already paused) tail of
+            // the previous one.
+            audio.volume = 0
             const pinPref = getHlsQualityPreference()
             if (pinPref !== 'auto') {
               const want = pinPref === 'hi' ? 'hi' : 'lo'
@@ -2743,6 +3331,7 @@ export function PlayerProvider({
       if (bail()) return
 
       finishMediaSessionSwitch(newTrack, audio)
+      scheduleFadeIn()
 
       // Detect autoplay block on programmatic advance (radio /
       // ended / queue auto-advance): play() returned without
@@ -2811,7 +3400,10 @@ export function PlayerProvider({
     setRadioSeedTrackId(seedTrack.id)
     _saveRadioState(true, seedTrack.id)
     try {
-      const result = await api.getRadio(seedTrack.id, 15)
+      const result = await api.getRadio(
+        seedTrack.id,
+        RADIO_BATCH_SIZE,
+      )
       const newTracks = result.tracks.filter(
         (t) => !radioPlayedIdsRef.current.has(t.id),
       )
@@ -2957,6 +3549,61 @@ export function PlayerProvider({
           return false
         }
         setQueue([...manualQueueRef.current])
+        // Pro-active radio top-up: if the queue is about to run dry
+        // we kick off a background ``getRadio`` so the *next* tap
+        // doesn't have to wait for an in-band refill on the hot
+        // path. Especially important when the screen is locked,
+        // because Android will throttle/abort fetches issued during
+        // an in-flight track switch but is much more lenient about
+        // ones started while playback is steady.
+        if (
+          radioModeRef.current &&
+          radioSeedTrackIdRef.current &&
+          manualQueueRef.current.length <= RADIO_REFILL_THRESHOLD
+        ) {
+          const seedId = radioSeedTrackIdRef.current
+          const excludeIds = Array.from(
+            radioPlayedIdsRef.current,
+          ).slice(-60)
+          api
+            .getRadio(seedId, RADIO_BATCH_SIZE, excludeIds)
+            .then((result) => {
+              if (!radioModeRef.current) return
+              if (radioSeedTrackIdRef.current !== seedId) return
+              const fresh = result.tracks.filter(
+                (t) =>
+                  !radioPlayedIdsRef.current.has(t.id) &&
+                  !unavailableTrackIdsRef.current.has(t.id) &&
+                  !manualQueueRef.current.some(
+                    (existing) => existing.id === t.id,
+                  ),
+              )
+              if (fresh.length === 0) return
+              for (const t of fresh) {
+                radioPlayedIdsRef.current.add(t.id)
+              }
+              if (radioPlayedIdsRef.current.size > 80) {
+                const arr = Array.from(radioPlayedIdsRef.current)
+                radioPlayedIdsRef.current = new Set(arr.slice(-80))
+              }
+              manualQueueRef.current = [
+                ...manualQueueRef.current,
+                ...fresh,
+              ]
+              setQueue([...manualQueueRef.current])
+              try {
+                void getPrefetchManager().enqueue(fresh, {
+                  context: 'radio',
+                })
+              } catch {
+                /* ignore */
+              }
+            })
+            .catch(() => {
+              /* best-effort top-up; the in-band refill in the empty-
+               * queue branch below will still cover the worst case. */
+            })
+        }
         return await advance(next)
       }
 
@@ -2966,7 +3613,11 @@ export function PlayerProvider({
           radioPlayedIdsRef.current,
         ).slice(-60)
         try {
-          const result = await api.getRadio(seedId, 15, excludeIds)
+          const result = await api.getRadio(
+            seedId,
+            RADIO_BATCH_SIZE,
+            excludeIds,
+          )
           const newTracks = result.tracks.filter(
             (t) =>
               !radioPlayedIdsRef.current.has(t.id) &&
@@ -3121,6 +3772,72 @@ export function PlayerProvider({
       }
       teardownPreloadHls()
       teardownSwCachePrefetch()
+      // Pre-warm the system notification artwork for the *next*
+      // probable track. The browser stuffs the bitmap into the SW
+      // cache (covers-cache route), so the actual setMetadata call
+      // during playTrack does not have to fetch it -- avoids the
+      // "blank tile flicker" frame on the Android drawer.
+      _warmCoverArtwork(next)
+      // Pre-resolve stream URLs for the next ``PREFETCH_STREAM_AHEAD``
+      // tracks (only those that need a backend round-trip per play:
+      // third_party_stream / private). Tracks that don't need a
+      // resolve are skipped silently, so this is "up to N", not
+      // "exactly N". Old entries in the cache that we are no longer
+      // looking at get evicted to keep the map bounded.
+      const upcomingIds = new Set<number>()
+      for (
+        let i = 0;
+        i < Math.min(PREFETCH_STREAM_AHEAD, tracks.length);
+        i += 1
+      ) {
+        upcomingIds.add(tracks[i].id)
+      }
+      for (const cachedId of Array.from(prefetchedStreamsRef.current.keys())) {
+        if (!upcomingIds.has(cachedId)) {
+          prefetchedStreamsRef.current.delete(cachedId)
+        }
+      }
+      const needsStreamPrefetch = (t: Track) =>
+        t.access_mode === 'third_party_stream' ||
+        (t.is_public === false &&
+          t.access_mode !== 'official_embed' &&
+          t.access_mode !== 'external_link')
+      for (
+        let i = 0;
+        i < Math.min(PREFETCH_STREAM_AHEAD, tracks.length);
+        i += 1
+      ) {
+        const candidate = tracks[i]
+        if (!needsStreamPrefetch(candidate)) continue
+        const cached = prefetchedStreamsRef.current.get(candidate.id)
+        const fresh =
+          cached !== undefined &&
+          Date.now() - cached.resolvedAt < PREFETCHED_STREAM_TTL_MS &&
+          (cached.expiresAt === null ||
+            cached.expiresAt > Date.now() + 5_000)
+        if (fresh) continue
+        const prefetchTrackId = candidate.id
+        api
+          .getStream(prefetchTrackId)
+          .then((stream) => {
+            if (cancelled) return
+            if (lastTrackIdRef.current !== track.id) return
+            prefetchedStreamsRef.current.set(prefetchTrackId, {
+              trackId: prefetchTrackId,
+              url: stream.url,
+              streamType: stream.stream_type,
+              expiresAt: stream.expires_in
+                ? Date.now() + stream.expires_in * 1000
+                : null,
+              resolvedAt: Date.now(),
+            })
+          })
+          .catch(() => {
+            /* best-effort prefetch: if the resolve fails, playTrack
+             * will fall through to its own ``api.getStream`` call
+             * the regular way. */
+          })
+      }
       if (
         next.access_mode === 'official_embed' ||
         next.access_mode === 'external_link'
@@ -3466,6 +4183,8 @@ export function PlayerProvider({
       hlsRef.current = null
     }
     streamLoadFailedTrackIdRef.current = null
+    prefetchedStreamsRef.current.clear()
+    _releaseWakeLock()
     if ('mediaSession' in navigator) {
       navigator.mediaSession.metadata = null
       navigator.mediaSession.playbackState = 'none'
@@ -3833,7 +4552,18 @@ export function PlayerProvider({
               <PlayerMetaCtx.Provider value={metaValue}>
                 <audio
                   ref={audioRef}
-                  preload="none"
+                  // ``auto`` lets the browser start fetching the
+                  // first segment / Range request as soon as the
+                  // src is assigned, without waiting for a play()
+                  // call. On a track switch this trims the gap
+                  // between ``audio.src = newUrl`` and ``canplay``
+                  // by ~150-400 ms on cold connections and is the
+                  // single most impactful knob for "next track
+                  // plays now" feel. The user explicitly accepted
+                  // the extra mobile data trade-off; we already
+                  // stop the previous src as soon as we set the
+                  // new one, so there is no double-load overlap.
+                  preload="auto"
                   crossOrigin="anonymous"
                 />
                 {children}

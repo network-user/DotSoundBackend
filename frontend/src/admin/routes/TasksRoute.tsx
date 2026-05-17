@@ -13,6 +13,7 @@ import { showIsland } from '@/lib/island'
 import { lyricsTierAdminTitle } from '../lib/lyricsAdminLabels'
 import { adminApi } from '../lib/adminApi'
 import { AdminWs } from '../lib/adminWs'
+import { Sparkline } from '../components/charts/Sparkline'
 import { useAdminPrompt } from '../components/layout/AdminPromptContext'
 import { DataTable } from '../components/widgets/DataTable'
 import { JsonViewer } from '../components/widgets/JsonViewer'
@@ -50,6 +51,58 @@ interface BackgroundJobRow {
   finished_at: string | null
   live?: LiveProgress | null
 }
+
+function TaskTypeTimeseriesCell({
+  name,
+  periodHours,
+}: {
+  name: string
+  periodHours: number
+}) {
+  const q = useQuery({
+    queryKey: ['admin', 'tasks', 'ts', name, periodHours],
+    queryFn: () =>
+      adminApi.tasksTypeTimeseries(name, periodHours, 5),
+    staleTime: 60_000,
+    refetchOnWindowFocus: false,
+  })
+  if (q.isLoading) {
+    return <span className="admin-card__sub">…</span>
+  }
+  if (q.isError || !q.data) {
+    return <span className="admin-card__sub">—</span>
+  }
+  const data = q.data
+  const series = data.buckets.map(
+    (b) => b.succeeded + b.failed,
+  )
+  const total = series.reduce((a, b) => a + b, 0)
+  if (total === 0) {
+    return <span className="admin-card__sub">0</span>
+  }
+  const p95 = data.p95_duration_ms
+  return (
+    <div
+      style={{
+        display: 'flex',
+        alignItems: 'center',
+        gap: 8,
+        minWidth: 140,
+      }}
+    >
+      <Sparkline
+        data={series}
+        height={28}
+        ariaLabel={`throughput ${name}`}
+      />
+      <span className="admin-card__sub" style={{ fontSize: 11 }}>
+        {total}
+        {p95 != null ? ` · p95 ${Math.round(p95 / 100) / 10}s` : ''}
+      </span>
+    </div>
+  )
+}
+
 
 interface TaskTypeRow {
   name: string
@@ -1833,6 +1886,19 @@ export function TasksRoute() {
                   </div>
                 )
               },
+            },
+            {
+              header: t('admin.tasks.dispatcher.cols.trend', {
+                defaultValue: 'Тренд',
+              }) as string,
+              id: 'trend',
+              enableSorting: false,
+              cell: (i) => (
+                <TaskTypeTimeseriesCell
+                  name={i.row.original.name}
+                  periodHours={typesPeriodHours}
+                />
+              ),
             },
             {
               header: t('admin.tasks.dispatcher.cols.donePeriod', {
