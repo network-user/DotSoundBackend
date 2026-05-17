@@ -77,19 +77,21 @@ const TRACK_FADE_IN_MS = 180
 // ``api.getRadio`` to top it up, so the next-track tap never has to
 // wait for a fresh network round-trip.
 const RADIO_REFILL_THRESHOLD = 5
-// "Pseudo-crossfade" lead time. In radio mode, this many ms before
-// the current track ends we proactively trigger ``playNext`` so the
-// new track starts playing while the previous one is still in its
-// fade-out tail. The user perceives an overlap-style transition
-// (~1 s) instead of an abrupt onEnded boundary.
+// Gapless crossfade: two lead-time constants for the dual-audio
+// crossfade path.
 //
-// NOTE on a *true* crossfade (overlapping two audio sources):
-// requires (a) a second ``<audio>`` element, (b) a second
-// ``MediaElementAudioSourceNode`` wired into the same EQ chain, and
-// (c) listener-set rebinding on every active-audio swap. That is a
-// real rewrite of the playback core (1-2 days) and was scoped out
-// of this change. Documented under TODO so a follow-up sprint can
-// pick it up without re-deriving the design.
+// GAPLESS_EARLY_LEAD_MS (600 ms): used when the idle element already
+// has the next track buffered. The crossfade itself takes
+// GAPLESS_FADE_MS (350 ms), so the trigger fires ~250 ms before the
+// current track reaches its last sample → the transition sits right
+// at the musical boundary without an audible gap.
+//
+// CROSSFADE_LEAD_MS (2000 ms): used when the idle element is NOT yet
+// buffered. Two seconds give the network enough time to respond and
+// the fallback ``playNext`` path (which pauses the current element
+// and loads the new source normally) enough lead to reach ``canplay``
+// before the user notices silence.
+const GAPLESS_EARLY_LEAD_MS = 600
 const CROSSFADE_LEAD_MS = 2000
 // Initial batch size for radio. Bumped from 15 to 25 so a typical
 // ~30-minute background listening session can stay self-sufficient
@@ -1230,6 +1232,12 @@ export function PlayerProvider({
   // Guards the ended handler from double-advancing when gapless
   // crossfade already popped the queue.
   const gaplessGuardRef = useRef(false)
+  // Which track ID is currently loaded (src set + load() called) on
+  // the idle audio element. Used by _tryGaplessTransition to confirm
+  // idle is holding the right track for any source type (progressive,
+  // third_party_stream direct URL, etc.) without having to inspect
+  // the opaque src attribute.
+  const idleLoadedTrackIdRef = useRef<number | null>(null)
   // Records when we entered ``playTrack`` for a given trackId, so
   // the first ``playing`` event can compute "time from user-visible
   // tap/swipe to first audible frame" and emit it as telemetry.
@@ -2889,27 +2897,40 @@ export function PlayerProvider({
       const dur = a.duration
       if (!Number.isFinite(dur) || dur <= 0) return
       const remainingMs = (dur - a.currentTime) * 1000
-      if (
-        remainingMs <= 0 ||
-        remainingMs > CROSSFADE_LEAD_MS
-      ) {
-        return
-      }
-      const currentId = track?.id ?? lastTrackIdRef.current ?? null
-      if (currentId == null) return
-      if (crossfadeFiredForRef.current === currentId) return
+      if (remainingMs <= 0) return
       // Only fire if there is actually something to cross-fade to,
       // so we don't preempt the natural ``onEnded`` for the last
-      // track of a finite queue. ``manualQueueRef`` is populated in
-      // every mode that has a queue (radio, album, playlist, manual
-      // queue), so this gates the trigger correctly without having
-      // to special-case ``radioModeRef``.
+      // track of a finite queue.
       const nextInQueue = manualQueueRef.current[0]
       if (!nextInQueue) return
+      const currentId = track?.id ?? lastTrackIdRef.current ?? null
+      if (currentId == null) return
       if (nextInQueue.id === currentId) return
       // Don't compete with an in-flight ``playNext`` (e.g. from a
       // user swipe that just landed) -- that would double-advance.
       if (playNextInFlightRef.current) return
+      // Dynamic lead window:
+      // • Idle element already buffered → use the tight 600 ms window
+      //   so the crossfade fires right at the musical boundary with
+      //   only the fade overlap (GAPLESS_FADE_MS ≈ 350 ms).
+      // • Idle not ready yet → use the wide 2000 ms window so the
+      //   network has time to deliver data AND the fallback playNext
+      //   path has enough head-start to reach ``canplay`` without
+      //   silence.
+      const idleEl = _getIdleAudio()
+      const idleIsReady =
+        idleEl !== null &&
+        (
+          (preloadHlsRef.current !== null &&
+            preloadHlsTrackIdRef.current === nextInQueue.id) ||
+          (idleEl.readyState >= 2 &&
+            idleLoadedTrackIdRef.current === nextInQueue.id)
+        )
+      const effectiveLeadMs = idleIsReady
+        ? GAPLESS_EARLY_LEAD_MS
+        : CROSSFADE_LEAD_MS
+      if (remainingMs > effectiveLeadMs) return
+      if (crossfadeFiredForRef.current === currentId) return
       crossfadeFiredForRef.current = currentId
       // Attempt gapless crossfade; if preconditions are not met
       // (idle element not buffered yet) fall back to playNext which
@@ -3054,11 +3075,15 @@ export function PlayerProvider({
     const hlsReady =
       preloadHlsRef.current !== null &&
       preloadHlsTrackIdRef.current === nextTrack.id
+    // progressiveReady covers both internal progressive tracks and
+    // third_party_stream / private tracks that were loaded via a
+    // pre-fetched direct stream URL. In both cases idleLoadedTrackIdRef
+    // is set to the track ID when the idle element receives its src, so
+    // we don't need to inspect the (possibly opaque) src attribute.
     const progressiveReady =
       !hlsReady &&
       idleEl.readyState >= 2 &&
-      idleEl.src !== '' &&
-      idleEl.src.includes(`/tracks/${nextTrack.id}/`)
+      idleLoadedTrackIdRef.current === nextTrack.id
 
     if (!hlsReady && !progressiveReady) return false
 
@@ -3398,6 +3423,10 @@ export function PlayerProvider({
       ig.gain.cancelScheduledValues(ctxNow)
       ig.gain.value = 0
     }
+    // The idle element will be re-loaded with the new next track's
+    // audio by the prefetch / queue-warm effects after this playTrack
+    // call resolves, so we clear the stale ID now.
+    idleLoadedTrackIdRef.current = null
     // Capture the volume the user actually wants to hear before we
     // touch ``audio.volume`` for the cross-track fade. Falls back to
     // the React-state ``volume`` if the audio element is currently
@@ -4257,6 +4286,26 @@ export function PlayerProvider({
                 : null,
               resolvedAt: Date.now(),
             })
+            // If this is the first queued track and the URL is a
+            // plain direct stream, warm the idle element immediately
+            // so gapless crossfade can fire as soon as the buffer
+            // fills — without waiting for the next preloadFirst run.
+            if (
+              stream.stream_type === 'direct' &&
+              prefetchTrackId === manualQueueRef.current[0]?.id &&
+              idleLoadedTrackIdRef.current !== prefetchTrackId
+            ) {
+              const idleEl = _getIdleAudio()
+              if (idleEl && idleEl !== audioRef.current) {
+                try { idleEl.pause() } catch { /* ignore */ }
+                idleEl.muted = true
+                idleEl.volume = 0
+                idleEl.src = stream.url
+                idleEl.preload = 'auto'
+                idleEl.load()
+                idleLoadedTrackIdRef.current = prefetchTrackId
+              }
+            }
           })
           .catch(() => {
             /* best-effort prefetch: if the resolve fails, playTrack
@@ -4282,18 +4331,47 @@ export function PlayerProvider({
       pa.src = trackProgressiveAudioUrl(next.id)
       _applyPitchPreservation(pa)
       prefetchAudioRef.current = pa
-      // Also warm the persistent idle element for gapless handoff
-      // on progressive tracks (non-HLS). The idle element stays
-      // muted/paused; gapless transition unmutes and plays it.
+      // Warm the persistent idle element for gapless handoff.
+      // The idle element stays muted/paused; _tryGaplessTransition
+      // unmutes and plays it when the active track nears its end.
       if (!shouldUseInternalHlsPlayback(next)) {
         const idleEl = _getIdleAudio()
         if (idleEl && idleEl !== audioRef.current) {
-          try { idleEl.pause() } catch { /* ignore */ }
-          idleEl.muted = true
-          idleEl.volume = 0
-          idleEl.src = trackProgressiveAudioUrl(next.id)
-          idleEl.preload = 'auto'
-          idleEl.load()
+          if (needsStreamPrefetch(next)) {
+            // third_party_stream / private: the stream URL might not
+            // be in the cache yet (the api.getStream call is async
+            // below). We warm the idle element there, after the URL
+            // is stored, so here we only handle the already-cached
+            // case (e.g. user revisits the same track in one session).
+            const cachedStream = prefetchedStreamsRef.current.get(
+              next.id,
+            )
+            if (
+              cachedStream &&
+              cachedStream.streamType === 'direct' &&
+              Date.now() - cachedStream.resolvedAt <
+                PREFETCHED_STREAM_TTL_MS &&
+              (cachedStream.expiresAt === null ||
+                cachedStream.expiresAt > Date.now() + 5_000)
+            ) {
+              try { idleEl.pause() } catch { /* ignore */ }
+              idleEl.muted = true
+              idleEl.volume = 0
+              idleEl.src = cachedStream.url
+              idleEl.preload = 'auto'
+              idleEl.load()
+              idleLoadedTrackIdRef.current = next.id
+            }
+          } else {
+            // Public progressive track
+            try { idleEl.pause() } catch { /* ignore */ }
+            idleEl.muted = true
+            idleEl.volume = 0
+            idleEl.src = trackProgressiveAudioUrl(next.id)
+            idleEl.preload = 'auto'
+            idleEl.load()
+            idleLoadedTrackIdRef.current = next.id
+          }
         }
       }
 
@@ -4402,6 +4480,21 @@ export function PlayerProvider({
       })()
     }
 
+    // Merge helper: the API predicts upcoming tracks based on radio
+    // recommendations, but if the user has a manual queue (album,
+    // playlist, shuffle) the actual next track is manualQueueRef[0].
+    // We put the real next-in-queue first so preloadFirst targets it,
+    // while keeping the API tail for stream-URL prefetch of the 2nd
+    // and 3rd upcoming tracks.
+    const mergeWithActualQueue = (apiTracks: Track[]): Track[] => {
+      const actualNext = manualQueueRef.current[0]
+      if (!actualNext || actualNext.id === track.id) return apiTracks
+      return [
+        actualNext,
+        ...apiTracks.filter((t) => t.id !== actualNext.id),
+      ]
+    }
+
     api.getRadio(track.id, 5)
       .then((res) => {
         if (cancelled || !res.tracks.length)
@@ -4413,7 +4506,7 @@ export function PlayerProvider({
           forTrackId: track.id,
           tracks: res.tracks,
         }
-        preloadFirst(res.tracks)
+        preloadFirst(mergeWithActualQueue(res.tracks))
         try {
           void getPrefetchManager().enqueue(res.tracks, {
             context: radioModeRef.current ? 'radio' : 'playback',
@@ -4431,7 +4524,7 @@ export function PlayerProvider({
               forTrackId: track.id,
               tracks: res.next_tracks,
             }
-            preloadFirst(res.next_tracks)
+            preloadFirst(mergeWithActualQueue(res.next_tracks))
             try {
               void getPrefetchManager().enqueue(
                 res.next_tracks,
@@ -4456,6 +4549,59 @@ export function PlayerProvider({
       teardownSwCachePrefetch()
     }
   }, [track?.id])
+
+  // Re-warm the idle element when the first queued track changes
+  // (shuffle toggle, queue reorder, manual-queue push) without
+  // making any extra API calls. This complements the main prefetch
+  // useEffect which only fires on track changes.
+  //
+  // HLS tracks are intentionally skipped here — starting a second
+  // hls.js instance outside the main prefetch lifecycle risks
+  // resource leaks. The main prefetch effect handles them.
+  const _nextQueueId = queue[0]?.id ?? null
+  useEffect(() => {
+    const next = queue[0]
+    if (!next || !track || next.id === track.id) return
+    if (idleLoadedTrackIdRef.current === next.id) return
+    const idleEl = _getIdleAudio()
+    if (!idleEl || idleEl === audioRef.current) return
+    if (shouldUseInternalHlsPlayback(next)) return
+
+    if (
+      next.access_mode === 'third_party_stream' ||
+      (next.is_public === false &&
+        next.access_mode !== 'official_embed' &&
+        next.access_mode !== 'external_link')
+    ) {
+      const cached = prefetchedStreamsRef.current.get(next.id)
+      if (
+        !cached ||
+        cached.streamType !== 'direct' ||
+        Date.now() - cached.resolvedAt >= PREFETCHED_STREAM_TTL_MS ||
+        (cached.expiresAt !== null &&
+          cached.expiresAt <= Date.now() + 5_000)
+      ) {
+        return
+      }
+      try { idleEl.pause() } catch { /* ignore */ }
+      idleEl.muted = true
+      idleEl.volume = 0
+      idleEl.src = cached.url
+      idleEl.preload = 'auto'
+      idleEl.load()
+      idleLoadedTrackIdRef.current = next.id
+      return
+    }
+
+    try { idleEl.pause() } catch { /* ignore */ }
+    idleEl.muted = true
+    idleEl.volume = 0
+    idleEl.src = trackProgressiveAudioUrl(next.id)
+    idleEl.preload = 'auto'
+    idleEl.load()
+    idleLoadedTrackIdRef.current = next.id
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [_nextQueueId, track?.id])
 
   useEffect(() => {
     if (!track) return
