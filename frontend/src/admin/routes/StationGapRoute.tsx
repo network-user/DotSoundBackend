@@ -435,9 +435,9 @@ export function StationGapRoute() {
 
       <DataTable
         columns={columns}
-        data={rows}
+        rows={rows}
         isLoading={list.isLoading}
-        emptyMessage={
+        emptyHint={
           list.isError
             ? 'Ошибка загрузки'
             : `Нет артистов с проблемами станций (порог ${minTracks})`

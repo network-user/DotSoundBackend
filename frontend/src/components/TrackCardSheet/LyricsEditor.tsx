@@ -345,6 +345,7 @@ export function LyricsEditor({
             catalog_type: 'ugc',
             access_mode: 'internal_stream',
             source_platform: null,
+            imported_from: null,
             sc_url: null,
             sc_uri: null,
             source_url: null,

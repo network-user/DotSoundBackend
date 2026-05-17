@@ -45,6 +45,14 @@ from app.services.telegram_profile_preflight import (
 
 logger = structlog.get_logger(__name__)
 _SMART_SKIP_FLAG = "onboarding.smart_skip_enabled"
+
+
+async def _invalidate_rec_caches(user_id: int) -> None:
+    redis = get_redis_client()
+    await redis.delete(
+        f"rec:daily_mix:{user_id}",
+        f"rec:genre_mixes:{user_id}",
+    )
 _ACTIVATION_COUNTER_PREFIX = "activation:counters:"
 _ACTIVATION_USERS_PREFIX = "activation:users:"
 _ACTIVATION_RETENTION_SECONDS = 35 * 24 * 60 * 60
@@ -222,6 +230,7 @@ class OnboardingService:
             preferred_moods=None,
             tutorial_seen_at=None,
         )
+        await _invalidate_rec_caches(user_id)
         logger.info(
             "onboarding_replay",
             user_id=user_id,
@@ -249,6 +258,7 @@ class OnboardingService:
 
             follow_svc = ArtistFollowService(self._session)
             await follow_svc.follow_artists_bulk(user_id, artist_ids)
+        await _invalidate_rec_caches(user_id)
         logger.info(
             "onboarding_preferences_saved",
             user_id=user_id,
@@ -559,6 +569,7 @@ class OnboardingService:
             onboarding_completed=True,
             onboarding_import_acknowledged=True,
         )
+        await _invalidate_rec_caches(user_id)
         logger.info(
             "onboarding_smart_skip_applied",
             user_id=user_id,

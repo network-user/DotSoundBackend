@@ -3,9 +3,11 @@ from datetime import UTC, datetime
 from dotsound_private_core.services.playcount_policy import (
     USER_CHOICE_SCORE_VERSION,
 )
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.rate_limit import limiter
+from app.core.redis import get_redis_client
 from app.dependencies import get_current_user, get_db, get_optional_user
 from app.models.user import User
 from app.repositories.artist import ArtistRepository
@@ -409,6 +411,32 @@ async def refresh_daily_playlist(
         )
     svc = RecommendationService(db)
     await svc.refresh_daily_playlist(user.id)
+
+
+@router.post(
+    "/daily-mix/refresh",
+    status_code=status.HTTP_204_NO_CONTENT,
+)
+@limiter.limit("3/minute")
+async def refresh_daily_mix(
+    request: Request,
+    user: User = Depends(get_current_user),
+):
+    redis = get_redis_client()
+    await redis.delete(f"rec:daily_mix:{user.id}")
+
+
+@router.post(
+    "/genre-mixes/refresh",
+    status_code=status.HTTP_204_NO_CONTENT,
+)
+@limiter.limit("3/minute")
+async def refresh_genre_mixes(
+    request: Request,
+    user: User = Depends(get_current_user),
+):
+    redis = get_redis_client()
+    await redis.delete(f"rec:genre_mixes:{user.id}")
 
 
 @router.get(

@@ -85,6 +85,18 @@ _UNSEEN_POOL_LIMIT = 100
 _EXTERNAL_DISCOVERY_TIMEOUT = 8
 _EXTERNAL_IMPORT_TIMEOUT = 15
 _GENRE_MIXES_CACHE_TTL = 3 * 60 * 60
+_GENRE_MIXES_CACHE_PATTERN = "rec:genre_mixes:*"
+
+
+async def _purge_genre_mixes_cache() -> int:
+    redis = get_redis_client()
+    keys: list[str] = []
+    async for key in redis.scan_iter(_GENRE_MIXES_CACHE_PATTERN, count=200):
+        keys.append(key)
+    if keys:
+        await redis.delete(*keys)
+    logger.info("genre_mixes_cache_purged", count=len(keys))
+    return len(keys)
 _RADIO_CACHE_TTL = 30 * 60
 _RADIO_SKIP_GUARD_SECONDS = 1
 _RADIO_LAST_QUEUE_TTL = 20
@@ -1139,6 +1151,7 @@ class RecommendationService:
             updated_by_id=updated_by_id,
         )
         await self._session.commit()
+        await _purge_genre_mixes_cache()
         return {
             "genre": clean_genre,
             "title": clean_title,

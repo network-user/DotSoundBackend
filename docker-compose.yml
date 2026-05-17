@@ -168,6 +168,7 @@ services:
       - app.services.scheduler_service
       - app.services.account_deletion_worker
       - app.services.track_title_normalization_task
+      - app.tasks.rec_cache_warmer
     env_file:
       - .env
       # PrivateCore-only configuration (lyrics provider tokens, audio

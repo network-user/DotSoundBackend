@@ -1,5 +1,30 @@
 # DotSound - TODO Tracker
 
+- [x] **Рекомендации: кеш-инвалидация, refresh-эндпоинты, DB-индексы, cache warmer (2026-05-17)**
+  - **`app/services/onboarding_service.py`**: при сохранении жанровых/артистных предпочтений
+    (`save_preferences`, `replay_onboarding`, `apply_smart_default_profile`) автоматически
+    инвалидируются `rec:daily_mix:{user_id}` и `rec:genre_mixes:{user_id}`.
+    Вспомогательная функция `_invalidate_rec_caches(user_id)`.
+  - **`app/services/recommendation_service.py`**: в `save_genre_mix_override` после commit
+    вызывается `_purge_genre_mixes_cache()` — Redis SCAN + DELETE всех `rec:genre_mixes:*`
+    ключей, чтобы admin override сразу отображался у всех пользователей.
+  - **`app/api/v1/recommendations.py`**: добавлены два user-facing эндпоинта с rate-limit 3/min:
+    - `POST /recommendations/daily-mix/refresh` — инвалидирует `rec:daily_mix:{user_id}`
+    - `POST /recommendations/genre-mixes/refresh` — инвалидирует `rec:genre_mixes:{user_id}`
+  - **`alembic/versions/0109_tracks_playable_filter_indexes.py`**: два индекса:
+    - `ix_tracks_file_key_not_null` — partial index `WHERE file_key IS NOT NULL`
+    - `ix_tracks_access_mode` — btree на `access_mode`
+    Покрывают оба OR-ветки `_playable_filter()`.
+  - **`app/tasks/rec_cache_warmer.py`**: Taskiq-воркер предварительного прогрева кешей.
+    - `warm_user_rec_caches_task(user_id)` — warms daily_mix + genre_mixes для одного
+      пользователя (идемпотентно: пропускает уже тёплые кеши).
+    - `dispatch_rec_cache_warmup_task()` — оркестратор: запрашивает пользователей
+      с событиями прослушивания за последние 7 дней, рассылает per-user задачи батчами
+      по 50 с `Semaphore(4)`.
+  - **`alembic/versions/0110_seed_rec_cache_warmer_job.py`**: seed ScheduledJob
+    `daily-rec-cache-warmup`, cron `5 0 * * *` (00:05 UTC каждый день).
+  - **`docker-compose.yml`**: добавлен `app.tasks.rec_cache_warmer` в список модулей worker.
+
 - [x] **Рекомендации: фикс медленной загрузки плейлистов + фильтрация воспроизводимых треков (2026-05-17)**
   - **`app/repositories/recommendation.py`**: добавлен `TrackRepository._playable_filter()` во все
     кандидатные запросы (`get_candidate_tracks`, `get_cyrillic_likely_ru_candidates`,

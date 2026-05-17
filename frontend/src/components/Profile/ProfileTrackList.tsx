@@ -1,13 +1,11 @@
 import { useTranslation } from 'react-i18next'
 import { useNavigate } from 'react-router-dom'
 import { Icon } from '@/components/Icon/Icon'
-import { MotionPress } from '@/components/ui/MotionPress'
 import { TrackCard } from '@/components/TrackCard/TrackCard'
 import {
   LongPressMenu,
   type LongPressMenuItem,
 } from '@/components/ui/LongPressMenu'
-import { useSound } from '@/store/SoundContext'
 import { api } from '@/lib/api'
 import {
   copyToClipboard,
@@ -31,9 +29,6 @@ export function ProfileTrackList({
 }: Props) {
   const { t } = useTranslation()
   const navigate = useNavigate()
-  const sound = useSound()
-  const tap = () => sound.play('tapSoft')
-
   const handleDeleted = (trackId: number) => {
     const track = tracks.find((t) => t.id === trackId)
     if (track) onDelete(track)
