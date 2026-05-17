@@ -4,6 +4,32 @@ from pydantic import model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
+def _parse_proxy_url_list(raw: str, *, cap: int) -> list[str]:
+    """Comma- or newline-separated httpx ``proxy=`` URLs.
+
+    Strips whitespace, drops duplicates while preserving order, and
+    clamps to the ``cap`` upper bound. Returns ``[]`` for empty input.
+    """
+    text = (raw or "").strip()
+    if not text:
+        return []
+    parts: list[str] = []
+    for line in text.splitlines():
+        for piece in line.split(","):
+            p = piece.strip()
+            if p:
+                parts.append(p)
+    seen: set[str] = set()
+    out: list[str] = []
+    for p in parts:
+        if p in seen:
+            continue
+        seen.add(p)
+        out.append(p)
+    capped = max(0, int(cap))
+    return out[:capped] if capped else out
+
+
 class AppSettings(BaseSettings):
     model_config = SettingsConfigDict(
         env_file=".env",
@@ -251,8 +277,31 @@ class AppSettings(BaseSettings):
     # its own pooled httpx.AsyncClient (TCP/TLS reuse).
     # Filled list wins over Tor pool; the two modes are mutually
     # exclusive (model validator rejects both being set).
+    # ``outbound_static_proxy_urls`` covers catalog/API egress
+    # (``/resolve``, transcoding-manifest, OAuth refresh, ...);
+    # third-party CDN audio byte-streams use a SEPARATE pool —
+    # ``streaming_proxy_out_urls`` below.
     outbound_static_proxy_urls: str = ""
     outbound_static_proxy_max_urls: int = 64
+
+    # Comma or newline separated httpx ``proxy=`` URLs reserved
+    # for the third-party AUDIO CDN byte-stream (cf-media.sndcdn.com,
+    # bcbits.com, googlevideo.com). Empty = direct (server's native
+    # IP). When non-empty, the streaming egress pool round-robins
+    # through these IPs with a per-track sticky binding, an
+    # exponential quarantine on consecutive transport failures, and
+    # a soft fallback to direct when every proxy is unhealthy.
+    # Tor is never used for streaming (SoundCloud's audio CDN
+    # consistently throttles Tor exits, which produced the
+    # "every track plays through once and then errors" pattern).
+    streaming_proxy_out_urls: str = ""
+    streaming_proxy_out_max_urls: int = 64
+    # When True (default) the streaming pool falls back to the
+    # direct server IP if every configured proxy is in quarantine
+    # or at the per-egress concurrency cap. When False, the request
+    # fails fast with 503 — useful when the operator deliberately
+    # never wants the server's bare IP to be exposed to a CDN.
+    streaming_proxy_out_fallback_direct: bool = True
 
     # SoundCloud transcoding-manifest fallback when outbound proxy
     # (Tor pool or ``OUTBOUND_STATIC_PROXY_URLS``) is active.
@@ -572,24 +621,17 @@ class AppSettings(BaseSettings):
 
     @property
     def outbound_static_proxy_urls_list(self) -> list[str]:
-        raw = (self.outbound_static_proxy_urls or "").strip()
-        if not raw:
-            return []
-        parts: list[str] = []
-        for line in raw.splitlines():
-            for piece in line.split(","):
-                p = piece.strip()
-                if p:
-                    parts.append(p)
-        seen: set[str] = set()
-        out: list[str] = []
-        for p in parts:
-            if p in seen:
-                continue
-            seen.add(p)
-            out.append(p)
-        cap = max(0, int(self.outbound_static_proxy_max_urls))
-        return out[:cap] if cap else out
+        return _parse_proxy_url_list(
+            self.outbound_static_proxy_urls,
+            cap=self.outbound_static_proxy_max_urls,
+        )
+
+    @property
+    def streaming_proxy_out_urls_list(self) -> list[str]:
+        return _parse_proxy_url_list(
+            self.streaming_proxy_out_urls,
+            cap=self.streaming_proxy_out_max_urls,
+        )
 
     @property
     def admin_panel_path_slug(self) -> str:

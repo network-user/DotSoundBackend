@@ -290,8 +290,23 @@ async def _http_proxy_range_get(
     detail_error: str,
     extra_headers: dict[str, str] | None = None,
     proxy_service: str | None = None,
+    sticky_key: str | None = None,
 ) -> StreamingResponse:
-    """Proxy GET + Range: media is same-origin for WebAudio + ``<audio>``."""
+    """Proxy GET + Range: media is same-origin for WebAudio + ``<audio>``.
+
+    Egress selection logic:
+    - When ``proxy_service`` is a third-party audio CDN streaming
+      service (SoundCloud / Bandcamp / YouTube), we go through the
+      dedicated streaming egress pool — server's native IP by
+      default, with optional ``STREAMING_PROXY_OUT_URLS`` round-robin
+      and per-track sticky binding. Tor is never consulted here:
+      Tor exits are consistently throttled by SC's audio CDN and
+      caused the "track plays once, then 502s" pattern.
+    - For any other ``proxy_service`` the call stays on the legacy
+      ``OUTBOUND_STATIC_PROXY_URLS`` / Tor path used by the catalog
+      and resolve APIs.
+    - When ``proxy_service`` is ``None`` the request goes direct.
+    """
     from app.config import settings
 
     range_header: str | None = request.headers.get("range")
@@ -304,10 +319,44 @@ async def _http_proxy_range_get(
         h["Range"] = range_header
 
     out_proxy: str | None = None
+    streaming_decision = None
     if proxy_service:
-        from app.services.outbound_proxy import get_outbound_proxy
+        from app.services.streaming_egress_pool import (
+            get_streaming_egress_pool,
+            is_audio_streaming_service,
+        )
 
-        out_proxy = get_outbound_proxy(proxy_service)
+        if is_audio_streaming_service(proxy_service):
+            pool = get_streaming_egress_pool()
+            streaming_decision = pool.pick(
+                proxy_urls=settings.streaming_proxy_out_urls_list,
+                sticky_key=sticky_key,
+                allow_direct_fallback=(
+                    settings.streaming_proxy_out_fallback_direct
+                ),
+            )
+            if streaming_decision is None:
+                logger.warning(
+                    "streaming_egress_pool_exhausted",
+                    service=proxy_service,
+                    sticky_key=sticky_key,
+                )
+                raise HTTPException(
+                    status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                    detail=detail_error,
+                )
+            out_proxy = streaming_decision.proxy_url
+            logger.info(
+                "streaming_egress_pool_selected",
+                service=proxy_service,
+                egress=streaming_decision.egress_name,
+                sticky_key=sticky_key,
+                via_proxy=out_proxy is not None,
+            )
+        else:
+            from app.services.outbound_proxy import get_outbound_proxy
+
+            out_proxy = get_outbound_proxy(proxy_service)
 
     client = _get_audio_proxy_client(out_proxy)
     started_at = time.monotonic()
@@ -315,7 +364,7 @@ async def _http_proxy_range_get(
         req = client.build_request("GET", stream_url, headers=h)
         resp = await client.send(req, stream=True)
     except httpx.HTTPError as exc:
-        if proxy_service:
+        if proxy_service and streaming_decision is None:
             from app.services.outbound_proxy import (
                 record_outbound_proxy_error,
             )
@@ -328,7 +377,13 @@ async def _http_proxy_range_get(
                 error=exc,
                 started_at=started_at,
             )
-        if out_proxy:
+        if streaming_decision is not None:
+            from app.services.streaming_egress_pool import (
+                get_streaming_egress_pool,
+            )
+
+            get_streaming_egress_pool().finish(streaming_decision, ok=False)
+        elif out_proxy:
             from app.services.outbound_proxy import (
                 report_outbound_proxy_result,
             )
@@ -340,7 +395,13 @@ async def _http_proxy_range_get(
         ) from exc
 
     if resp.status_code not in (200, 206):
-        if out_proxy:
+        if streaming_decision is not None:
+            from app.services.streaming_egress_pool import (
+                get_streaming_egress_pool,
+            )
+
+            get_streaming_egress_pool().finish(streaming_decision, ok=False)
+        elif out_proxy:
             from app.services.outbound_proxy import (
                 report_outbound_proxy_result,
             )
@@ -359,6 +420,9 @@ async def _http_proxy_range_get(
                 else "?"
             ),
             outbound_proxied=bool(out_proxy),
+            streaming_egress=(
+                streaming_decision.egress_name if streaming_decision else None
+            ),
             body_preview=body_preview[:200].decode("utf-8", errors="replace"),
         )
         raise HTTPException(
@@ -384,7 +448,16 @@ async def _http_proxy_range_get(
             upstream_error = True
             raise
         finally:
-            if out_proxy:
+            if streaming_decision is not None:
+                from app.services.streaming_egress_pool import (
+                    get_streaming_egress_pool,
+                )
+
+                get_streaming_egress_pool().finish(
+                    streaming_decision,
+                    ok=not upstream_error,
+                )
+            elif out_proxy:
                 from app.services.outbound_proxy import (
                     report_outbound_proxy_result,
                 )
@@ -424,6 +497,7 @@ async def _proxy_cors_bypass_third_party_audio(
             detail_fail="Bandcamp stream failed",
             detail_error="Bandcamp stream error",
             proxy_service="bandcamp",
+            sticky_key=f"track:{getattr(track, 'id', 0)}",
         )
     if sp == "youtube":
         from app.services.youtube_service import YouTubeService
@@ -441,6 +515,8 @@ async def _proxy_cors_bypass_third_party_audio(
             stream_url,
             detail_fail="YouTube stream failed",
             detail_error="YouTube stream error",
+            proxy_service="youtube",
+            sticky_key=f"track:{getattr(track, 'id', 0)}",
         )
     raise HTTPException(
         status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
@@ -1082,6 +1158,9 @@ async def audio_stream(
                         "Referer": settings.lyrics_sc_cdn_referer,
                     },
                     proxy_service="soundcloud",
+                    sticky_key=(
+                        f"track:{int(getattr(eff_track, 'id', track_id))}"
+                    ),
                 )
             except HTTPException as exc:
                 ph = TrackPlaybackHealthService(session)

@@ -835,6 +835,8 @@
         "subtitle": "Like / dislike / skip — the card flies away",
         "tapHint": "Tap a card to play a preview",
         "tapToUnmute": "Tap to enable sound",
+        "trackUnavailable": "Track unavailable — skipping…",
+        "noTracks": "No tracks available — you can still continue",
         "like": "Like",
         "dislike": "Dislike",
         "skipCard": "Skip",

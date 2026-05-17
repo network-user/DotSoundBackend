@@ -111,6 +111,8 @@
 
 .re-tl-item {
   min-width: 0;
+  content-visibility: auto;
+  contain-intrinsic-size: auto 80px;
 }
 
 .re-tcs-cover-stack {

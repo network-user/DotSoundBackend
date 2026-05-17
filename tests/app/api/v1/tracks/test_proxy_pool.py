@@ -1,4 +1,5 @@
 """Unit tests for audio-proxy client pool and body_iter penalty logic."""
+
 from __future__ import annotations
 
 import contextlib
@@ -139,22 +140,20 @@ def _make_fake_client(resp: object) -> SimpleNamespace:
 
 async def test_body_iter_reports_ok_on_clean_completion() -> None:
     from app.api.v1.tracks import playback as mod
+    from app.services.streaming_egress_pool import (
+        get_streaming_egress_pool,
+    )
 
     fake_client = _make_fake_client(_CleanResp())
-    proxy_url = "socks5://c0:ds@127.0.0.1:9050"
+    pool = get_streaming_egress_pool()
+    pool.reset_for_tests()
 
     with (
-        patch(
-            "app.services.outbound_proxy.get_outbound_proxy",
-            return_value=proxy_url,
-        ),
-        patch(
-            "app.services.outbound_proxy.report_outbound_proxy_result"
-        ) as mock_report,
         patch(
             "app.api.v1.tracks.playback.httpx.AsyncClient",
             return_value=fake_client,
         ),
+        patch.object(pool, "finish", wraps=pool.finish) as mock_finish,
     ):
         resp = await mod._http_proxy_range_get(
             SimpleNamespace(headers={}),  # type: ignore[arg-type]
@@ -168,27 +167,27 @@ async def test_body_iter_reports_ok_on_clean_completion() -> None:
             body += chunk
 
     assert body == b"abc"
-    mock_report.assert_called_once_with(proxy_url, ok=True)
+    mock_finish.assert_called_once()
+    finish_kwargs = mock_finish.call_args.kwargs
+    assert finish_kwargs["ok"] is True
 
 
 async def test_body_iter_reports_fail_on_upstream_http_error() -> None:
     from app.api.v1.tracks import playback as mod
+    from app.services.streaming_egress_pool import (
+        get_streaming_egress_pool,
+    )
 
     fake_client = _make_fake_client(_ErrorResp())
-    proxy_url = "socks5://c0:ds@127.0.0.1:9050"
+    pool = get_streaming_egress_pool()
+    pool.reset_for_tests()
 
     with (
-        patch(
-            "app.services.outbound_proxy.get_outbound_proxy",
-            return_value=proxy_url,
-        ),
-        patch(
-            "app.services.outbound_proxy.report_outbound_proxy_result"
-        ) as mock_report,
         patch(
             "app.api.v1.tracks.playback.httpx.AsyncClient",
             return_value=fake_client,
         ),
+        patch.object(pool, "finish", wraps=pool.finish) as mock_finish,
     ):
         resp = await mod._http_proxy_range_get(
             SimpleNamespace(headers={}),  # type: ignore[arg-type]
@@ -201,28 +200,28 @@ async def test_body_iter_reports_fail_on_upstream_http_error() -> None:
             async for _ in resp.body_iterator:
                 pass
 
-    mock_report.assert_called_once_with(proxy_url, ok=False)
+    mock_finish.assert_called_once()
+    finish_kwargs = mock_finish.call_args.kwargs
+    assert finish_kwargs["ok"] is False
 
 
 async def test_body_iter_does_not_penalise_on_client_disconnect() -> None:
-    """Consumer breaking early must NOT mark the proxy as failed."""
+    """Consumer breaking early must NOT mark the egress as failed."""
     from app.api.v1.tracks import playback as mod
+    from app.services.streaming_egress_pool import (
+        get_streaming_egress_pool,
+    )
 
     fake_client = _make_fake_client(_MultiChunkResp())
-    proxy_url = "socks5://c0:ds@127.0.0.1:9050"
+    pool = get_streaming_egress_pool()
+    pool.reset_for_tests()
 
     with (
-        patch(
-            "app.services.outbound_proxy.get_outbound_proxy",
-            return_value=proxy_url,
-        ),
-        patch(
-            "app.services.outbound_proxy.report_outbound_proxy_result"
-        ) as mock_report,
         patch(
             "app.api.v1.tracks.playback.httpx.AsyncClient",
             return_value=fake_client,
         ),
+        patch.object(pool, "finish", wraps=pool.finish) as mock_finish,
     ):
         resp = await mod._http_proxy_range_get(
             SimpleNamespace(headers={}),  # type: ignore[arg-type]
@@ -235,7 +234,9 @@ async def test_body_iter_does_not_penalise_on_client_disconnect() -> None:
         await gen.__anext__()
         await gen.aclose()
 
-    mock_report.assert_called_once_with(proxy_url, ok=True)
+    mock_finish.assert_called_once()
+    finish_kwargs = mock_finish.call_args.kwargs
+    assert finish_kwargs["ok"] is True
 
 
 # ---------------------------------------------------------------------------

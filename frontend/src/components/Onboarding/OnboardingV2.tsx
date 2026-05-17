@@ -61,10 +61,11 @@ type Step =
 
 interface SwipeDecisionOptions {
   haptic?: boolean
+  reason?: 'auto_error' | 'user'
 }
 
 const MIN_GENRES = 3
-const SWIPE_FETCH_BATCH = 8
+const SWIPE_FETCH_BATCH = 15
 const tasteTrackAudioSrc = (trackId: number) =>
   `/api/v1/tracks/${trackId}/audio?force_progressive=true`
 const SWIPE_THRESHOLD = 110
@@ -134,6 +135,8 @@ export function OnboardingV2({ onComplete }: Props) {
   const audio = useOnboardingAudio()
   const fetchMoreInFlightRef = useRef(false)
   const autoPlayedTrackRef = useRef<number | null>(null)
+  const swipeRetryRef = useRef<Record<number, number>>({})
+  const errorSkipCountRef = useRef(0)
 
   useEffect(() => {
     let cancelled = false
@@ -194,7 +197,7 @@ export function OnboardingV2({ onComplete }: Props) {
         if (cancelled) return
         setTasteTracks(tracks)
         setTasteIndex(0)
-        setTasteExhausted(false)
+        setTasteExhausted(tracks.length === 0)
       })
       .catch(() => {
         if (cancelled) return
@@ -231,6 +234,8 @@ export function OnboardingV2({ onComplete }: Props) {
       setTasteExhausted(false)
       fetchMoreInFlightRef.current = false
       autoPlayedTrackRef.current = null
+      swipeRetryRef.current = {}
+      errorSkipCountRef.current = 0
     }
     setStep(STEP_ORDER[i - 1])
   }, [step, audio])
@@ -367,6 +372,9 @@ export function OnboardingV2({ onComplete }: Props) {
       if (options?.haptic !== false) {
         hapticSelection()
       }
+      if (options?.reason === 'auto_error') {
+        errorSkipCountRef.current += 1
+      }
       const nextIdx = tasteIndex + 1
       setTasteDecisions((prev) => [
         ...prev,
@@ -392,7 +400,11 @@ export function OnboardingV2({ onComplete }: Props) {
   const togglePreview = useCallback(() => {
     const tr = tasteTracks[tasteIndex]
     if (!tr) return
-    audio.prime()
+    const needsUnlock =
+      audio.state === 'blocked' || audio.state === 'error'
+    if (!needsUnlock) {
+      audio.prime()
+    }
     if (
       audio.state === 'playing' ||
       (audio.state === 'paused' &&
@@ -408,6 +420,32 @@ export function OnboardingV2({ onComplete }: Props) {
     )
   }, [audio, tasteTracks, tasteIndex])
 
+  useEffect(() => {
+    if (audio.state !== 'error') return
+    if (step !== 'swipe') return
+    const tr = tasteTracks[tasteIndex]
+    if (!tr) return
+    const retries = swipeRetryRef.current[tr.id] ?? 0
+    if (retries === 0) {
+      const timer = setTimeout(() => {
+        swipeRetryRef.current[tr.id] = 1
+        audio.playTrack(
+          tr.id,
+          tasteTrackAudioSrc(tr.id),
+          { step: 'swipe' },
+        )
+      }, 800)
+      return () => clearTimeout(timer)
+    }
+    const timer = setTimeout(() => {
+      recordDecision('skip', {
+        haptic: false,
+        reason: 'auto_error',
+      })
+    }, 1500)
+    return () => clearTimeout(timer)
+  }, [audio, audio.state, step, tasteIndex, tasteTracks, recordDecision])
+
   const finalizeSwipe = useCallback(
     async (decisions: typeof tasteDecisions) => {
       if (saving) return
@@ -418,7 +456,10 @@ export function OnboardingV2({ onComplete }: Props) {
         }
         await api.completeOnboarding()
         trackActivationEvent('onboarding_complete', {
-          meta: { calibrated: decisions.length },
+          meta: {
+            calibrated: decisions.length,
+            error_skips: errorSkipCountRef.current,
+          },
         })
         showIsland({
           kind: 'toast',
@@ -654,10 +695,8 @@ export function OnboardingV2({ onComplete }: Props) {
                     : null
                 }
                 audioLoading={audio.state === 'loading'}
-                audioBlocked={
-                  audio.state === 'blocked' ||
-                  audio.state === 'error'
-                }
+                audioBlocked={audio.state === 'blocked'}
+                audioError={audio.state === 'error'}
                 onLike={() => recordDecision('like')}
                 onDislike={() =>
                   recordDecision('dislike')
@@ -1132,6 +1171,7 @@ interface SwipeStepProps {
   playingId: number | null
   audioLoading: boolean
   audioBlocked: boolean
+  audioError: boolean
   onLike: (options?: SwipeDecisionOptions) => void
   onDislike: (options?: SwipeDecisionOptions) => void
   onSkipCard: () => void
@@ -1147,6 +1187,7 @@ function SwipeStep({
   playingId,
   audioLoading,
   audioBlocked,
+  audioError,
   onLike,
   onDislike,
   onSkipCard,
@@ -1222,9 +1263,13 @@ function SwipeStep({
           )}
           {!loading && tracks.length === 0 && (
             <div className="onb-v2-swipe-empty">
-              {t(
-                'redesign.onboardingV2.swipe.empty',
-              )}
+              {exhausted
+                ? t(
+                    'redesign.onboardingV2.swipe.noTracks',
+                  )
+                : t(
+                    'redesign.onboardingV2.swipe.empty',
+                  )}
             </div>
           )}
           {next && !reduce && (
@@ -1241,6 +1286,7 @@ function SwipeStep({
                 isPlaying={playingId === top.id}
                 audioLoading={audioLoading}
                 audioBlocked={audioBlocked}
+                audioError={audioError}
                 onLike={handleLike}
                 onDislike={handleDislike}
                 onTogglePreview={onTogglePreview}
@@ -1349,6 +1395,7 @@ interface SwipeCardProps {
   isPlaying: boolean
   audioLoading: boolean
   audioBlocked: boolean
+  audioError: boolean
   onLike: (options?: SwipeDecisionOptions) => void
   onDislike: (options?: SwipeDecisionOptions) => void
   onTogglePreview: () => void
@@ -1360,6 +1407,7 @@ function SwipeCard({
   isPlaying,
   audioLoading,
   audioBlocked,
+  audioError,
   onLike,
   onDislike,
   onTogglePreview,
@@ -1601,6 +1649,7 @@ function SwipeCard({
       {audioBlocked && !audioLoading && (
         <MuteHint onUnmute={onTogglePreview} />
       )}
+      {audioError && !audioLoading && <ErrorHint />}
     </m.div>
   )
 }
@@ -1622,6 +1671,16 @@ function MuteHint({ onUnmute }: { onUnmute: () => void }) {
       <Icon name="volume-off" size={16} />
       {t('redesign.onboardingV2.swipe.tapToUnmute')}
     </button>
+  )
+}
+
+function ErrorHint() {
+  const { t } = useTranslation()
+  return (
+    <div className="onb-v2-swipe-card__error-hint">
+      <Icon name="alert-circle" size={16} />
+      {t('redesign.onboardingV2.swipe.trackUnavailable')}
+    </div>
   )
 }
 

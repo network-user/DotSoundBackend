@@ -1,8 +1,10 @@
 import {
+  useDeferredValue,
   useEffect,
   useMemo,
   useRef,
   useState,
+  useTransition,
 } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { MotionPress } from '@/components/ui/MotionPress'
@@ -24,6 +26,7 @@ interface LogsFilter {
 }
 
 const MAX_BUFFER = 1000
+const DISPLAY_LIMIT = 300
 
 function fmtTs(ns: number): string {
   return new Date(
@@ -42,9 +45,9 @@ export function LiveLogStream({
 }: Props) {
   const [filter, setFilter] =
     useState<LogsFilter>(initialFilter || {})
-  const [items, setItems] = useState<LogRow[]>(
-    [],
-  )
+  const [items, setItems] = useState<LogRow[]>([])
+  const [, startTransition] = useTransition()
+  const deferredItems = useDeferredValue(items)
   const [paused, setPaused] = useState(false)
   const [connected, setConnected] =
     useState(false)
@@ -91,14 +94,14 @@ export function LiveLogStream({
           error?: string
         }
         if (!data?.items?.length) return
-        setItems((prev) => {
-          const next = [...prev, ...data.items!]
-          if (next.length > MAX_BUFFER) {
-            return next.slice(
-              next.length - MAX_BUFFER,
-            )
-          }
-          return next
+        startTransition(() => {
+          setItems((prev) => {
+            const next = [...prev, ...data.items!]
+            if (next.length > MAX_BUFFER) {
+              return next.slice(next.length - MAX_BUFFER)
+            }
+            return next
+          })
         })
       },
     })
@@ -124,7 +127,7 @@ export function LiveLogStream({
     const el = containerRef.current
     if (!el) return
     el.scrollTop = el.scrollHeight
-  }, [items])
+  }, [deferredItems])
 
   useEffect(() => {
     if (!filtersOpen) return
@@ -167,6 +170,11 @@ export function LiveLogStream({
     if (paused) return 'paused'
     return `streaming (${items.length})`
   }, [connected, paused, items.length])
+
+  const displayItems = useMemo(
+    () => deferredItems.slice(-DISPLAY_LIMIT),
+    [deferredItems],
+  )
 
   const clearChip = (key: keyof LogsFilter) =>
     setFilter((p) => ({ ...p, [key]: undefined }))
@@ -362,12 +370,12 @@ export function LiveLogStream({
         className="admin-log-stream"
         style={{ maxHeight: height }}
       >
-        {items.length === 0 && (
+        {displayItems.length === 0 && (
           <div className="admin-log-empty">
             Waiting for log entries…
           </div>
         )}
-        {items.map((row, idx) => {
+        {displayItems.map((row, idx) => {
           const level = row.labels?.level || 'info'
           return (
             <div

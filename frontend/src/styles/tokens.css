@@ -218,6 +218,20 @@
   }
 }
 
+/* Desktop fine-pointer: reduce backdrop-filter blur radius.
+ * Chrome/Firefox compositor is more expensive with backdrop-filter
+ * than Safari; halving the values on fixed nav/player surfaces
+ * significantly reduces scroll jank without visible quality loss. */
+@media (hover: hover) and (pointer: fine) {
+  :root {
+    --glass-backdrop-fixed: blur(8px) saturate(120%);
+    --glass-backdrop-fixed-player: blur(8px) saturate(120%)
+      brightness(1.04);
+    --glass-blur-strong: blur(14px);
+    --glass-blur-medium: blur(10px);
+  }
+}
+
 html.ds-perf-lite,
 body.ds-perf-lite {
   --glass-blur-soft: blur(4px);

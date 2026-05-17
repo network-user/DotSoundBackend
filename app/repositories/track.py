@@ -26,6 +26,7 @@ class TrackRepository(BaseRepository[Track]):
                 Track.is_public.is_(True),
                 self._exclude_hidden_sources(),
                 self._playback_listing_allowed(),
+                self._playable_filter(),
             )
             .distinct()
             .order_by(Track.genre.asc())

@@ -1,3 +1,5 @@
+from unittest.mock import MagicMock
+
 import pytest
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -277,3 +279,117 @@ async def test_smart_skip_uses_locale_seed(
     applied = await svc.apply_smart_default_profile(user.id)
     assert len(applied["genres"]) <= 5
     assert applied["genres"]
+
+
+def _track(
+    *,
+    is_active: bool = True,
+    duration_seconds: int | None = 180,
+    source_platform: str | None = None,
+    access_mode: str = "internal_stream",
+    blob_id: int | None = 1,
+    file_key: str | None = "path/to/audio.mp3",
+) -> MagicMock:
+    t = MagicMock()
+    t.is_active = is_active
+    t.duration_seconds = duration_seconds
+    t.source_platform = source_platform
+    t.access_mode = access_mode
+    t.blob_id = blob_id
+    t.file_key = file_key
+    return t
+
+
+def test_swipe_playable_internal_with_file() -> None:
+    assert (
+        OnboardingService._is_swipe_playable_track(
+            _track()
+        )
+        is True
+    )
+
+
+def test_swipe_playable_internal_no_file() -> None:
+    assert (
+        OnboardingService._is_swipe_playable_track(
+            _track(blob_id=None, file_key=None)
+        )
+        is False
+    )
+
+
+def test_swipe_playable_internal_no_file_key() -> None:
+    assert (
+        OnboardingService._is_swipe_playable_track(
+            _track(file_key=None)
+        )
+        is False
+    )
+
+
+def test_swipe_playable_soundcloud() -> None:
+    assert (
+        OnboardingService._is_swipe_playable_track(
+            _track(
+                source_platform="soundcloud",
+                access_mode="third_party_stream",
+                blob_id=None,
+                file_key=None,
+            )
+        )
+        is True
+    )
+
+
+def test_swipe_playable_bandcamp() -> None:
+    assert (
+        OnboardingService._is_swipe_playable_track(
+            _track(
+                source_platform="bandcamp",
+                access_mode="third_party_stream",
+                blob_id=None,
+                file_key=None,
+            )
+        )
+        is True
+    )
+
+
+def test_swipe_playable_youtube_excluded() -> None:
+    assert (
+        OnboardingService._is_swipe_playable_track(
+            _track(
+                source_platform="youtube",
+                access_mode="third_party_stream",
+                blob_id=None,
+                file_key=None,
+            )
+        )
+        is False
+    )
+
+
+def test_swipe_playable_inactive() -> None:
+    assert (
+        OnboardingService._is_swipe_playable_track(
+            _track(
+                is_active=False,
+                source_platform="soundcloud",
+                access_mode="third_party_stream",
+            )
+        )
+        is False
+    )
+
+
+def test_swipe_playable_no_duration() -> None:
+    assert (
+        OnboardingService._is_swipe_playable_track(
+            _track(
+                duration_seconds=None,
+                source_platform="soundcloud",
+                access_mode="third_party_stream",
+            )
+        )
+        is False
+    )

@@ -411,8 +411,12 @@ async def test_soundcloud_progressive_audio_proxies_upstream(
     assert r.content == b"\xff\xfb\x92"
 
 
-async def test_http_proxy_range_get_uses_outbound_proxy() -> None:
+async def test_http_proxy_range_get_uses_streaming_egress_pool() -> None:
     from app.api.v1.tracks import playback as mod
+    from app.config import settings as _settings
+    from app.services.streaming_egress_pool import (
+        get_streaming_egress_pool,
+    )
 
     class _UpstreamResponse:
         status_code = 200
@@ -432,37 +436,33 @@ async def test_http_proxy_range_get_uses_outbound_proxy() -> None:
         send=AsyncMock(return_value=_UpstreamResponse()),
         aclose=AsyncMock(),
     )
-
-    with (
-        patch(
-            "app.services.outbound_proxy.get_outbound_proxy",
-            return_value="socks5://127.0.0.1:9050",
-        ),
-        patch(
-            "app.services.outbound_proxy.report_outbound_proxy_result",
-        ) as report_result,
-        patch(
+    pool = get_streaming_egress_pool()
+    pool.reset_for_tests()
+    proxy_url = "http://10.0.0.1:8080"
+    original = _settings.streaming_proxy_out_urls
+    _settings.streaming_proxy_out_urls = proxy_url
+    try:
+        with patch(
             "app.api.v1.tracks.playback.httpx.AsyncClient",
             return_value=fake_client,
-        ) as client_cls,
-    ):
-        response = await mod._http_proxy_range_get(
-            SimpleNamespace(headers={}),  # type: ignore[arg-type]
-            "https://media.sndcdn.com/x.mp3",
-            detail_fail="fail",
-            detail_error="error",
-            proxy_service="soundcloud",
-        )
-        body = b""
-        async for chunk in response.body_iterator:
-            body += chunk
+        ) as client_cls:
+            response = await mod._http_proxy_range_get(
+                SimpleNamespace(headers={}),  # type: ignore[arg-type]
+                "https://media.sndcdn.com/x.mp3",
+                detail_fail="fail",
+                detail_error="error",
+                proxy_service="soundcloud",
+                sticky_key="track:99",
+            )
+            body = b""
+            async for chunk in response.body_iterator:
+                body += chunk
 
-    assert body == b"abc"
-    assert client_cls.call_args.kwargs["proxy"] == "socks5://127.0.0.1:9050"
-    report_result.assert_called_once_with(
-        "socks5://127.0.0.1:9050",
-        ok=True,
-    )
+        assert body == b"abc"
+        assert client_cls.call_args.kwargs["proxy"] == proxy_url
+    finally:
+        _settings.streaming_proxy_out_urls = original
+        pool.reset_for_tests()
 
 
 async def test_soundcloud_hls_stream_and_audio_redirect(

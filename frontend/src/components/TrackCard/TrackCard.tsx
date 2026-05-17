@@ -1,4 +1,5 @@
 import {
+  memo,
   useEffect,
   useMemo,
   useRef,
@@ -49,7 +50,7 @@ interface Props {
   contextTracks?: Track[] | null
 }
 
-export function TrackCard({
+function TrackCardInner({
   track,
   variant = 'compact',
   summarySuffix = null,
@@ -437,4 +438,15 @@ export function TrackCard({
     </LongPressMenu>
   )
 }
+
+export const TrackCard = memo(TrackCardInner, (prev, next) => {
+  return (
+    prev.track === next.track &&
+    prev.variant === next.variant &&
+    prev.summarySuffix === next.summarySuffix &&
+    prev.onDeleted === next.onDeleted &&
+    prev.onVisibilityChanged === next.onVisibilityChanged &&
+    prev.contextTracks === next.contextTracks
+  )
+})
 

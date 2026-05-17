@@ -25,6 +25,7 @@ interface TimeProps {
 }
 
 const LABEL_INTERVAL_MS = 250
+const SEEK_FRAME_MS = 33
 
 function fmt(sec: number) {
   if (!sec || isNaN(sec)) return '0:00'
@@ -71,9 +72,13 @@ function PlayerBarSeekInner({
     writePct(duration ? (now / duration) * 100 : 0)
     if (!isPlaying) return
     let rafId = 0
-    const frame = () => {
-      const t = getPreciseTime()
-      writePct(duration ? (t / duration) * 100 : 0)
+    let lastFrameTime = 0
+    const frame = (ts: number) => {
+      if (ts - lastFrameTime >= SEEK_FRAME_MS) {
+        lastFrameTime = ts
+        const t = getPreciseTime()
+        writePct(duration ? (t / duration) * 100 : 0)
+      }
       rafId = window.requestAnimationFrame(frame)
     }
     rafId = window.requestAnimationFrame(frame)

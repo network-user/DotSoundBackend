@@ -285,7 +285,10 @@ export function ArtistTopTracksPanel({
                   key={tr.id}
                   className="rf-artist-top-tracks__row"
                 >
-                  <TrackCard track={tr} />
+                  <TrackCard
+                    track={tr}
+                    contextTracks={previewTracks}
+                  />
                 </div>
               ))}
             </div>

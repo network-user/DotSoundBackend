@@ -190,6 +190,11 @@ Backend (file_validator.py):
   аномалий воркеров (processing_too_fast, duplicate_result,
   failure_rate, stale_after_claim) + `should_auto_suspend`.
   Используется в `app/services/compute_anomaly_service.py`.
+- `services/streaming_egress_policy.py` -- decision-функции пула
+  egress для байтового стриминга стороннего аудио (sticky-TTL,
+  quarantine threshold, exponential back-off, capacity per egress,
+  список аудио-CDN сервисов). Питает `app/services/streaming_egress_pool.py`
+  и `app/api/v1/tracks/playback.py`. Tor для стриминга не используется.
 - `contracts/` -- protocol constants
 
 ## Стек

@@ -1,5 +1,141 @@
 # DotSound - TODO Tracker
 
+- [x] **Стриминг: dedicated egress pool + кеш уже проигранных треков (2026-05-17)**
+  - **PrivateCore (`DotSoundPrivateCore`)** — `services/streaming_egress_policy.py`:
+    новый policy-модуль для пула egress, который Backend использует для
+    байтовых стримов сторонних аудио-CDN. Stateless decision-функции:
+    `pick_streaming_egress`, `record_egress_outcome`,
+    `record_request_started/finished`, `is_streaming_audio_service`,
+    sticky-TTL и пороги quarantine. Все runtime-данные (in-flight,
+    last-use, quarantine until) живут в Backend, политика не мутирует
+    их in-place — возвращает новые `EgressHealth`. Tests:
+    `tests/dotsound_private_core/services/test_streaming_egress_policy.py`
+    (25 cases).
+  - **Backend (`DotSoundBackend`)**:
+    - `app/services/streaming_egress_pool.py` — per-process pool: lock,
+      `_healths`, `_sticky` (track_id → egress_name + ts). Использует
+      decision-функции из PrivateCore. `pick(...)` отдаёт
+      `StreamingEgressDecision(proxy_url, egress_name, sticky_key)` или
+      `None`; `finish(decision, ok=...)` логирует результат, при
+      `ok=False` сбрасывает sticky-привязку.
+    - `app/api/v1/tracks/playback.py` — `_http_proxy_range_get`:
+      для аудио-CDN сервисов (`soundcloud/bandcamp/youtube`) выбирает
+      egress через пул, передаёт `sticky_key=track:{id}` чтобы
+      все байтовые диапазоны одного трека шли через тот же IP
+      (без чего CDN отдаёт 403). Tor для стриминга больше не
+      используется. Поведение для остальных сервисов и `same-origin`
+      запросов не изменилось.
+    - `app/config.py` — добавлены `streaming_proxy_out_urls` (и список
+      `streaming_proxy_out_urls_list`), `streaming_proxy_out_max_urls`,
+      `streaming_proxy_out_fallback_direct`. Парсинг прокси-списков
+      вынесен в общий `_parse_proxy_url_list`.
+    - `.env.example` — задокументированы `STREAMING_PROXY_OUT_URLS`,
+      `STREAMING_PROXY_OUT_MAX_URLS`, `STREAMING_PROXY_OUT_FALLBACK_DIRECT`.
+    - Tests: `tests/app/services/test_streaming_egress_pool.py` (новый),
+      обновлены `tests/app/api/v1/tracks/test_proxy_pool.py` под новый
+      путь учёта результата.
+  - **Frontend (`frontend/`)** — кеширование уже проигранных треков:
+    - `src/store/PlayerContext.tsx` — `armProgressiveBodyCacheWarm`:
+      после `canplay`/`playing` текущего трека (не HLS, не
+      `external_link`/`official_embed`, ещё не в Cache API) триггерится
+      фоновая `prefetchProgressiveBodyForCache(trackId)`. Workbox
+      `progressive-audio-cache` хранит только 200 OK (не 206), поэтому
+      запускаем явный full-body GET без `Range` сразу после старта
+      воспроизведения. Теперь возврат на трек = cache-hit ⇒ старт <100 ms.
+    - `src/lib/prefetch/PrefetchManager.ts` — горячие контексты
+      (`playback/queue/radio/deep_link/continue_on_app_start`)
+      сохраняют полный `policy.fullDownloadAhead`; cold-контексты
+      (home/library/search/album/playlist/...) получают консервативный
+      бюджет на 1 full-body neighbour, всё ещё под gate save-data/2g/quota.
+      Юзер тапает первую карточку фида — соседняя карточка тоже
+      попадает в Cache API.
+    - Tests: `frontend/src/lib/prefetch/PrefetchManager.test.ts` —
+      добавлены `warms full body for the first card on cold home feed`
+      и `hot context (queue) keeps the full policy budget` (всего 13/13).
+  - **Архитектура**: правила (TTL/threshold/sticky) — в PrivateCore,
+    транспорт (Redis нет, in-process pool, sticky map, http прокси) — в
+    Backend. Прозрачно для остальных сервисов.
+
+- [x] **Frontend: оптимизация производительности — высокий приоритет (2026-05-17)**
+  - `frontend/package.json`: добавлен `@tanstack/react-virtual` v3.13.24.
+  - `frontend/src/components/TrackList/TrackList.tsx`: переписан на `useVirtualizer`
+    (`@tanstack/react-virtual`). Контейнер — `#main` (`getScrollElement`); `scrollMargin` измеряется
+    через `getBoundingClientRect` в `useLayoutEffect`; `overscan=5`; `estimateSize=72px` + `measureElement`
+    для точных высот. Из DOM существует только ~10-15 видимых + overscan записей вместо всех.
+  - `frontend/src/components/TrackCard/TrackCard.tsx`: обёрнут в `React.memo` с кастомным
+    comparator по ссылочному равенству всех пропсов — предотвращает лишние ре-рендеры при
+    обновлениях PlayerContext/LikesContext в соседних карточках.
+  - `admin/components/widgets/*`: проверены `refetchInterval`; ситуация уже оптимальна
+    (Dashboard: 30s только в live-режиме; `refetchIntervalInBackground: false` везде).
+
+- [x] **Frontend: оптимизация производительности (2026-05-17)**
+  - `frontend/src/styles/global.css`: `will-change: transform` на `#nav`, `#player-bar`, `.search-sticky`
+    для продвижения в отдельный GPU-слой — устраняет jank при скролле с backdrop-filter.
+  - `frontend/src/styles/redesign-tracks.css`: `content-visibility: auto; contain-intrinsic-size: auto 80px`
+    на `.re-tl-item` — пропуск off-screen элементов при рендере длинных трек-листов.
+  - `frontend/src/styles/tokens.css`: `@media (hover: hover) and (pointer: fine)` — снижение
+    `--glass-backdrop-fixed` (14px→8px), `--glass-blur-strong` (20px→14px), `--glass-blur-medium`
+    (14px→10px) для desktop Chrome/Firefox, где compositor дороже чем в Safari.
+  - `frontend/src/components/PlayerBar/PlayerBarProgress.tsx`: throttle seek-RAF до 30fps
+    (`SEEK_FRAME_MS = 33`) вместо 60fps — меньше нагрузки на main thread.
+  - `frontend/src/lib/glassPerformance.ts`: `shouldUseLiteProfile()` — для desktop (`hover: hover`
+    + `pointer: fine`) порог ядер снижен до 4 (убирает ложный perf-lite на 6-ядерных ноутбуках);
+    мобильные устройства сохраняют прежний порог ≤6 ядер.
+  - `frontend/src/admin/components/widgets/LiveLogStream.tsx`: `startTransition` вокруг `setItems`
+    + `useDeferredValue` + `DISPLAY_LIMIT=300` — рендер 300 строк вместо 1000 при живом стриминге логов.
+
+- [x] **Онбординг: 6 улучшений после калибровки (2026-05-17)**
+  - **П1 — Нормализация жанров в БД**
+    - `alembic/versions/0112_normalize_track_genres.py`: SQL UPDATE `LOWER(TRIM(genre))` для всех
+      существующих треков — устраняет "Hip-Hop"/"hip-hop"/"Hip Hop" как три разных жанра.
+    - `app/services/onboarding_service.py`: `get_available_genres()` теперь возвращает нормализованную
+      форму (`key = g.lower().strip()`), а не оригинал — новые импорты тоже попадают правильно.
+  - **П2 — Разделение `blocked` и `error` в свайп-UI**
+    - `OnboardingV2.tsx`: `audioBlocked` — только `state === 'blocked'`,
+      `audioError` — только `state === 'error'`. Оба пропа переданы в `SwipeStep` → `SwipeCard`.
+    - `SwipeCard`: `MuteHint` рендерится при `blocked`, новый `ErrorHint` — при `error`.
+    - i18n: `swipe.trackUnavailable` (EN/RU), `swipe.noTracks` (EN/RU).
+    - CSS: `.onb-v2-swipe-card__error-hint` (аналог mute-hint, без курсора).
+  - **П3 — Автоскип при сетевой ошибке**
+    - `OnboardingV2.tsx`: `useEffect` — при `audio.state === 'error'` на step 'swipe' ставит
+      `setTimeout(1500)` → `recordDecision('skip', {haptic: false})`. Cleanup отменяет таймер.
+  - **П4 — Заглушка при 0 карточках**
+    - `OnboardingV2.tsx`: при начальной загрузке 0 треков сразу `setTasteExhausted(true)`.
+      Пустое состояние показывает `swipe.noTracks` (нет треков в каталоге) вместо
+      `swipe.empty` (все оценены).
+  - **П5 — Redis-кэш жанровых пузырьков (TTL 15 мин)**
+    - `app/services/onboarding_service.py`: `get_genre_bubbles()` читает/пишет
+      `onboarding:genre_bubbles:{locale}:{cap}` через `redis.get`/`redis.setex`.
+      Промах → обычный SQL-запрос. Ошибки Redis не блокируют ответ (try/except + warning).
+  - **П6 — Юнит-тесты `_is_swipe_playable_track()`**
+    - `tests/app/services/test_onboarding_service.py`: 8 синхронных тестов без БД (MagicMock):
+      internal с файлом ✓, без файла ✗, SoundCloud ✓, Bandcamp ✓, YouTube ✗, inactive ✗,
+      no_duration ✗. Все 8 проходят.
+
+- [x] **Онбординг: жанры + свайп-калибровка (2026-05-17)**
+  - **P1 — Жанры: отображаются все, сортировка по популярности**
+    - `DotSoundPrivateCore/services/onboarding_policy.py`: `GENRE_BUBBLE_COUNT` 12 → 30,
+      `TASTE_SWIPE_MAX_COUNT` 8 → 20.
+    - `app/repositories/track.py`: `get_unique_genres()` — добавлен `_playable_filter()`,
+      чтобы в список попадали только жанры с хотя бы одним воспроизводимым треком.
+    - `app/services/onboarding_service.py`: `get_genre_bubbles()` — результат сортируется
+      по `track_count DESC`; теперь наиболее насыщенные жанры всплывают первыми.
+  - **P2 — Свайп: нет звука («бесконечное нажмите чтобы включить»)**
+    - `frontend/src/components/Onboarding/OnboardingV2.tsx`: в `togglePreview()`
+      убран вызов `audio.prime()` когда `state === 'blocked' | 'error'`.
+      Ранее `prime()` стартовал play(SILENT_WAV) и сразу поглощал разрешение
+      пользовательского жеста; последующий `playTrack()` уже не проходил
+      iOS/Telegram автоблокировку. Теперь при blocked/error `playTrack()`
+      вызывается напрямую в контексте жеста — разблокировка надёжная.
+  - **P3 — Свайп: мало треков**
+    - `app/services/onboarding_service.py`: `_is_swipe_playable_track()` расширен —
+      теперь принимает треки с `access_mode='third_party_stream'` (SoundCloud, Bandcamp),
+      кроме YouTube.
+    - `app/services/onboarding_service.py`: в genre-запрос и fallback-запрос
+      `get_calibration_tracks()` добавлен `_playable_filter()` для захвата
+      SC-треков уже на уровне SQL.
+    - `frontend/src/components/Onboarding/OnboardingV2.tsx`: `SWIPE_FETCH_BATCH` 8 → 15.
+
 - [x] **SC semaphore: deferred verify sweep, exhaustion metric, backpressure (2026-05-17)**
   - **P1 — Post-import deferred verification sweep**
     - `app/services/soundcloud_service.py`: `_push_pending_verify(track_id)` — при `skip_playback_verify=True`

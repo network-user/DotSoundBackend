@@ -70,16 +70,26 @@ interface PendingTask {
 
 // Contexts where the *next* track is statistically certain to play
 // next (radio engine, manual queue, autoplay continuation, etc.).
-// These are the only contexts where we burn the bandwidth budget on
-// downloading the full audio body so the next track switch is
-// genuinely instant. ``home`` / ``library`` etc. only get head-warm.
-const _FULL_DOWNLOAD_CONTEXTS: ReadonlySet<PrefetchContextName> = new Set([
-  'playback',
-  'queue',
-  'radio',
-  'deep_link',
-  'continue_on_app_start',
-])
+// These contexts use the full ``policy.fullDownloadAhead`` budget so
+// the next track switch is genuinely instant.
+const _HOT_FULL_DOWNLOAD_CONTEXTS: ReadonlySet<PrefetchContextName> = new Set(
+  [
+    'playback',
+    'queue',
+    'radio',
+    'deep_link',
+    'continue_on_app_start',
+  ],
+)
+
+// Cold-feed contexts (home, library, search, …) get one full-body
+// download per enqueue call when the budget allows. The user
+// commonly clicks the FIRST card in a feed and expects the second
+// click on the same card to start instantly, so warming a single
+// neighbour shifts "play / leave / come back" from a fresh network
+// fetch to a cache hit. Stays gated behind save-data / 2g / quota
+// inside the prefetch helper.
+const _COLD_FULL_DOWNLOAD_BUDGET = 1
 
 
 interface FetchPolicyArgs {
@@ -445,12 +455,18 @@ export class PrefetchManager {
   private _fullDownloadBudgetForContext(
     context: PrefetchContextName,
   ): number {
-    if (!_FULL_DOWNLOAD_CONTEXTS.has(context)) return 0
     const policyAhead = Math.max(
       0,
       Math.floor(this.policy.fullDownloadAhead || 0),
     )
-    return policyAhead
+    if (policyAhead <= 0) return 0
+    if (_HOT_FULL_DOWNLOAD_CONTEXTS.has(context)) {
+      return policyAhead
+    }
+    // Cold context: cap at a single neighbour, but never above the
+    // policy budget. Keeps the bandwidth bill predictable on home /
+    // library / search where the user might never tap a card.
+    return Math.min(policyAhead, _COLD_FULL_DOWNLOAD_BUDGET)
   }
 
   private _networkForbidsFullDownload(): boolean {

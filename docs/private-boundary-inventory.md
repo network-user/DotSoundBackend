@@ -47,6 +47,23 @@ which parts are owned by `DotSoundPrivateCore`.
   stratified Cyrillic vs global slices where applicable), and issues
   external discovery search queries.
 
+## Streaming Egress Pool
+
+- Decision rules for the third-party audio CDN streaming pool live in
+  `DotSoundPrivateCore` (`streaming_egress_policy`). The policy module
+  owns sticky-TTL, quarantine thresholds, exponential back-off, and the
+  set of services that count as "audio CDN streaming". Decision
+  functions are stateless: Backend passes a snapshot of in-flight
+  counters and last-use timestamps and gets back the next egress to
+  use plus an updated health record.
+- Backend (`app/services/streaming_egress_pool.py`) owns the runtime
+  state — per-egress in-flight counter, last-use timestamp, quarantine
+  window, and the per-track sticky map — guarded by a single
+  `threading.Lock`. The playback range proxy
+  (`app/api/v1/tracks/playback.py`) routes audio CDN requests through
+  the pool and falls back to the server's native egress when no proxy
+  is available or healthy. Tor is intentionally not on this path.
+
 ## Non-Goals For Slice-1
 
 - No migration of websocket manager and realtime orchestration.

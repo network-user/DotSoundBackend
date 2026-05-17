@@ -1,3 +1,4 @@
+import json
 from datetime import UTC, datetime
 from typing import Any
 
@@ -11,6 +12,7 @@ from dotsound_private_core.services.onboarding_policy import (
     derive_default_display_name,
     has_minimum_taste_signal,
     is_display_name_valid,
+    normalize_locale_for_genres,
     order_taste_swipe_tracks,
     pick_default_genres_for_locale,
     should_offer_import_in_onboarding,
@@ -336,6 +338,7 @@ class OnboardingService:
                 Track.is_active.is_(True),
                 Track.is_public.is_(True),
                 TrackRepository._playback_listing_allowed(),
+                TrackRepository._playable_filter(),
             )
             if genres:
                 q = q.where(Track.genre.in_(genres))
@@ -357,6 +360,7 @@ class OnboardingService:
                     Track.is_active.is_(True),
                     Track.is_public.is_(True),
                     TrackRepository._playback_listing_allowed(),
+                    TrackRepository._playable_filter(),
                 )
                 .order_by(Track.play_count.desc())
                 .limit(candidate_count)
@@ -403,12 +407,13 @@ class OnboardingService:
 
     @staticmethod
     def _is_swipe_playable_track(track: Track) -> bool:
-        return bool(
-            track.blob_id
-            and track.file_key
-            and track.is_active
-            and track.duration_seconds
-        )
+        if not (track.is_active and track.duration_seconds):
+            return False
+        if getattr(track, "source_platform", None) == "youtube":
+            return False
+        if track.access_mode == "third_party_stream":
+            return True
+        return bool(track.blob_id and track.file_key)
 
     async def save_calibration(
         self,
@@ -713,11 +718,35 @@ class OnboardingService:
             show_tutorial=show_tutorial,
         )
 
+    _GENRE_BUBBLES_TTL = 900
+    _GENRE_BUBBLES_KEY_PREFIX = "onboarding:genre_bubbles"
+
     async def get_genre_bubbles(
         self,
         locale: str | None,
         cap: int = GENRE_BUBBLE_COUNT,
     ) -> list[GenreBubbleResponse]:
+        norm_locale = normalize_locale_for_genres(locale)
+        cache_key = (
+            f"{self._GENRE_BUBBLES_KEY_PREFIX}:{norm_locale}:{cap}"
+        )
+        redis = get_redis_client()
+        try:
+            cached_raw = await redis.get(cache_key)
+        except Exception as exc:
+            logger.warning(
+                "genre_bubbles_cache_get_fail", err=str(exc)
+            )
+            cached_raw = None
+        if cached_raw:
+            try:
+                return [
+                    GenreBubbleResponse(**d)
+                    for d in json.loads(cached_raw)
+                ]
+            except (TypeError, ValueError, KeyError):
+                pass
+
         all_genres = await self.get_available_genres()
         trimmed = trim_genre_bubbles(
             all_genres,
@@ -759,14 +788,29 @@ class OnboardingService:
             if len(covers_by_genre[genre]) < 3:
                 covers_by_genre[genre].append(cover_key)
 
-        return [
-            GenreBubbleResponse(
-                genre=g,
-                track_count=counts_by_genre.get(g, 0),
-                sample_cover_keys=covers_by_genre.get(g, []),
+        bubbles = sorted(
+            [
+                GenreBubbleResponse(
+                    genre=g,
+                    track_count=counts_by_genre.get(g, 0),
+                    sample_cover_keys=covers_by_genre.get(g, []),
+                )
+                for g in trimmed
+            ],
+            key=lambda b: b.track_count,
+            reverse=True,
+        )
+        try:
+            await redis.setex(
+                cache_key,
+                self._GENRE_BUBBLES_TTL,
+                json.dumps([b.model_dump() for b in bubbles]),
             )
-            for g in trimmed
-        ]
+        except Exception as exc:
+            logger.warning(
+                "genre_bubbles_cache_set_fail", err=str(exc)
+            )
+        return bubbles
 
     async def process_activation_event(
         self,
@@ -862,7 +906,7 @@ class OnboardingService:
             key = g.lower().strip()
             if key and key not in seen:
                 seen.add(key)
-                result.append(g)
+                result.append(key)
         return result
 
     async def get_popular_artists(

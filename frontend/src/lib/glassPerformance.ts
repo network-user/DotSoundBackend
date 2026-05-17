@@ -23,6 +23,10 @@ export function shouldUseLiteProfile(): boolean {
   const memoryGb = nav.deviceMemory ?? 8
   const effectiveType = nav.connection?.effectiveType ?? ''
 
+  const isDesktop =
+    mediaMatches('(hover: hover)') &&
+    mediaMatches('(pointer: fine)')
+
   return (
     mediaMatches('(pointer: coarse)') ||
     mediaMatches('(hover: none)') ||
@@ -30,8 +34,9 @@ export function shouldUseLiteProfile(): boolean {
     nav.connection?.saveData === true ||
     effectiveType === 'slow-2g' ||
     effectiveType === '2g' ||
-    cores <= 6 ||
-    memoryGb <= 4
+    cores <= 4 ||
+    memoryGb <= 4 ||
+    (!isDesktop && cores <= 6)
   )
 }
 

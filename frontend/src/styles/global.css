@@ -705,6 +705,7 @@ body.ds-perf-lite .playing-indicator span {
   -webkit-backdrop-filter: var(--glass-blur-soft)
     saturate(130%);
   border-bottom: 1px solid var(--glass-border);
+  will-change: transform;
 }
 .search-bar {
   display: flex;
@@ -1244,6 +1245,7 @@ body.ds-perf-lite .playing-indicator span {
   padding: 0;
   isolation: isolate;
   overflow: visible;
+  will-change: transform;
 }
 
 #player-bar::before {
@@ -1594,6 +1596,7 @@ body.ds-perf-lite .play-btn.play-btn--playing {
   display: flex;
   z-index: 166;
   isolation: isolate;
+  will-change: transform;
 }
 
 #nav::before {
