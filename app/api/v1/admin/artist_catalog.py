@@ -57,6 +57,9 @@ from app.schemas.admin_artist_catalog import (
     AdminCatalogSyncQueuedResponse,
     AdminImportByScUrlRequest,
     AdminImportByScUrlResponse,
+    AdminStationGapResponse,
+    AdminStationResyncBulkRequest,
+    AdminStationResyncBulkResponse,
     ArtistPipelineHealthResponse,
 )
 from app.schemas.artist_catalog import ArtistCatalogReleaseDetailResponse
@@ -933,3 +936,107 @@ async def admin_import_artist_by_sc_url(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=msg,
         ) from exc
+
+
+@router.get(
+    "/station-gap",
+    response_model=AdminStationGapResponse,
+)
+@limiter.limit("30/minute")
+async def admin_artists_station_gap(
+    request: Request,
+    min_tracks: int = Query(10, ge=0, le=200),
+    page: int = Query(1, ge=1),
+    size: int = Query(50, ge=1, le=200),
+    session: AsyncSession = Depends(get_db),
+    _admin: User = Depends(require_admin_session),
+) -> AdminStationGapResponse:
+    """List artists whose station playlist is missing or has fewer
+    than *min_tracks* tracks. Used to bulk-schedule station re-syncs."""
+    repo = ArtistCatalogRepository(session)
+    offset = (page - 1) * size
+    rows, total = await repo.find_artists_with_station_gap(
+        min_tracks,
+        offset=offset,
+        limit=size,
+    )
+    from app.schemas.admin_artist_catalog import AdminStationGapItem
+
+    items = [
+        AdminStationGapItem(
+            id=int(artist.id),
+            name=str(artist.name),
+            image_key=artist.image_key,
+            soundcloud_user_id=(
+                int(artist.soundcloud_user_id)
+                if artist.soundcloud_user_id is not None
+                else None
+            ),
+            station_track_count=(
+                int(track_count) if track_count is not None else None
+            ),
+            station_synced_at=(
+                synced_at.isoformat() if synced_at is not None else None
+            ),
+        )
+        for artist, track_count, synced_at in rows
+    ]
+    return AdminStationGapResponse(
+        items=items,
+        total=total,
+        min_tracks=min_tracks,
+    )
+
+
+@router.post(
+    "/station-gap/resync-bulk",
+    response_model=AdminStationResyncBulkResponse,
+)
+@limiter.limit("5/minute")
+async def admin_artists_station_resync_bulk(
+    request: Request,
+    body: AdminStationResyncBulkRequest,
+    session: AsyncSession = Depends(get_db),
+    _admin: User = Depends(require_step_up("catalog.sync.run")),
+) -> AdminStationResyncBulkResponse:
+    """Enqueue a forced station re-sync for each supplied artist."""
+    from app.services.artist_catalog_sync_worker import (
+        force_sync_artist_similar_station_task,
+    )
+
+    svc = ArtistService(session)
+    job_ids: dict[int, str | None] = {}
+    errors: list[AdminCatalogBulkSyncError] = []
+    seen: set[int] = set()
+
+    for artist_id in body.artist_ids:
+        if artist_id in seen:
+            continue
+        seen.add(artist_id)
+        artist = await svc.get_by_id(artist_id)
+        if artist is None:
+            errors.append(
+                AdminCatalogBulkSyncError(
+                    artist_id=artist_id,
+                    detail="artist not found",
+                )
+            )
+            continue
+        try:
+            task_handle = await force_sync_artist_similar_station_task.kiq(
+                artist_id,
+                skip_background_lyrics=body.skip_background_lyrics,
+            )
+            job_ids[artist_id] = getattr(task_handle, "task_id", None)
+        except Exception as exc:
+            errors.append(
+                AdminCatalogBulkSyncError(
+                    artist_id=artist_id,
+                    detail=str(exc)[:200],
+                )
+            )
+    return AdminStationResyncBulkResponse(
+        queued=len(job_ids),
+        job_ids=job_ids,
+        errors=errors,
+    )

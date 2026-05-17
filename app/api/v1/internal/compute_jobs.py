@@ -383,10 +383,25 @@ async def claim(
         q.JOB_TRACK_TRANSCODING,
         q.JOB_TRACK_WAVEFORM,
     ):
-        token = cws.generate_single_use_token(job.id, worker.id)
-        out["audio_url"] = (
-            f"/api/v1/internal/compute/jobs/{job.id}/audio" f"?ott={token}"
-        )
+        include_audio_url = True
+        if not settings.worker_third_party_audio_enabled:
+            include_audio_url = False
+            if job.target_kind == q.TARGET_KIND_TRACK and job.target_id:
+                try:
+                    track_id = int(job.target_id)
+                except (TypeError, ValueError):
+                    track_id = 0
+                if track_id > 0:
+                    track_for_audio = await session.get(Track, track_id)
+                    include_audio_url = bool(
+                        track_for_audio and track_for_audio.file_key
+                    )
+        if include_audio_url:
+            token = cws.generate_single_use_token(job.id, worker.id)
+            out["audio_url"] = (
+                f"/api/v1/internal/compute/jobs/{job.id}/audio"
+                f"?ott={token}"
+            )
     await cws._log_audit(
         session,
         worker_id=worker.id,
@@ -516,6 +531,18 @@ async def download_job_audio(
         return JSONResponse(
             status_code=200,
             content={"url": presigned},
+        )
+
+    if not settings.worker_third_party_audio_enabled:
+        log.warning(
+            "compute_job_audio_third_party_disabled",
+            job_id=job_id,
+            track_id=track_id,
+        )
+        await session.commit()
+        raise HTTPException(
+            status_code=403,
+            detail="worker_third_party_audio_disabled",
         )
 
     sc_stream_url: str | None = None

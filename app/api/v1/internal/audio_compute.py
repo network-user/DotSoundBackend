@@ -733,6 +733,17 @@ async def download_audio(
             source="s3",
         )
     else:
+        if not settings.worker_third_party_audio_enabled:
+            logger.warning(
+                "audio_compute_third_party_audio_disabled",
+                job_id=job_id,
+                track_id=job.track_id,
+            )
+            await session.commit()
+            raise HTTPException(
+                status_code=403,
+                detail="worker_third_party_audio_disabled",
+            )
         track = await session.get(Track, job.track_id)
         if not track or not getattr(track, "sc_url", None):
             logger.warning(

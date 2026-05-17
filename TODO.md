@@ -1,5 +1,53 @@
 # DotSound - TODO Tracker
 
+- [x] **Controlled catalog growth: backpressure + priority ordering (2026-05-17)**
+  - **PrivateCore `sc_anti_block_policy.py`**: `SC_QUEUE_BACKPRESSURE_THRESHOLD` 1000 → 200.
+    Свипы теперь останавливаются раньше, не давая очереди разбухать.
+  - **PrivateCore `catalog_sync_policy.py`**: добавлен `ENRICH_ON_CREATE_BACKPRESSURE_THRESHOLD = 60`
+    и decision-функция `should_defer_new_artist_enrich(queue_len)`. Когда очередь > 60 задач,
+    enrichment нового артиста откладывается; артист остаётся с `enrichment_status="pending"` —
+    периодический re-enrich sweep подберёт его позже. Исключает цепную реакцию при
+    станционном синке (50 новых артистов → не 50 задач enrichment одновременно).
+  - **Backend `config.py`**: `artist_auto_discovery_enabled` возвращён в `True`
+    (предыдущая жёсткая блокировка убрана). Снижены дефолтные лимиты свипов:
+    station `20→8`, full `10→4`, batch sizes `5→4/2`.
+  - **Backend `artist_service._find_or_create`**: перед `enrich_artist_task.kiq()`
+    вызывается `_get_taskiq_queue_len()` + `should_defer_new_artist_enrich()`.
+    При занятой очереди — пропуск немедленного enqueue с логом `artist_enrich_deferred_queue_busy`.
+  - **Repository sweep queries**: оба метода (`find_stale_station_artist_ids`,
+    `find_stale_full_catalog_artist_ids`) переупорядочены по
+    `enrichment_confidence DESC NULLS LAST` — сначала синхронизируются наиболее
+    известные/популярные артисты.
+
+- [x] **Station-gap admin page: bulk resync for artists missing station (2026-05-17)**
+  - Backend: `ArtistCatalogRepository.find_artists_with_station_gap(min_track_count)`
+    — SELECT артисты с `catalog_sync_enabled=True` и `soundcloud_user_id IS NOT NULL`,
+    у которых нет станционного релиза либо в нём < N треков. Возвращает `(rows, total)`.
+  - Схемы: `AdminStationGapItem`, `AdminStationGapResponse`, `AdminStationResyncBulkRequest`,
+    `AdminStationResyncBulkResponse` в `app/schemas/admin_artist_catalog.py`.
+  - Эндпоинты:
+    - `GET /api/v1/admin/artists/station-gap?min_tracks=10&page=1&size=50`
+    - `POST /api/v1/admin/artists/station-gap/resync-bulk` — ставит
+      `force_sync_artist_similar_station_task` для каждого артиста,
+      требует step-up `catalog.sync.run`.
+  - Manifest: новый пункт меню `station-gap` (иконка `radio`, группа «Catalog»)
+    → `/admin/artists/station-gap`.
+  - Frontend: `StationGapRoute.tsx` — таблица с артистами, inline-checkbox выделение,
+    `BulkPageSelector`, фильтр порога (`min_tracks`), кнопка «Resync станций (N)»,
+    toast-результат после постановки в очередь.
+  - `AdminMenu.tsx`: regex-группа Catalog расширена на `station-gap`.
+
+- [x] **Artist auto-discovery disabled by default (2026-05-17)**
+  - Добавлен флаг `artist_auto_discovery_enabled: bool = False` в `app/config.py`.
+  - `ArtistService._find_or_create` при отключённом флаге возвращает `None`
+    вместо создания новой строки артиста; выводит `artist_discovery_disabled_skip_create`.
+  - `resolve_and_link` и `link_title_artists` пропускают `None`-результат,
+    не создавая связей и не падая.
+  - `find_or_create_by_name` корректно возвращает `None` вместо NPE.
+  - Итог: при `ARTIST_AUTO_DISCOVERY_ENABLED=false` (дефолт) станционный синк,
+    импорт треков и парсинг title-артистов обновляют треки у существующих
+    артистов, но не порождают новые записи артистов.
+
 - [ ] **Унификация prefetch-подсистем плеера (2026-05-17)**
   - В `frontend/src/store/PlayerContext.tsx` живут пять
     параллельных prefetch-механизмов: `prefetchAudioRef`,

@@ -59,6 +59,11 @@ const ArtistsRoute = lazy(() =>
     default: m.ArtistsRoute,
   })),
 )
+const StationGapRoute = lazy(() =>
+  import('./routes/StationGapRoute').then((m) => ({
+    default: m.StationGapRoute,
+  })),
+)
 const AuditRoute = lazy(() =>
   import('./routes/AuditRoute').then((m) => ({
     default: m.AuditRoute,
@@ -367,6 +372,10 @@ export function AdminApp() {
                   <Route
                     path="complaints"
                     element={<ComplaintsRoute />}
+                  />
+                  <Route
+                    path="artists/station-gap"
+                    element={<StationGapRoute />}
                   />
                   <Route
                     path="artists"

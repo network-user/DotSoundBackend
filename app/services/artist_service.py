@@ -21,6 +21,21 @@ from app.repositories.user import UserRepository
 logger = structlog.get_logger(__name__)
 
 
+async def _get_taskiq_queue_len() -> int:
+    """Return approximate Taskiq queue depth.
+
+    Fails open (returns 0) so a Redis hiccup never blocks artist
+    creation. Keeps the same key as the sweep backpressure helper.
+    """
+    try:
+        from app.core.redis import get_redis_client
+
+        redis = get_redis_client()
+        return int(await redis.llen("taskiq"))
+    except Exception:
+        return 0
+
+
 class ArtistService:
     def __init__(self, session: AsyncSession) -> None:
         self._repo = ArtistRepository(session)
@@ -57,6 +72,8 @@ class ArtistService:
                 external_id=(external_id if i == 0 else None),
                 skip_catalog_sync=skip_catalog_sync,
             )
+            if artist is None:
+                continue
             await self._repo.link_track(
                 track_id=track_id,
                 artist_id=artist.id,
@@ -73,7 +90,9 @@ class ArtistService:
         source: str,
         external_id: str | None,
         skip_catalog_sync: bool = False,
-    ) -> Artist:
+    ) -> Artist | None:
+        from app.config import settings
+
         existing = await self._repo.find_by_normalized_name(normalized)
         if existing:
             return existing
@@ -87,6 +106,14 @@ class ArtistService:
                     matched=candidate.name,
                 )
                 return candidate
+
+        if not settings.artist_auto_discovery_enabled:
+            logger.info(
+                "artist_discovery_disabled_skip_create",
+                name=canonical,
+                source=source,
+            )
+            return None
 
         artist = await self._repo.create(
             name=canonical,
@@ -116,11 +143,22 @@ class ArtistService:
             from app.services.artist_enrichment_worker import (
                 enrich_artist_task,
             )
-
-            await enrich_artist_task.kiq(
-                artist_id=artist.id,
-                skip_catalog_sync=skip_catalog_sync,
+            from dotsound_private_core.services.catalog_sync_policy import (
+                should_defer_new_artist_enrich,
             )
+
+            _queue_len = await _get_taskiq_queue_len()
+            if should_defer_new_artist_enrich(_queue_len):
+                logger.info(
+                    "artist_enrich_deferred_queue_busy",
+                    artist_id=artist.id,
+                    queue_len=_queue_len,
+                )
+            else:
+                await enrich_artist_task.kiq(
+                    artist_id=artist.id,
+                    skip_catalog_sync=skip_catalog_sync,
+                )
         except Exception:
             logger.exception(
                 "artist_enrich_schedule_failed",
@@ -272,6 +310,8 @@ class ArtistService:
             source="internal",
             external_id=None,
         )
+        if artist is None:
+            return None
         await self._backfill_track_links(artist)
         return artist
 
@@ -402,6 +442,8 @@ class ArtistService:
                     source="internal",
                     external_id=None,
                 )
+                if artist is None:
+                    continue
                 await self._repo.link_track(
                     track_id=track_id,
                     artist_id=artist.id,

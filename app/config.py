@@ -99,6 +99,7 @@ class AppSettings(BaseSettings):
     # the outer 600s httpx timeout fires.
     lyrics_audio_resolve_timeout_seconds: float = 45.0
     lyrics_audio_chunk_idle_seconds: float = 30.0
+    worker_third_party_audio_enabled: bool = False
     #: Used only for the internal ``/internal/audio-compute/audio`` proxy
     #: to ``cf-media.sndcdn.com``. The CDN often returns 403 to
     #: non-browser ``User-Agent``/missing ``Referer``.
@@ -186,10 +187,11 @@ class AppSettings(BaseSettings):
     # отдельно разбираться. См. план Фазы 7.
     sc_playback_mode: str = "stream"
     catalog_auto_sync_enabled: bool = False
-    catalog_station_sweep_limit: int = 20
-    catalog_station_sweep_batch_size: int = 5
-    catalog_full_sweep_limit: int = 10
-    catalog_full_sweep_batch_size: int = 5
+    artist_auto_discovery_enabled: bool = True
+    catalog_station_sweep_limit: int = 8
+    catalog_station_sweep_batch_size: int = 4
+    catalog_full_sweep_limit: int = 4
+    catalog_full_sweep_batch_size: int = 2
     catalog_reenrich_sweep_limit: int = 25
     artist_station_stale_threshold_days: int = 7
     artist_catalog_full_sync_stale_threshold_days: int = 30

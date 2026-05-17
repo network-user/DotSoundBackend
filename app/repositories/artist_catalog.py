@@ -382,15 +382,20 @@ class ArtistCatalogRepository(BaseRepository[ArtistCatalogRelease]):
         *,
         limit: int | None = None,
     ) -> list[int]:
-        """Artists whose SC station row is stale or missing."""
+        """Artists whose SC station row is stale or missing.
+
+        Ordered by ``enrichment_confidence DESC NULLS LAST`` so the
+        most well-known artists are refreshed first within each sweep
+        batch.
+        """
         from app.models.artist import Artist
 
         cutoff = datetime.now(UTC) - timedelta(days=threshold_days)
         stmt = (
-            select(distinct(ArtistCatalogRelease.artist_id))
+            select(Artist.id, Artist.enrichment_confidence)
             .join(
-                Artist,
-                Artist.id == ArtistCatalogRelease.artist_id,
+                ArtistCatalogRelease,
+                ArtistCatalogRelease.artist_id == Artist.id,
             )
             .where(
                 ArtistCatalogRelease.release_kind == _ARTIST_STATION_KIND,
@@ -398,11 +403,16 @@ class ArtistCatalogRepository(BaseRepository[ArtistCatalogRelease]):
                 | (ArtistCatalogRelease.synced_at < cutoff),
                 Artist.catalog_sync_enabled.is_(True),
             )
+            .distinct()
+            .order_by(
+                Artist.enrichment_confidence.desc().nullslast(),
+                Artist.id,
+            )
         )
         if limit is not None:
             stmt = stmt.limit(limit)
         rows = await self._session.execute(stmt)
-        return [r for (r,) in rows.all()]
+        return [int(r) for r, _ in rows.all()]
 
     async def find_stale_full_catalog_artist_ids(
         self,
@@ -411,7 +421,11 @@ class ArtistCatalogRepository(BaseRepository[ArtistCatalogRelease]):
         limit: int = 50,
     ) -> list[int]:
         """Artists with SC identity whose non-station catalog is stale or
-        missing entirely. Used by the periodic full-catalog sweep task."""
+        missing entirely. Used by the periodic full-catalog sweep task.
+
+        Ordered by ``enrichment_confidence DESC NULLS LAST`` so popular
+        artists are synced first within each sweep batch.
+        """
         from app.models.artist import Artist
 
         cutoff = datetime.now(UTC) - timedelta(days=threshold_days)
@@ -441,10 +455,95 @@ class ArtistCatalogRepository(BaseRepository[ArtistCatalogRelease]):
                     last_sync_sq.c.last_sync < cutoff,
                 ),
             )
+            .order_by(
+                Artist.enrichment_confidence.desc().nullslast(),
+                Artist.id,
+            )
             .limit(limit)
         )
         rows = await self._session.execute(stmt)
         return [r for (r,) in rows.all()]
+
+    async def find_artists_with_station_gap(
+        self,
+        min_track_count: int,
+        *,
+        offset: int = 0,
+        limit: int = 50,
+    ) -> tuple[list[tuple], int]:
+        """Artists eligible for station sync that either have no station
+        playlist or have fewer than *min_track_count* tracks in it.
+
+        Returns ``(rows, total)`` where each row is
+        ``(Artist, track_count: int | None, synced_at: datetime | None)``.
+        ``track_count`` is ``None`` when the artist has no station release.
+        Ordered ascending by track count (nulls first), then by artist id.
+        """
+        from app.models.artist import Artist
+
+        station_sq = (
+            select(
+                ArtistCatalogRelease.artist_id.label("artist_id"),
+                func.count(ArtistCatalogReleaseTrack.id).label(
+                    "track_count"
+                ),
+                func.max(ArtistCatalogRelease.synced_at).label("synced_at"),
+            )
+            .outerjoin(
+                ArtistCatalogReleaseTrack,
+                ArtistCatalogReleaseTrack.release_id
+                == ArtistCatalogRelease.id,
+            )
+            .where(
+                ArtistCatalogRelease.release_kind == _ARTIST_STATION_KIND,
+            )
+            .group_by(ArtistCatalogRelease.artist_id)
+            .subquery()
+        )
+        gap_filter = [
+            Artist.catalog_sync_enabled.is_(True),
+            Artist.soundcloud_user_id.isnot(None),
+            or_(
+                station_sq.c.artist_id.is_(None),
+                station_sq.c.track_count < min_track_count,
+            ),
+        ]
+        data_stmt = (
+            select(
+                Artist,
+                station_sq.c.track_count,
+                station_sq.c.synced_at,
+            )
+            .outerjoin(
+                station_sq,
+                station_sq.c.artist_id == Artist.id,
+            )
+            .where(*gap_filter)
+            .order_by(
+                station_sq.c.track_count.asc().nullsfirst(),
+                Artist.id,
+            )
+            .offset(offset)
+            .limit(limit)
+        )
+        count_stmt = (
+            select(func.count())
+            .select_from(Artist)
+            .outerjoin(
+                station_sq,
+                station_sq.c.artist_id == Artist.id,
+            )
+            .where(*gap_filter)
+        )
+        rows = await self._session.execute(data_stmt)
+        total = await self._session.scalar(count_stmt) or 0
+        return (
+            [
+                (artist, tc, sa)
+                for artist, tc, sa in rows.all()
+            ],
+            int(total),
+        )
 
     async def count_artists_by_enrichment_status(
         self,

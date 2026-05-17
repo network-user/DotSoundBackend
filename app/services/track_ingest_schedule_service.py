@@ -7,6 +7,7 @@ from typing import Any
 import structlog
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.models.track import Track
 from app.services import compute_queue_service as cqs
 from app.services.audio_embedding_dispatch import (
     enqueue_audio_embedding,
@@ -23,22 +24,31 @@ async def schedule_new_track_background_jobs(
     skip_lyrics: bool = False,
     catalog_payload: dict[str, Any] | None = None,
 ) -> None:
-    await cqs.enqueue_track_audio_features(
-        session,
-        track_id=track_id,
-        priority=10,
-    )
+    track = await session.get(Track, track_id)
+    has_local_audio = bool(track and track.file_key)
+    if has_local_audio:
+        await cqs.enqueue_track_audio_features(
+            session,
+            track_id=track_id,
+            priority=10,
+        )
+        await enqueue_audio_embedding(
+            session,
+            track_id=track_id,
+            audio_blob_key=f"track:{track_id}",
+            priority=8,
+        )
+    else:
+        logger.info(
+            "track_ingest_skipped_worker_audio_jobs",
+            track_id=track_id,
+            reason="no_local_audio",
+        )
     await cqs.enqueue_catalog_ingest_normalize(
         session,
         track_id=track_id,
         priority=5,
         payload=catalog_payload,
-    )
-    await enqueue_audio_embedding(
-        session,
-        track_id=track_id,
-        audio_blob_key=f"track:{track_id}",
-        priority=8,
     )
     if skip_lyrics:
         logger.info(

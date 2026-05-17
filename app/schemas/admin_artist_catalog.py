@@ -193,3 +193,29 @@ class AdminImportByScUrlResponse(BaseModel):
 class ArtistPipelineHealthResponse(BaseModel):
     enrichment_counts: dict[str, int]
     total: int
+
+
+class AdminStationGapItem(BaseModel):
+    id: int
+    name: str
+    image_key: str | None = None
+    soundcloud_user_id: int | None = None
+    station_track_count: int | None = None
+    station_synced_at: str | None = None
+
+
+class AdminStationGapResponse(BaseModel):
+    items: list[AdminStationGapItem]
+    total: int
+    min_tracks: int
+
+
+class AdminStationResyncBulkRequest(BaseModel):
+    artist_ids: list[int] = Field(..., min_length=1, max_length=200)
+    skip_background_lyrics: bool = False
+
+
+class AdminStationResyncBulkResponse(BaseModel):
+    queued: int
+    job_ids: dict[int, str | None]
+    errors: list[AdminCatalogBulkSyncError]

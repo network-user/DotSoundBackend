@@ -987,6 +987,38 @@ export const adminApi = {
       method: 'POST',
       body: { artist_ids: artistIds, bypass_cache: true },
     }),
+  getStationGapArtists: (params: {
+    min_tracks?: number
+    page?: number
+    size?: number
+  }) =>
+    adminFetch<{
+      items: Array<{
+        id: number
+        name: string
+        image_key: string | null
+        soundcloud_user_id: number | null
+        station_track_count: number | null
+        station_synced_at: string | null
+      }>
+      total: number
+      min_tracks: number
+    }>('/artists/station-gap', { query: params }),
+  bulkResyncStations: (
+    artistIds: number[],
+    skipBackgroundLyrics = false,
+  ) =>
+    adminFetch<{
+      queued: number
+      job_ids: Record<string, string | null>
+      errors: Array<{ artist_id: number; detail: string }>
+    }>('/artists/station-gap/resync-bulk', {
+      method: 'POST',
+      body: {
+        artist_ids: artistIds,
+        skip_background_lyrics: skipBackgroundLyrics,
+      },
+    }),
   listDeletedUsers: (params: {
     page?: number
     size?: number
