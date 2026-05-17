@@ -190,6 +190,14 @@ async def transcode_and_upload_local(
             await svc.set_hls_manifest_key(
                 blob=ab, hls_manifest_key=manifest_key
             )
+            # If the track was previously linked to a different blob (e.g.
+            # an imported track that was temporarily attached to the raw OGG
+            # blob while waiting for transcoding), release the old ref first
+            # so ref-counts stay accurate and the new MP3 blob can be linked.
+            if track.blob_id is not None and track.blob_id != ab.id:
+                await svc.try_release_for_track(track)
+                track.blob_id = None
+                track.blob_ref_freed = False
             await svc.attach_playback_blob(track, ab)
             track.processing_status = "active"
             track.file_size_bytes = len(mp3_data)

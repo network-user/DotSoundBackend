@@ -11,6 +11,7 @@ from dotsound_private_core.services import (
 )
 
 from app.config import settings
+from app.core import s3
 from app.core.db import AsyncSessionLocal
 from app.core.tkq import broker
 from app.models.import_job import ImportJob
@@ -29,6 +30,7 @@ from app.services.import_service import (
     clear_cancel_flag,
     is_cancel_flag_set,
 )
+from app.services.transcoding import transcode_and_upload
 
 
 def _lease_lost(job: ImportJob, expected_lease: str) -> bool:
@@ -288,6 +290,34 @@ async def process_import_job(job_id: int) -> None:
                     session.add(track)
                     await session.flush()
                     await blob_service.attach_playback_blob(track, audio_blob)
+
+                    # Schedule MP3 + HLS transcoding so the track plays on
+                    # all platforms (OGG Vorbis/Opus is not supported by iOS
+                    # Safari / Telegram WebView).  We write a one-off temp
+                    # copy because transcode_and_upload deletes its raw_key
+                    # after use and the CAS blob must not be removed.
+                    try:
+                        _tmp_key = (
+                            f"tmp-transcode/{uuid.uuid4().hex}.{ext}"
+                        )
+                        await s3.upload_object(
+                            _tmp_key,
+                            audio_bytes,
+                            mime or "audio/mpeg",
+                        )
+                        await transcode_and_upload.kiq(
+                            track_id=track.id,
+                            raw_key=_tmp_key,
+                            original_filename=f"audio.{ext}",
+                            source_sha256=audio_blob.content_sha256,
+                        )
+                    except Exception as _exc:
+                        logger.warning(
+                            "import_transcode_schedule_failed",
+                            track_id=track.id,
+                            title=title,
+                            error=str(_exc),
+                        )
 
                     try:
                         await library_repo.add(

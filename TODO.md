@@ -1,5 +1,21 @@
 # DotSound - TODO Tracker
 
+- [x] **Bugfix: Telegram-импортированные треки не воспроизводятся (2026-05-18)**
+  - **Причина**: `import_worker.py` сохранял OGG-аудио из Telegram без транскодирования. iOS
+    Safari / Telegram WebView не поддерживают `audio/ogg` → `MEDIA_ERR_SRC_NOT_SUPPORTED` →
+    фронтенд циклически ретраил play/stop до исчерпания `MAX_CONSECUTIVE_AUTO_SKIPS`.
+  - **Исправление `app/services/import_worker.py`**: после `attach_playback_blob` загружать
+    временную копию аудио в S3 (`tmp-transcode/{uuid}.{ext}`) и ставить
+    `transcode_and_upload.kiq(track.id, tmp_key, filename, source_sha256)`.
+    Ошибки планирования логируются (`import_transcode_schedule_failed`) и не ломают импорт.
+  - **Исправление `app/services/transcoding.py`**: в `transcode_and_upload_local` перед
+    `attach_playback_blob` — если трек уже прилинкован к другому blob (импортный OGC-blob),
+    освобождать старую ссылку через `try_release_for_track`, обнулять `blob_id`, после
+    чего нормально прикреплять новый MP3-blob.
+  - После фикса: новые импорты сразу ставятся в очередь транскодирования → трек доступен
+    в MP3+HLS; до завершения транскода воспроизводится OGG (работает на Android/Desktop,
+    на iOS — ошибка, но только один раз до готовности HLS).
+
 - [x] **Caching observability: split-метрика + legacy sweep (2026-05-18, follow-up)**
   - **Split-метрика** — `app/core/observability.py`: новый Counter
     `client_playback_source_chosen_total{chosen_source, surface}`,
