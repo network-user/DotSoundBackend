@@ -177,11 +177,23 @@ open at `https://your-domain.com/mini_app/`.
   override it in `.env`, the compose env still wins.
 - ClamAV (`UPLOAD_MALWARE_SCAN_MODE=clamav`) requires 4+ GB RAM. On
   smaller VPS use `lightweight`.
-- Database backups run via the `backup` profile. Activate with:
-  ```
-  docker compose -f docker-compose.yml -f docker-compose.prod.yml --profile backup up -d backup
-  ```
-  Configure retention and remote-rsync targets in `.env`.
+- Database and object-storage backups run automatically:
+  `docker-compose.prod.yml` removes the `backup` profile so the container
+  starts with the rest of the stack on every `./scripts/deploy.sh`
+  invocation. No manual `--profile backup` needed in production.
+  The backup container uses a custom image (`docker/Dockerfile.backup`)
+  that includes PostgreSQL client tools, `mc` (MinIO client), `gnupg`,
+  and `rsync`.
+  Cron schedule (UTC):
+  - `0 */6 * * *` — PostgreSQL-only dump every 6 hours.
+  - `0 3 * * *` — full backup (PostgreSQL + Redis + MinIO mirror +
+    configs + logs).
+  - `0 4 * * *` — healthcheck on the latest backup.
+  MinIO audio files are mirrored incrementally to `/backups/minio/` and
+  included in the remote rsync when `BACKUP_REMOTE_HOST` is set.
+  Configure in `.env`:
+  `BACKUP_ENCRYPTION_KEY`, `BACKUP_RETENTION_*`,
+  `BACKUP_REMOTE_HOST`, `BACKUP_REMOTE_SSH_KEY`, `MINIO_BACKUP_ENDPOINT`.
 - Compute worker (`compute-worker-cpu` / `compute-worker-gpu`) lives
   behind profiles. The default deploy does **not** start it; see the
   ComputeWorker README to run it on a dedicated host.

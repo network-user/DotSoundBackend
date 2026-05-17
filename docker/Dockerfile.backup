@@ -1,0 +1,11 @@
+FROM postgres:16-alpine
+
+ARG TARGETARCH=amd64
+
+RUN apk add --no-cache gnupg rsync curl \
+    && MC_ARCH=$([ "${TARGETARCH}" = "arm64" ] && echo "arm64" || echo "amd64") \
+    && curl -fsSL \
+        "https://dl.min.io/client/mc/release/linux-${MC_ARCH}/mc" \
+        -o /usr/local/bin/mc \
+    && chmod +x /usr/local/bin/mc \
+    && mc --version

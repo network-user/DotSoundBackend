@@ -1033,7 +1033,7 @@
     "commentHideSelf": "Hide for me"
   },
   "imported": {
-    "title": "Imported",
+    "title": "Imports",
     "loaded": "Showing: {{count}}",
     "empty": "Tracks you import from Telegram, SoundCloud, and other services will appear here",
     "loading": "Loading…",

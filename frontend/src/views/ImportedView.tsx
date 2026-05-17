@@ -19,18 +19,18 @@ const SOURCE_FILTERS: {
   labelKey: string
   apiValue?: string
 }[] = [
-  { key: 'all', labelKey: 'redesign.imported.sourceAll' },
+  { key: 'all', labelKey: 'imported.sourceAll' },
   {
     key: 'telegram',
-    labelKey: 'redesign.imported.sourceTelegram',
+    labelKey: 'imported.sourceTelegram',
     apiValue: 'telegram',
   },
   {
     key: 'soundcloud',
-    labelKey: 'redesign.imported.sourceSoundcloud',
+    labelKey: 'imported.sourceSoundcloud',
     apiValue: 'soundcloud',
   },
-  { key: 'other', labelKey: 'redesign.imported.sourceOther' },
+  { key: 'other', labelKey: 'imported.sourceOther' },
 ]
 
 const OTHER_SOURCES = new Set(['telegram', 'soundcloud'])
@@ -109,7 +109,7 @@ export function ImportedView({
   const headerMeta =
     Array.isArray(tracks) && tracks.length > 0 ? (
       <p className="rd-liked-meta">
-        {t('redesign.imported.loaded', {
+        {t('imported.loaded', {
           count: tracks.length,
         })}
       </p>
@@ -119,7 +119,7 @@ export function ImportedView({
     <div
       className="rd-liked-source"
       role="tablist"
-      aria-label={t('redesign.imported.sourceFilterAria')}
+      aria-label={t('imported.sourceFilterAria')}
     >
       {SOURCE_FILTERS.map(({ key, labelKey }) => (
         <MotionPress
@@ -148,7 +148,7 @@ export function ImportedView({
       </div>
       <TrackList
         tracks={tracks}
-        emptyMessage={t('redesign.imported.empty')}
+        emptyMessage={t('imported.empty')}
       />
       {hasMore && (
         <MotionPress
@@ -159,8 +159,8 @@ export function ImportedView({
           disabled={loading}
         >
           {loading
-            ? t('redesign.imported.loading')
-            : t('redesign.imported.showMore')}
+            ? t('imported.loading')
+            : t('imported.showMore')}
         </MotionPress>
       )}
     </>
@@ -178,7 +178,7 @@ export function ImportedView({
       className="view active rd-liked"
     >
       <div className="view-header rd-liked-header">
-        <h2>{t('redesign.imported.title')}</h2>
+        <h2>{t('imported.title')}</h2>
       </div>
       {list}
     </section>

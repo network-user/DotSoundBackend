@@ -105,10 +105,39 @@ check_configs() {
     fi
 }
 
+check_minio() {
+    local minio_dir="${BACKUP_ROOT}/minio"
+    local sentinel="${minio_dir}/.last_backup"
+
+    if [ ! -d "${minio_dir}" ]; then
+        log "WARN: MinIO mirror directory not found at ${minio_dir}"
+        return
+    fi
+
+    if [ ! -f "${sentinel}" ]; then
+        log "WARN: MinIO mirror exists but no .last_backup sentinel (never completed?)"
+        return
+    fi
+
+    local age_seconds
+    age_seconds=$(( $(date +%s) - $(stat -c%Y "${sentinel}" 2>/dev/null || \
+        stat -f%m "${sentinel}" 2>/dev/null || echo 0) ))
+    local age_hours=$(( age_seconds / 3600 ))
+
+    if [ "${age_hours}" -gt 26 ]; then
+        log "WARN: MinIO mirror stale — last backup ${age_hours}h ago"
+    else
+        local size
+        size=$(du -sh "${minio_dir}" | cut -f1)
+        log "OK: MinIO mirror present (${size}, ${age_hours}h ago)"
+    fi
+}
+
 check_pg
 check_size_regression
 check_redis
 check_configs
+check_minio
 
 if [ "${STATUS}" -eq 0 ]; then
     log "=== ALL CHECKS PASSED ==="

@@ -16,6 +16,10 @@ REMOTE_HOST="${BACKUP_REMOTE_HOST:-}"
 REMOTE_PATH="${BACKUP_REMOTE_PATH:-/backups/dotsound}"
 REMOTE_SSH_KEY="${BACKUP_REMOTE_SSH_KEY:-}"
 
+MINIO_ENDPOINT_URL="${MINIO_BACKUP_ENDPOINT:-http://minio:9000}"
+MINIO_ACCESS_KEY="${MINIO_ROOT_USER:-minioadmin}"
+MINIO_SECRET_KEY="${MINIO_ROOT_PASSWORD:-minioadmin}"
+
 MODE="${1:-full}"
 
 log() { echo "[$(date -Iseconds)] $*"; }
@@ -63,6 +67,26 @@ backup_redis() {
         log "Redis: done ($(du -sh "${BACKUP_DIR}/redis-dump.rdb" | cut -f1))"
     else
         log "Redis: no RDB file found, skipping"
+    fi
+}
+
+backup_minio() {
+    log "MinIO: mirroring to ${BACKUP_ROOT}/minio ..."
+    local minio_dir="${BACKUP_ROOT}/minio"
+    mkdir -p "${minio_dir}"
+
+    mc alias set dotsound \
+        "${MINIO_ENDPOINT_URL}" \
+        "${MINIO_ACCESS_KEY}" \
+        "${MINIO_SECRET_KEY}" \
+        --api S3v4 --quiet
+
+    if mc mirror --overwrite dotsound/ "${minio_dir}/"; then
+        touch "${minio_dir}/.last_backup"
+        log "MinIO: done ($(du -sh "${minio_dir}" | cut -f1))"
+    else
+        log "MinIO: mirror FAILED"
+        return 1
     fi
 }
 
@@ -143,9 +167,7 @@ sync_remote() {
     fi
     rsync -azP --delete \
         -e "${ssh_opts}" \
-        "${BACKUP_ROOT}/daily/" \
-        "${BACKUP_ROOT}/weekly/" \
-        "${BACKUP_ROOT}/monthly/" \
+        "${BACKUP_ROOT}/" \
         "${REMOTE_HOST}:${REMOTE_PATH}/" || {
         log "Remote sync: FAILED"
         return 1
@@ -153,13 +175,28 @@ sync_remote() {
     log "Remote sync: done"
 }
 
-backup_pg
-
-if [ "${MODE}" = "full" ]; then
-    backup_redis
-    backup_configs
-    backup_logs
-fi
+case "${MODE}" in
+    full)
+        backup_pg
+        backup_redis
+        backup_minio
+        backup_configs
+        backup_logs
+        ;;
+    pg)
+        backup_pg
+        ;;
+    redis)
+        backup_redis
+        ;;
+    minio)
+        backup_minio
+        ;;
+    *)
+        log "Unknown mode: ${MODE}"
+        exit 1
+        ;;
+esac
 
 rotate
 sync_remote || true

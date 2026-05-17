@@ -101,7 +101,7 @@ case "${MODE}" in
 
     log "Rolling app services"
     "${COMPOSE[@]}" up -d \
-      backend worker frontend caddy bot sc_id_refresher
+      backend worker frontend caddy bot sc_id_refresher backup
     if [ "${OBSERVABILITY:-0}" = "1" ]; then
       log "Starting observability stack"
       "${COMPOSE[@]}" up -d \
@@ -116,7 +116,7 @@ case "${MODE}" in
     wait_for_postgres
     run_migrations
     "${COMPOSE[@]}" up -d \
-      backend worker frontend caddy bot sc_id_refresher
+      backend worker frontend caddy bot sc_id_refresher backup
     if [ "${OBSERVABILITY:-0}" = "1" ]; then
       log "Starting observability stack"
       "${COMPOSE[@]}" up -d \
@@ -131,7 +131,7 @@ case "${MODE}" in
     "${COMPOSE[@]}" up -d postgres redis minio elasticsearch
     wait_for_postgres
     run_migrations
-    "${COMPOSE[@]}" up -d backend worker sc_id_refresher
+    "${COMPOSE[@]}" up -d backend worker sc_id_refresher backup
     ;;
 
   only-bot)

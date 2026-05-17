@@ -35,6 +35,11 @@ services:
   worker:
     volumes: !reset []
 
+  # Remove the backup profile in prod so the container starts automatically
+  # with the rest of the stack (mirrors sc_id_refresher pattern above).
+  backup:
+    profiles: !reset []
+
   frontend:
     ports: !reset []
 

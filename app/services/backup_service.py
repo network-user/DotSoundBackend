@@ -22,7 +22,7 @@ logger: structlog.stdlib.BoundLogger = structlog.get_logger(__name__)
 
 BACKUPS_ROOT = pathlib.Path("/backups")
 LOCAL_FALLBACK_ROOT = pathlib.Path("./backups")
-ALLOWED_KINDS: frozenset[str] = frozenset({"full", "pg", "redis"})
+ALLOWED_KINDS: frozenset[str] = frozenset({"full", "pg", "redis", "minio"})
 
 
 def _root() -> pathlib.Path:
