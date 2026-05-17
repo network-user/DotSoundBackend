@@ -42,6 +42,7 @@ class AdminActionLogRepository:
         *,
         user_id: int | None = None,
         action: str | None = None,
+        action_prefix: str | None = None,
         target_type: str | None = None,
         since: datetime | None = None,
         until: datetime | None = None,
@@ -57,6 +58,10 @@ class AdminActionLogRepository:
         if action is not None:
             query = query.where(AdminActionLog.action == action)
             count_query = count_query.where(AdminActionLog.action == action)
+        if action_prefix:
+            like = f"{action_prefix}%"
+            query = query.where(AdminActionLog.action.like(like))
+            count_query = count_query.where(AdminActionLog.action.like(like))
         if target_type is not None:
             query = query.where(AdminActionLog.target_type == target_type)
             count_query = count_query.where(

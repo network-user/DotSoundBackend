@@ -243,6 +243,15 @@ async def claim_next(
             job_type_candidates.add(alias)
     if not job_type_candidates:
         return None
+    from app.services.task_pause_service import paused_task_set
+
+    paused = await paused_task_set()
+    if paused:
+        job_type_candidates = {
+            jt for jt in job_type_candidates if jt not in paused
+        }
+        if not job_type_candidates:
+            return None
     now = _now()
     cw = (
         await session.execute(

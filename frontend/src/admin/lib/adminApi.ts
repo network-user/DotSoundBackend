@@ -1730,6 +1730,131 @@ export const adminApi = {
       lyrics_jobs: Record<string, number>
       upcoming_schedules: Array<Record<string, unknown>>
     }>('/tasks/overview'),
+  tasksListTypes: (periodHours = 24) =>
+    adminFetch<{
+      period_hours: number
+      paused: Record<
+        string,
+        {
+          paused_at: string | null
+          by_admin_id: number | null
+          reason: string | null
+        }
+      >
+      items: Array<{
+        name: string
+        kind: 'taskiq' | 'compute' | 'mixed'
+        paused: boolean
+        paused_meta: {
+          paused_at: string | null
+          by_admin_id: number | null
+          reason: string | null
+        } | null
+        by_status: Record<string, number>
+        done_period: number
+        failed_period: number
+        avg_duration_ms: number | null
+        max_duration_ms: number | null
+      }>
+    }>('/tasks/types', { query: { period_hours: periodHours } }),
+  tasksPauseType: (name: string, reason?: string) =>
+    adminFetch<{
+      task_name: string
+      paused: boolean
+      meta: Record<string, unknown>
+    }>(
+      `/tasks/types/${encodeURIComponent(name)}/pause`,
+      { method: 'POST', body: { reason: reason ?? null } },
+    ),
+  tasksResumeType: (name: string) =>
+    adminFetch<{
+      task_name: string
+      paused: boolean
+      removed: boolean
+    }>(`/tasks/types/${encodeURIComponent(name)}/resume`, {
+      method: 'POST',
+      body: {},
+    }),
+  tasksListWorkers: () =>
+    adminFetch<{
+      workers: Array<{
+        id: string
+        name: string
+        profile: string
+        active: boolean
+        max_concurrent_jobs: number
+        last_seen_at: string | null
+        last_ip: string | null
+        revoked_at: string | null
+        suspended_until: string | null
+        suspended_reason: string | null
+        claims_paused_until: string | null
+        claims_pause_reason: string | null
+        worker_package_version: string | null
+      }>
+      scheduler_leader: {
+        owner: string | null
+        ttl_seconds: number | null
+      }
+    }>('/tasks/workers'),
+  tasksListAudit: (params: {
+    page?: number
+    size?: number
+    action_prefix?: string
+    user_id?: number
+  }) =>
+    adminFetch<{
+      items: Array<{
+        id: number
+        user_id: number
+        action: string
+        target_type: string | null
+        target_id: string | null
+        ip: string | null
+        meta: Record<string, unknown> | null
+        created_at: string
+      }>
+      total: number
+      page: number
+      size: number
+    }>('/tasks/audit', { query: params }),
+  tasksPurgeBackgroundJobs: (params: {
+    older_than_hours: number
+    statuses?: string[]
+    name?: string
+  }) =>
+    adminFetch<{
+      deleted: number
+      older_than_hours: number
+      statuses: string[]
+    }>('/tasks/jobs/purge', {
+      method: 'POST',
+      body: params,
+    }),
+  tasksPurgeComputeJobs: (params: {
+    older_than_hours: number
+    status?: string
+  }) =>
+    adminFetch<{
+      deleted: number
+      older_than_hours: number
+      status: string
+      remaining: number
+    }>('/tasks/compute-jobs/purge', {
+      method: 'POST',
+      body: params,
+    }),
+  tasksListAllowed: () =>
+    adminFetch<{ tasks: string[] }>('/tasks/allowed'),
+  tasksRunAllowed: (taskName: string, payload?: Record<string, unknown>) =>
+    adminFetch<{
+      task_id: string | null
+      task_name: string
+      queued: boolean
+    }>(`/tasks/run/${encodeURIComponent(taskName)}`, {
+      method: 'POST',
+      body: payload ?? {},
+    }),
   listAudit: (params: {
     user_id?: number
     action?: string

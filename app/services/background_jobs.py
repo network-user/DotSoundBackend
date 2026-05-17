@@ -33,6 +33,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.db import AsyncSessionLocal
 from app.models.background_job import BackgroundJob
 from app.services.idempotency import acquire_idempotency_slot
+from app.services.task_pause_service import TaskPaused, is_task_paused
 
 logger: structlog.stdlib.BoundLogger = structlog.get_logger(__name__)
 
@@ -43,6 +44,13 @@ class IdempotencySkipped(Exception):
     def __init__(self, key: str) -> None:
         super().__init__(f"idempotency slot taken: {key}")
         self.key = key
+
+
+__all__ = [
+    "IdempotencySkipped",
+    "TaskPaused",
+    "enqueue",
+]
 
 
 class TaskKicker(Protocol):
@@ -84,6 +92,13 @@ async def enqueue(
     in flight (caller decides whether to swallow or propagate).
     """
     payload = dict(payload or {})
+
+    if await is_task_paused(task.task_name):
+        logger.info(
+            "background_job_paused_skip",
+            task=task.task_name,
+        )
+        raise TaskPaused(task.task_name)
 
     if idempotency_key is not None:
         ok = await acquire_idempotency_slot(

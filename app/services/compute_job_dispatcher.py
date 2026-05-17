@@ -73,6 +73,14 @@ async def dispatch_compute_job(
         force_offload=force_offload,
     )
     if should_enqueue:
+        from app.services.task_pause_service import is_task_paused
+
+        if await is_task_paused(canonical_type):
+            logger.info(
+                "compute_job_dispatch_paused_skipped",
+                job_type=canonical_type,
+            )
+            return ComputeDispatchResult(status="paused")
         job = await q.enqueue(
             session,
             job_type=canonical_type,

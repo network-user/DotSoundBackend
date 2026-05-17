@@ -770,8 +770,7 @@ async def playback_repair_summary(
         raise HTTPException(
             status_code=400,
             detail=(
-                "too many job ids; "
-                f"max {_PLAYBACK_REPAIR_SUMMARY_LIMIT}"
+                "too many job ids; " f"max {_PLAYBACK_REPAIR_SUMMARY_LIMIT}"
             ),
         )
     rows = [
@@ -792,8 +791,7 @@ async def playback_repair_summary(
             select(Track.id, Track.sc_url).where(Track.id.in_(track_ids))
         )
         current_sc_urls = {
-            int(track_id): sc_url
-            for track_id, sc_url in track_rows.all()
+            int(track_id): sc_url for track_id, sc_url in track_rows.all()
         }
     progress_by_job: dict[str, str] = {}
     for row in rows:
@@ -881,12 +879,8 @@ async def playback_repair_summary(
         }
         if row.status in _ACTIVE_BACKGROUND_JOB_STATUSES:
             items.append(item)
-            if (
-                current is None
-                or (
-                    row.status == "running"
-                    and current.get("status") != "running"
-                )
+            if current is None or (
+                row.status == "running" and current.get("status") != "running"
             ):
                 current = item
 
@@ -921,8 +915,7 @@ async def retry_unresolved_playback_repairs(
         raise HTTPException(
             status_code=400,
             detail=(
-                "too many job ids; "
-                f"max {_PLAYBACK_REPAIR_SUMMARY_LIMIT}"
+                "too many job ids; " f"max {_PLAYBACK_REPAIR_SUMMARY_LIMIT}"
             ),
         )
     rows = [
@@ -1284,3 +1277,461 @@ async def run_schedule_now(
             detail=("schedule not found or task not registered"),
         )
     return {"job_id": job_id, "schedule_id": schedule_id}
+
+
+# ---------------------------------------------------------------------------
+# Dispatcher panel: per-type metrics, pause/resume, workers, audit, purge
+# ---------------------------------------------------------------------------
+
+
+_PURGEABLE_BG_STATUSES: frozenset[str] = frozenset(
+    {"done", "failed", "failed_terminal", "cancelled"},
+)
+
+
+@router.get("/types")
+async def list_task_types(
+    period_hours: int = Query(24, ge=1, le=720),
+    _admin: User = Depends(require_capability("tasks.manage")),
+    session: AsyncSession = Depends(get_db),
+) -> dict[str, Any]:
+    """Per-task-name aggregate for the dispatcher panel.
+
+    Walks ``background_jobs`` (Taskiq layer) and ``compute_jobs``
+    (worker layer) and folds them into a single ``items`` list grouped
+    by task name. Pause flags are returned so the UI can render the
+    toggle in one round-trip.
+    """
+    from datetime import UTC, datetime, timedelta
+
+    from sqlalchemy import func as sa_func
+
+    from app.models.compute_job import ComputeJob
+    from app.services.task_pause_service import list_paused_tasks
+
+    hours = max(1, min(720, int(period_hours)))
+    start = datetime.now(UTC) - timedelta(hours=hours)
+
+    bg_rows = (
+        await session.execute(
+            select(
+                BackgroundJob.name,
+                BackgroundJob.status,
+                sa_func.count(BackgroundJob.id),
+            ).group_by(BackgroundJob.name, BackgroundJob.status)
+        )
+    ).all()
+
+    bg_perf = (
+        await session.execute(
+            select(
+                BackgroundJob.name,
+                sa_func.count(BackgroundJob.id),
+                sa_func.avg(BackgroundJob.duration_ms),
+                sa_func.max(BackgroundJob.duration_ms),
+            )
+            .where(
+                BackgroundJob.status == "done",
+                BackgroundJob.finished_at >= start,
+            )
+            .group_by(BackgroundJob.name)
+        )
+    ).all()
+
+    bg_failed_period = (
+        await session.execute(
+            select(
+                BackgroundJob.name,
+                sa_func.count(BackgroundJob.id),
+            )
+            .where(
+                BackgroundJob.status.in_(("failed", "failed_terminal")),
+                BackgroundJob.finished_at >= start,
+            )
+            .group_by(BackgroundJob.name)
+        )
+    ).all()
+
+    compute_rows = (
+        await session.execute(
+            select(
+                ComputeJob.job_type,
+                ComputeJob.status,
+                sa_func.count(ComputeJob.id),
+            ).group_by(ComputeJob.job_type, ComputeJob.status)
+        )
+    ).all()
+
+    paused = await list_paused_tasks()
+
+    items: dict[str, dict[str, Any]] = {}
+
+    def _ensure(name: str, kind: str) -> dict[str, Any]:
+        bucket = items.setdefault(
+            name,
+            {
+                "name": name,
+                "kind": kind,
+                "paused": False,
+                "paused_meta": None,
+                "by_status": {},
+                "done_period": 0,
+                "failed_period": 0,
+                "avg_duration_ms": None,
+                "max_duration_ms": None,
+            },
+        )
+        if bucket["kind"] != kind:
+            bucket["kind"] = "mixed"
+        return bucket
+
+    for name, status, count in bg_rows:
+        bucket = _ensure(str(name), "taskiq")
+        bucket["by_status"][str(status)] = int(count or 0)
+
+    for name, count, avg_ms, max_ms in bg_perf:
+        bucket = _ensure(str(name), "taskiq")
+        bucket["done_period"] = int(count or 0)
+        bucket["avg_duration_ms"] = (
+            int(round(float(avg_ms))) if avg_ms is not None else None
+        )
+        bucket["max_duration_ms"] = int(max_ms) if max_ms is not None else None
+
+    for name, count in bg_failed_period:
+        bucket = _ensure(str(name), "taskiq")
+        bucket["failed_period"] = int(count or 0)
+
+    for job_type, status, count in compute_rows:
+        bucket = _ensure(str(job_type), "compute")
+        bucket["by_status"][str(status)] = bucket["by_status"].get(
+            str(status), 0
+        ) + int(count or 0)
+
+    for name, meta in paused.items():
+        bucket = _ensure(name, "taskiq")
+        bucket["paused"] = True
+        bucket["paused_meta"] = meta
+
+    sorted_items = sorted(
+        items.values(),
+        key=lambda b: (
+            -sum(b["by_status"].values()),
+            b["name"],
+        ),
+    )
+    return {
+        "period_hours": hours,
+        "paused": paused,
+        "items": sorted_items,
+    }
+
+
+class TaskPauseRequest(BaseModel):
+    reason: str | None = Field(default=None, max_length=200)
+
+
+@router.post("/types/{task_name}/pause")
+async def pause_task_endpoint(
+    task_name: str,
+    request: Request,
+    body: TaskPauseRequest = Body(default_factory=TaskPauseRequest),
+    admin: User = Depends(require_step_up("tasks.manage")),
+    session: AsyncSession = Depends(get_db),
+) -> dict[str, Any]:
+    from app.services.task_pause_service import pause_task
+
+    meta = await pause_task(
+        task_name,
+        by_admin_id=admin.id,
+        reason=body.reason,
+    )
+    await AdminActionLogRepository(session).write(
+        user_id=admin.id,
+        action="tasks.types.pause",
+        target_type="task_type",
+        target_id=task_name[:128],
+        ip=(request.client.host if request.client else None),
+        meta={"reason": body.reason},
+    )
+    await session.commit()
+    return {"task_name": task_name, "paused": True, "meta": meta}
+
+
+@router.post("/types/{task_name}/resume")
+async def resume_task_endpoint(
+    task_name: str,
+    request: Request,
+    admin: User = Depends(require_step_up("tasks.manage")),
+    session: AsyncSession = Depends(get_db),
+) -> dict[str, Any]:
+    from app.services.task_pause_service import resume_task
+
+    removed = await resume_task(task_name)
+    await AdminActionLogRepository(session).write(
+        user_id=admin.id,
+        action="tasks.types.resume",
+        target_type="task_type",
+        target_id=task_name[:128],
+        ip=(request.client.host if request.client else None),
+        meta=None,
+    )
+    await session.commit()
+    return {
+        "task_name": task_name,
+        "paused": False,
+        "removed": removed,
+    }
+
+
+@router.get("/workers")
+async def list_workers(
+    _admin: User = Depends(require_capability("tasks.manage")),
+    session: AsyncSession = Depends(get_db),
+) -> dict[str, Any]:
+    """Compute workers + Taskiq scheduler leader presence."""
+    from app.models.compute_worker import ComputeWorker
+
+    rows = (
+        (
+            await session.execute(
+                select(ComputeWorker).order_by(
+                    ComputeWorker.last_seen_at.desc().nullslast(),
+                    ComputeWorker.id,
+                )
+            )
+        )
+        .scalars()
+        .all()
+    )
+
+    workers: list[dict[str, Any]] = []
+    for w in rows:
+        workers.append(
+            {
+                "id": w.id,
+                "name": w.name,
+                "profile": w.profile,
+                "active": w.active,
+                "max_concurrent_jobs": w.max_concurrent_jobs,
+                "last_seen_at": w.last_seen_at,
+                "last_ip": w.last_ip,
+                "revoked_at": w.revoked_at,
+                "suspended_until": w.suspended_until,
+                "suspended_reason": w.suspended_reason,
+                "claims_paused_until": w.claims_paused_until,
+                "claims_pause_reason": w.claims_pause_reason,
+                "worker_package_version": (w.worker_package_version),
+            }
+        )
+
+    leader_owner: str | None = None
+    leader_ttl: int | None = None
+    try:
+        redis = get_redis_client()
+        raw = await redis.get("bgjob:scheduler:leader")
+        if raw is not None:
+            leader_owner = raw.decode() if isinstance(raw, bytes) else str(raw)
+            ttl = await redis.ttl("bgjob:scheduler:leader")
+            leader_ttl = int(ttl) if ttl is not None else None
+    except Exception:
+        logger.warning("admin_workers_leader_lookup_failed")
+
+    return {
+        "workers": workers,
+        "scheduler_leader": {
+            "owner": leader_owner,
+            "ttl_seconds": leader_ttl,
+        },
+    }
+
+
+@router.get("/audit")
+async def list_audit(
+    page: int = Query(1, ge=1, le=1000),
+    size: int = Query(50, ge=1, le=200),
+    action_prefix: str = Query(
+        "tasks.",
+        max_length=64,
+        description=(
+            "Prefix for the action column. Defaults to 'tasks.' so the "
+            "panel only shows task-related admin actions."
+        ),
+    ),
+    user_id: int | None = Query(None, ge=1),
+    _admin: User = Depends(require_capability("tasks.manage")),
+    session: AsyncSession = Depends(get_db),
+) -> dict[str, Any]:
+    repo = AdminActionLogRepository(session)
+    rows, total = await repo.list_paginated(
+        page=page,
+        size=size,
+        action_prefix=action_prefix or None,
+        user_id=user_id,
+    )
+    items = [
+        {
+            "id": int(r.id),
+            "user_id": int(r.user_id),
+            "action": r.action,
+            "target_type": r.target_type,
+            "target_id": r.target_id,
+            "ip": r.ip,
+            "meta": r.meta,
+            "created_at": r.created_at,
+        }
+        for r in rows
+    ]
+    return {
+        "items": items,
+        "total": total,
+        "page": page,
+        "size": size,
+    }
+
+
+class BackgroundJobsPurgeRequest(BaseModel):
+    older_than_hours: int = Field(default=24, ge=1, le=24 * 90)
+    statuses: list[str] = Field(
+        default_factory=lambda: [
+            "done",
+            "failed",
+            "failed_terminal",
+            "cancelled",
+        ],
+    )
+    name: str | None = Field(default=None, max_length=96)
+
+
+class BackgroundJobsPurgeResponse(BaseModel):
+    deleted: int
+    older_than_hours: int
+    statuses: list[str]
+
+
+@router.post(
+    "/jobs/purge",
+    response_model=BackgroundJobsPurgeResponse,
+)
+async def purge_background_jobs(
+    body: BackgroundJobsPurgeRequest,
+    request: Request,
+    admin: User = Depends(require_step_up("tasks.manage")),
+    session: AsyncSession = Depends(get_db),
+) -> BackgroundJobsPurgeResponse:
+    """Hard-delete terminal ``background_jobs`` rows older than cutoff.
+
+    Refuses to touch active statuses (``queued``/``running``/
+    ``cancelling``) — those go through ``cancel-active`` first.
+    """
+    from datetime import UTC, datetime, timedelta
+
+    from sqlalchemy import delete as sa_delete
+
+    statuses = [s for s in body.statuses if s in _PURGEABLE_BG_STATUSES]
+    if not statuses:
+        raise HTTPException(
+            status_code=400,
+            detail="no terminal statuses selected",
+        )
+
+    cutoff = datetime.now(UTC) - timedelta(hours=body.older_than_hours)
+    stmt = sa_delete(BackgroundJob).where(
+        BackgroundJob.status.in_(statuses),
+        BackgroundJob.created_at < cutoff,
+    )
+    if body.name:
+        stmt = stmt.where(BackgroundJob.name == body.name)
+    result = await session.execute(stmt)
+    await session.commit()
+    deleted = int(result.rowcount or 0)
+
+    await AdminActionLogRepository(session).write(
+        user_id=admin.id,
+        action="tasks.background_jobs.purge",
+        target_type="background_job",
+        target_id="bulk",
+        ip=(request.client.host if request.client else None),
+        meta={
+            "older_than_hours": body.older_than_hours,
+            "statuses": statuses,
+            "name": body.name,
+            "deleted": deleted,
+        },
+    )
+    await session.commit()
+    return BackgroundJobsPurgeResponse(
+        deleted=deleted,
+        older_than_hours=body.older_than_hours,
+        statuses=statuses,
+    )
+
+
+class ComputeJobsPurgeRequest(BaseModel):
+    older_than_hours: int = Field(default=24, ge=1, le=24 * 30)
+    status: str = Field(default="pending", max_length=16)
+
+
+class ComputeJobsPurgeResponse(BaseModel):
+    deleted: int
+    older_than_hours: int
+    status: str
+    remaining: int
+
+
+@router.post(
+    "/compute-jobs/purge",
+    response_model=ComputeJobsPurgeResponse,
+)
+async def purge_compute_jobs_endpoint(
+    body: ComputeJobsPurgeRequest,
+    request: Request,
+    admin: User = Depends(require_step_up("tasks.manage")),
+    session: AsyncSession = Depends(get_db),
+) -> ComputeJobsPurgeResponse:
+    from datetime import UTC, datetime, timedelta
+
+    from sqlalchemy import delete as sa_delete
+    from sqlalchemy import func as sa_func
+
+    from app.models.compute_job import ComputeJob
+
+    if body.status not in {"pending", "failed", "succeeded"}:
+        raise HTTPException(
+            status_code=400,
+            detail="status must be one of pending|failed|succeeded",
+        )
+    cutoff = datetime.now(UTC) - timedelta(hours=body.older_than_hours)
+    result = await session.execute(
+        sa_delete(ComputeJob).where(
+            ComputeJob.status == body.status,
+            ComputeJob.created_at < cutoff,
+        )
+    )
+    await session.commit()
+    deleted = int(result.rowcount or 0)
+    remaining_row = await session.execute(
+        select(sa_func.count(ComputeJob.id)).where(
+            ComputeJob.status == body.status
+        )
+    )
+    remaining = int(remaining_row.scalar_one() or 0)
+
+    await AdminActionLogRepository(session).write(
+        user_id=admin.id,
+        action="tasks.compute_jobs.purge",
+        target_type="compute_job",
+        target_id="bulk",
+        ip=(request.client.host if request.client else None),
+        meta={
+            "older_than_hours": body.older_than_hours,
+            "status": body.status,
+            "deleted": deleted,
+        },
+    )
+    await session.commit()
+    return ComputeJobsPurgeResponse(
+        deleted=deleted,
+        older_than_hours=body.older_than_hours,
+        status=body.status,
+        remaining=remaining,
+    )

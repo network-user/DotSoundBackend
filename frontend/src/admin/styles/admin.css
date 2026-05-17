@@ -1481,6 +1481,41 @@
   color: var(--text-secondary);
 }
 
+.admin-field {
+  display: inline-flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  font-size: var(--fs-12);
+  color: var(--text-secondary);
+}
+
+.admin-field > span,
+.admin-field > legend {
+  font-size: var(--fs-12);
+  color: var(--text-secondary);
+}
+
+.admin-field > input,
+.admin-field > select,
+.admin-field > textarea {
+  font-size: var(--fs-13);
+  padding: var(--space-2);
+  border: 1px solid var(--border);
+  border-radius: var(--r-sm, 6px);
+  background: var(--bg, #fff);
+  color: var(--text);
+  font-family: inherit;
+}
+
+.admin-field > textarea {
+  resize: vertical;
+  min-height: 6em;
+}
+
+.admin-toolbar--compact {
+  gap: var(--space-1);
+}
+
 .admin-link {
   color: var(--text);
   text-decoration: underline;

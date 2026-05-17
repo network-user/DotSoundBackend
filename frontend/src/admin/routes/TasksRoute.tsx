@@ -50,6 +50,49 @@ interface BackgroundJobRow {
   live?: LiveProgress | null
 }
 
+interface TaskTypeRow {
+  name: string
+  kind: 'taskiq' | 'compute' | 'mixed'
+  paused: boolean
+  paused_meta: {
+    paused_at: string | null
+    by_admin_id: number | null
+    reason: string | null
+  } | null
+  by_status: Record<string, number>
+  done_period: number
+  failed_period: number
+  avg_duration_ms: number | null
+  max_duration_ms: number | null
+}
+
+interface WorkerRow {
+  id: string
+  name: string
+  profile: string
+  active: boolean
+  max_concurrent_jobs: number
+  last_seen_at: string | null
+  last_ip: string | null
+  revoked_at: string | null
+  suspended_until: string | null
+  suspended_reason: string | null
+  claims_paused_until: string | null
+  claims_pause_reason: string | null
+  worker_package_version: string | null
+}
+
+interface AuditRow {
+  id: number
+  user_id: number
+  action: string
+  target_type: string | null
+  target_id: string | null
+  ip: string | null
+  meta: Record<string, unknown> | null
+  created_at: string
+}
+
 const CATALOG_SYNC_BG_FILTER = 'sync_artist_catalog'
 const PLAYBACK_REPAIR_BG_FILTER = 'repair_track_playback_task'
 const ACTIVE_BG_STATUSES = [
@@ -612,6 +655,241 @@ export function TasksRoute() {
     refetchIntervalInBackground: false,
   })
 
+  const [typesPeriodHours, setTypesPeriodHours] = useState(24)
+  const taskTypes = useQuery({
+    queryKey: ['admin', 'tasks', 'types', typesPeriodHours],
+    queryFn: () => adminApi.tasksListTypes(typesPeriodHours),
+    refetchInterval: 15_000,
+    refetchIntervalInBackground: false,
+  })
+  const workers = useQuery({
+    queryKey: ['admin', 'tasks', 'workers'],
+    queryFn: () => adminApi.tasksListWorkers(),
+    refetchInterval: 10_000,
+    refetchIntervalInBackground: false,
+  })
+  const audit = useQuery({
+    queryKey: ['admin', 'tasks', 'audit'],
+    queryFn: () =>
+      adminApi.tasksListAudit({
+        page: 1,
+        size: 50,
+        action_prefix: 'tasks.',
+      }),
+    refetchInterval: 15_000,
+    refetchIntervalInBackground: false,
+  })
+  const allowedTasks = useQuery({
+    queryKey: ['admin', 'tasks', 'allowed'],
+    queryFn: () => adminApi.tasksListAllowed(),
+    staleTime: 60_000,
+  })
+
+  const [typeFilter, setTypeFilter] = useState('')
+  const [typeKindFilter, setTypeKindFilter] = useState<
+    'all' | 'taskiq' | 'compute' | 'mixed' | 'paused'
+  >('all')
+  const [typeSort, setTypeSort] = useState<
+    'volume' | 'name' | 'failed' | 'avg' | 'paused'
+  >('volume')
+
+  const pauseTypeMutation = useMutation({
+    mutationFn: (params: { name: string; reason?: string }) =>
+      adminApi.tasksPauseType(params.name, params.reason),
+    onSuccess: () => {
+      qc.invalidateQueries({
+        queryKey: ['admin', 'tasks', 'types'],
+      })
+      qc.invalidateQueries({
+        queryKey: ['admin', 'tasks', 'audit'],
+      })
+    },
+  })
+  const resumeTypeMutation = useMutation({
+    mutationFn: (name: string) => adminApi.tasksResumeType(name),
+    onSuccess: () => {
+      qc.invalidateQueries({
+        queryKey: ['admin', 'tasks', 'types'],
+      })
+      qc.invalidateQueries({
+        queryKey: ['admin', 'tasks', 'audit'],
+      })
+    },
+  })
+
+  const handlePauseType = async (name: string) => {
+    const ok = await showConfirm(
+      t('admin.tasks.dispatcher.pauseConfirm', {
+        name,
+        defaultValue:
+          'Поставить тип задач "{{name}}" на паузу? Новые задачи ' +
+          'этого типа не будут планироваться. Уже исполняющиеся ' +
+          'продолжат работать до завершения.',
+      }),
+      { danger: true },
+    )
+    if (!ok) return
+    pauseTypeMutation.mutate({ name })
+  }
+  const handleResumeType = async (name: string) => {
+    resumeTypeMutation.mutate(name)
+  }
+
+  const [purgeBgOpen, setPurgeBgOpen] = useState(false)
+  const [purgeBgHours, setPurgeBgHours] = useState(24)
+  const [purgeBgStatuses, setPurgeBgStatuses] = useState<string[]>([
+    'done',
+    'failed',
+    'failed_terminal',
+    'cancelled',
+  ])
+  const [purgeBgName, setPurgeBgName] = useState('')
+  const purgeBgMutation = useMutation({
+    mutationFn: (params: {
+      older_than_hours: number
+      statuses: string[]
+      name?: string
+    }) => adminApi.tasksPurgeBackgroundJobs(params),
+    onSuccess: (data) => {
+      qc.invalidateQueries({
+        queryKey: ['admin', 'tasks', 'background-jobs'],
+      })
+      qc.invalidateQueries({
+        queryKey: ['admin', 'tasks', 'overview'],
+      })
+      qc.invalidateQueries({
+        queryKey: ['admin', 'tasks', 'audit'],
+      })
+      showIsland({
+        kind: 'toast',
+        title: t('admin.tasks.dispatcher.purgeBgDone', {
+          count: data.deleted,
+          defaultValue: 'Удалено: {{count}} строк',
+        }),
+        durationMs: 3000,
+      })
+      setPurgeBgOpen(false)
+    },
+    onError: () => {
+      showIsland({
+        kind: 'error',
+        title: t('admin.tasks.dispatcher.purgeBgFailed', {
+          defaultValue: 'Не удалось очистить очередь',
+        }),
+        durationMs: 4000,
+      })
+    },
+  })
+  const handlePurgeBg = async () => {
+    if (purgeBgStatuses.length === 0) return
+    const ok = await showConfirm(
+      t('admin.tasks.dispatcher.purgeBgConfirm', {
+        defaultValue:
+          'Жёстко удалить выбранные строки background_jobs старше ' +
+          'выбранного возраста? Действие необратимо.',
+      }),
+      { danger: true },
+    )
+    if (!ok) return
+    purgeBgMutation.mutate({
+      older_than_hours: purgeBgHours,
+      statuses: purgeBgStatuses,
+      name: purgeBgName.trim() || undefined,
+    })
+  }
+  const purgeComputeMutation = useMutation({
+    mutationFn: (params: {
+      older_than_hours: number
+      status: string
+    }) => adminApi.tasksPurgeComputeJobs(params),
+    onSuccess: (data) => {
+      qc.invalidateQueries({
+        queryKey: ['admin', 'tasks', 'overview'],
+      })
+      qc.invalidateQueries({
+        queryKey: ['admin', 'tasks', 'audit'],
+      })
+      showIsland({
+        kind: 'toast',
+        title: t('admin.tasks.dispatcher.purgeComputeDone', {
+          count: data.deleted,
+          defaultValue: 'Compute jobs удалено: {{count}}',
+        }),
+        durationMs: 3000,
+      })
+    },
+  })
+
+  const [runOpen, setRunOpen] = useState(false)
+  const [runName, setRunName] = useState<string>('')
+  const [runPayload, setRunPayload] = useState<string>('{}')
+  const runMutation = useMutation({
+    mutationFn: (params: {
+      name: string
+      payload: Record<string, unknown>
+    }) => adminApi.tasksRunAllowed(params.name, params.payload),
+    onSuccess: () => {
+      qc.invalidateQueries({
+        queryKey: ['admin', 'tasks', 'background-jobs'],
+      })
+      qc.invalidateQueries({
+        queryKey: ['admin', 'tasks', 'types'],
+      })
+      qc.invalidateQueries({
+        queryKey: ['admin', 'tasks', 'audit'],
+      })
+      showIsland({
+        kind: 'toast',
+        title: t('admin.tasks.dispatcher.runDone', {
+          defaultValue: 'Задача поставлена в очередь',
+        }),
+        durationMs: 3000,
+      })
+      setRunOpen(false)
+    },
+    onError: (err: Error) => {
+      showIsland({
+        kind: 'error',
+        title: t('admin.tasks.dispatcher.runFailed', {
+          message: err.message,
+          defaultValue: 'Не удалось запустить: {{message}}',
+        }),
+        durationMs: 5000,
+      })
+    },
+  })
+  const handleRunManual = () => {
+    if (!runName) {
+      showIsland({
+        kind: 'error',
+        title: t('admin.tasks.dispatcher.runNoTask', {
+          defaultValue: 'Выберите задачу',
+        }),
+        durationMs: 2500,
+      })
+      return
+    }
+    let parsed: Record<string, unknown> = {}
+    try {
+      const trimmed = runPayload.trim()
+      parsed = trimmed ? JSON.parse(trimmed) : {}
+      if (typeof parsed !== 'object' || Array.isArray(parsed)) {
+        throw new Error('payload must be a JSON object')
+      }
+    } catch (e) {
+      showIsland({
+        kind: 'error',
+        title: t('admin.tasks.dispatcher.runBadJson', {
+          message: (e as Error).message,
+          defaultValue: 'Некорректный JSON: {{message}}',
+        }),
+        durationMs: 4500,
+      })
+      return
+    }
+    runMutation.mutate({ name: runName, payload: parsed })
+  }
+
   const invalidateBg = () => {
     qc.invalidateQueries({
       queryKey: ['admin', 'tasks', 'background-jobs'],
@@ -1140,6 +1418,305 @@ export function TasksRoute() {
             </ul>
           </>
         )}
+      </section>
+      <section className="admin-card" id="dispatcher-types">
+        <div className="admin-toolbar">
+          <h2 style={{ flex: 1 }}>
+            {t('admin.tasks.dispatcher.title', {
+              defaultValue:
+                'Диспетчер: типы задач, пауза, ручной запуск',
+            })}
+          </h2>
+          <MotionPress
+            variant="primary"
+            haptic="light"
+            onClick={() => setRunOpen(true)}
+          >
+            {t('admin.tasks.dispatcher.runButton', {
+              defaultValue: 'Запустить задачу…',
+            })}
+          </MotionPress>
+          <MotionPress
+            variant="danger"
+            haptic="medium"
+            onClick={() => setPurgeBgOpen(true)}
+          >
+            {t('admin.tasks.dispatcher.purgeButton', {
+              defaultValue: 'Очистить background_jobs…',
+            })}
+          </MotionPress>
+        </div>
+        <p className="admin-card__sub">
+          {t('admin.tasks.dispatcher.hint', {
+            defaultValue:
+              'Сводка по типу задач за окно. Пауза останавливает ' +
+              'только новые планирования: запущенные задачи ' +
+              'завершатся сами. Все действия логируются в audit.',
+          })}
+        </p>
+        <div className="admin-toolbar">
+          <label className="admin-field">
+            <span>
+              {t('admin.tasks.dispatcher.periodLabel', {
+                defaultValue: 'Окно, ч',
+              })}
+            </span>
+            <select
+              value={typesPeriodHours}
+              onChange={(e) =>
+                setTypesPeriodHours(Number(e.target.value))
+              }
+            >
+              <option value={1}>1</option>
+              <option value={6}>6</option>
+              <option value={24}>24</option>
+              <option value={72}>72</option>
+              <option value={168}>168</option>
+            </select>
+          </label>
+          <label className="admin-field">
+            <span>
+              {t('admin.tasks.dispatcher.kindLabel', {
+                defaultValue: 'Слой',
+              })}
+            </span>
+            <select
+              value={typeKindFilter}
+              onChange={(e) =>
+                setTypeKindFilter(
+                  e.target.value as typeof typeKindFilter,
+                )
+              }
+            >
+              <option value="all">all</option>
+              <option value="taskiq">taskiq</option>
+              <option value="compute">compute</option>
+              <option value="mixed">mixed</option>
+              <option value="paused">paused</option>
+            </select>
+          </label>
+          <label className="admin-field">
+            <span>
+              {t('admin.tasks.dispatcher.sortLabel', {
+                defaultValue: 'Сорт.',
+              })}
+            </span>
+            <select
+              value={typeSort}
+              onChange={(e) =>
+                setTypeSort(e.target.value as typeof typeSort)
+              }
+            >
+              <option value="volume">volume</option>
+              <option value="failed">failed</option>
+              <option value="avg">avg duration</option>
+              <option value="name">name</option>
+              <option value="paused">paused first</option>
+            </select>
+          </label>
+          <label className="admin-field" style={{ flex: 1 }}>
+            <span>
+              {t('admin.tasks.dispatcher.filterLabel', {
+                defaultValue: 'Имя содержит',
+              })}
+            </span>
+            <input
+              type="text"
+              value={typeFilter}
+              onChange={(e) => setTypeFilter(e.target.value)}
+              placeholder="repair_track_playback"
+            />
+          </label>
+        </div>
+        {taskTypes.isError && (
+          <p className="admin-error" role="alert">
+            {t('admin.tasks.dispatcher.loadFailed', {
+              defaultValue: 'Не удалось загрузить статистику типов',
+            })}
+          </p>
+        )}
+        <DataTable<TaskTypeRow>
+          enableSorting
+          columns={[
+            {
+              header: t('admin.tasks.dispatcher.cols.name', {
+                defaultValue: 'Имя',
+              }) as string,
+              accessorKey: 'name',
+              cell: (i) => (
+                <span className="admin-mono">
+                  {i.row.original.name}
+                </span>
+              ),
+            },
+            {
+              header: t('admin.tasks.dispatcher.cols.kind', {
+                defaultValue: 'Слой',
+              }) as string,
+              accessorKey: 'kind',
+            },
+            {
+              header: t('admin.tasks.dispatcher.cols.paused', {
+                defaultValue: 'Пауза',
+              }) as string,
+              id: 'paused',
+              accessorFn: (row) => (row.paused ? 'paused' : ''),
+              cell: (i) =>
+                i.row.original.paused ? (
+                  <StatusPill kind="warn">paused</StatusPill>
+                ) : (
+                  <span className="admin-card__sub">—</span>
+                ),
+            },
+            {
+              header: t('admin.tasks.dispatcher.cols.total', {
+                defaultValue: 'Всего',
+              }) as string,
+              id: 'total',
+              accessorFn: (row) =>
+                Object.values(row.by_status).reduce(
+                  (a, b) => a + (b || 0),
+                  0,
+                ),
+            },
+            {
+              header: t('admin.tasks.dispatcher.cols.flight', {
+                defaultValue: 'В работе',
+              }) as string,
+              id: 'flight',
+              accessorFn: (row) =>
+                (row.by_status.running || 0) +
+                (row.by_status.queued || 0) +
+                (row.by_status.claimed || 0) +
+                (row.by_status.cancelling || 0),
+            },
+            {
+              header: t('admin.tasks.dispatcher.cols.donePeriod', {
+                defaultValue: 'Готово (окно)',
+              }) as string,
+              accessorKey: 'done_period',
+            },
+            {
+              header: t('admin.tasks.dispatcher.cols.failedPeriod', {
+                defaultValue: 'Ошибок (окно)',
+              }) as string,
+              accessorKey: 'failed_period',
+            },
+            {
+              header: t('admin.tasks.dispatcher.cols.avg', {
+                defaultValue: 'Avg, мс',
+              }) as string,
+              accessorKey: 'avg_duration_ms',
+              cell: (i) =>
+                i.row.original.avg_duration_ms ?? '–',
+            },
+            {
+              header: '',
+              id: 'actions',
+              enableSorting: false,
+              cell: (i) => (
+                <div className="admin-toolbar admin-toolbar--compact">
+                  {i.row.original.paused ? (
+                    <MotionPress
+                      variant="primary"
+                      haptic="light"
+                      onClick={() =>
+                        handleResumeType(i.row.original.name)
+                      }
+                      disabled={resumeTypeMutation.isPending}
+                    >
+                      {t('admin.tasks.dispatcher.actions.resume', {
+                        defaultValue: 'Возобновить',
+                      })}
+                    </MotionPress>
+                  ) : (
+                    <MotionPress
+                      variant="danger"
+                      haptic="medium"
+                      onClick={() =>
+                        handlePauseType(i.row.original.name)
+                      }
+                      disabled={pauseTypeMutation.isPending}
+                    >
+                      {t('admin.tasks.dispatcher.actions.pause', {
+                        defaultValue: 'Пауза',
+                      })}
+                    </MotionPress>
+                  )}
+                  <MotionPress
+                    variant="ghost"
+                    haptic="selection"
+                    className="admin-link"
+                    onClick={() => {
+                      setRunName(i.row.original.name)
+                      setRunPayload('{}')
+                      setRunOpen(true)
+                    }}
+                  >
+                    {t('admin.tasks.dispatcher.actions.run', {
+                      defaultValue: 'Запустить',
+                    })}
+                  </MotionPress>
+                  <MotionPress
+                    variant="ghost"
+                    haptic="selection"
+                    className="admin-link"
+                    onClick={() =>
+                      setBgPreset({ name: i.row.original.name })
+                    }
+                  >
+                    {t('admin.tasks.dispatcher.actions.filterBg', {
+                      defaultValue: 'В Jobs',
+                    })}
+                  </MotionPress>
+                </div>
+              ),
+            },
+          ]}
+          rows={(
+            (taskTypes.data?.items || []) as TaskTypeRow[]
+          )
+            .filter((row) => {
+              if (typeKindFilter === 'paused' && !row.paused)
+                return false
+              if (
+                typeKindFilter !== 'all' &&
+                typeKindFilter !== 'paused' &&
+                row.kind !== typeKindFilter
+              )
+                return false
+              if (
+                typeFilter &&
+                !row.name
+                  .toLowerCase()
+                  .includes(typeFilter.toLowerCase())
+              )
+                return false
+              return true
+            })
+            .sort((a, b) => {
+              if (typeSort === 'name')
+                return a.name.localeCompare(b.name)
+              if (typeSort === 'failed')
+                return b.failed_period - a.failed_period
+              if (typeSort === 'avg')
+                return (
+                  (b.avg_duration_ms || 0) -
+                  (a.avg_duration_ms || 0)
+                )
+              if (typeSort === 'paused')
+                return Number(b.paused) - Number(a.paused)
+              const aT = Object.values(a.by_status).reduce(
+                (x, y) => x + (y || 0),
+                0,
+              )
+              const bT = Object.values(b.by_status).reduce(
+                (x, y) => x + (y || 0),
+                0,
+              )
+              return bT - aT
+            })}
+        />
       </section>
       <section className="admin-card">
         <div className="admin-toolbar">
@@ -1684,6 +2261,413 @@ export function TasksRoute() {
           {t('admin.tasks.detail.openHint')}
         </p>
       </section>
+      <section className="admin-card" id="dispatcher-workers">
+        <div className="admin-toolbar">
+          <h2 style={{ flex: 1 }}>
+            {t('admin.tasks.dispatcher.workers.title', {
+              defaultValue: 'Воркеры',
+            })}
+          </h2>
+          {workers.data?.scheduler_leader.owner && (
+            <span className="admin-card__sub admin-mono">
+              {t('admin.tasks.dispatcher.workers.leader', {
+                defaultValue: 'Scheduler leader:',
+              })}{' '}
+              {workers.data.scheduler_leader.owner.slice(0, 12)} (
+              {workers.data.scheduler_leader.ttl_seconds ?? '–'}s)
+            </span>
+          )}
+        </div>
+        <p className="admin-card__sub">
+          {t('admin.tasks.dispatcher.workers.hint', {
+            defaultValue:
+              'Compute-воркеры из таблицы compute_workers + лидер ' +
+              'scheduler-а из Redis. last_seen старше нескольких ' +
+              'минут означает что воркер скорее всего мёртв.',
+          })}
+        </p>
+        {workers.isError && (
+          <p className="admin-error" role="alert">
+            {t('admin.tasks.dispatcher.workers.loadFailed', {
+              defaultValue: 'Не удалось получить список воркеров',
+            })}
+          </p>
+        )}
+        <DataTable<WorkerRow>
+          enableSorting
+          columns={[
+            {
+              header: 'ID',
+              accessorKey: 'id',
+              cell: (i) => (
+                <span className="admin-mono">
+                  {i.row.original.id}
+                </span>
+              ),
+            },
+            { header: 'name', accessorKey: 'name' },
+            { header: 'profile', accessorKey: 'profile' },
+            {
+              header: 'active',
+              accessorKey: 'active',
+              cell: (i) =>
+                i.row.original.active ? (
+                  <StatusPill kind="ok">on</StatusPill>
+                ) : (
+                  <StatusPill kind="warn">off</StatusPill>
+                ),
+            },
+            {
+              header: 'max',
+              accessorKey: 'max_concurrent_jobs',
+            },
+            {
+              header: 'last_seen',
+              accessorKey: 'last_seen_at',
+              cell: (i) =>
+                i.row.original.last_seen_at
+                  ? new Date(
+                      i.row.original.last_seen_at,
+                    ).toLocaleString()
+                  : '–',
+            },
+            {
+              header: 'last_ip',
+              accessorKey: 'last_ip',
+              cell: (i) => i.row.original.last_ip || '–',
+            },
+            {
+              header: 'state',
+              id: 'state',
+              accessorFn: (row) =>
+                row.revoked_at
+                  ? 'revoked'
+                  : row.suspended_until
+                    ? 'suspended'
+                    : row.claims_paused_until
+                      ? 'claims_paused'
+                      : 'ok',
+              cell: (i) => {
+                const v = String(i.getValue())
+                if (v === 'ok')
+                  return <StatusPill kind="ok">ok</StatusPill>
+                return (
+                  <StatusPill kind="warn">{v}</StatusPill>
+                )
+              },
+            },
+            {
+              header: 'version',
+              accessorKey: 'worker_package_version',
+              cell: (i) =>
+                i.row.original.worker_package_version || '–',
+            },
+          ]}
+          rows={(workers.data?.workers || []) as WorkerRow[]}
+        />
+      </section>
+      <section className="admin-card" id="dispatcher-audit">
+        <h2>
+          {t('admin.tasks.dispatcher.audit.title', {
+            defaultValue: 'Аудит: действия админов по задачам',
+          })}
+        </h2>
+        <p className="admin-card__sub">
+          {t('admin.tasks.dispatcher.audit.hint', {
+            defaultValue:
+              'Последние 50 записей admin_actions_log с префиксом ' +
+              'tasks.* (отмены, retry, pause/resume, purge, ' +
+              'manual run).',
+          })}
+        </p>
+        {audit.isError && (
+          <p className="admin-error" role="alert">
+            {t('admin.tasks.dispatcher.audit.loadFailed', {
+              defaultValue: 'Не удалось загрузить аудит',
+            })}
+          </p>
+        )}
+        <DataTable<AuditRow>
+          enableSorting
+          columns={[
+            {
+              header: 'when',
+              accessorKey: 'created_at',
+              cell: (i) => {
+                try {
+                  return new Date(
+                    i.row.original.created_at,
+                  ).toLocaleString()
+                } catch {
+                  return String(i.row.original.created_at)
+                }
+              },
+            },
+            { header: 'user', accessorKey: 'user_id' },
+            {
+              header: 'action',
+              accessorKey: 'action',
+              cell: (i) => (
+                <span className="admin-mono">
+                  {i.row.original.action}
+                </span>
+              ),
+            },
+            {
+              header: 'target',
+              id: 'target',
+              accessorFn: (row) =>
+                `${row.target_type ?? '–'}:${row.target_id ?? '–'}`,
+            },
+            {
+              header: 'ip',
+              accessorKey: 'ip',
+              cell: (i) => i.row.original.ip || '–',
+            },
+            {
+              header: 'meta',
+              id: 'meta',
+              accessorFn: (row) =>
+                row.meta ? JSON.stringify(row.meta) : '',
+              cell: (i) => {
+                const v = String(i.getValue())
+                return v.length > 80 ? v.slice(0, 80) + '…' : v
+              },
+            },
+          ]}
+          rows={(audit.data?.items || []) as AuditRow[]}
+        />
+      </section>
+      {runOpen && (
+        <div
+          className="admin-modal-overlay"
+          role="dialog"
+          aria-modal="true"
+          onClick={() => setRunOpen(false)}
+        >
+          <div
+            className="admin-modal"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="admin-toolbar">
+              <h3>
+                {t('admin.tasks.dispatcher.run.title', {
+                  defaultValue: 'Запуск задачи вручную',
+                })}
+              </h3>
+              <MotionPress
+                variant="ghost"
+                className="admin-link"
+                onClick={() => setRunOpen(false)}
+              >
+                <Icon name="close" />
+              </MotionPress>
+            </div>
+            <p className="admin-card__sub">
+              {t('admin.tasks.dispatcher.run.hint', {
+                defaultValue:
+                  'Доступен только белый список (см. ' +
+                  '/tasks/allowed). Payload — JSON-объект, ' +
+                  'будет передан как **kwargs.',
+              })}
+            </p>
+            <label className="admin-field">
+              <span>
+                {t('admin.tasks.dispatcher.run.taskLabel', {
+                  defaultValue: 'Задача',
+                })}
+              </span>
+              <select
+                value={runName}
+                onChange={(e) => setRunName(e.target.value)}
+              >
+                <option value="">—</option>
+                {(allowedTasks.data?.tasks || []).map((n) => (
+                  <option key={n} value={n}>
+                    {n}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className="admin-field">
+              <span>
+                {t('admin.tasks.dispatcher.run.payloadLabel', {
+                  defaultValue: 'Payload (JSON)',
+                })}
+              </span>
+              <textarea
+                rows={8}
+                className="admin-mono"
+                value={runPayload}
+                onChange={(e) => setRunPayload(e.target.value)}
+              />
+            </label>
+            <div className="admin-toolbar">
+              <MotionPress
+                variant="ghost"
+                className="admin-link"
+                onClick={() => setRunOpen(false)}
+              >
+                {t('admin.tasks.dispatcher.run.cancel', {
+                  defaultValue: 'Отмена',
+                })}
+              </MotionPress>
+              <MotionPress
+                variant="primary"
+                onClick={handleRunManual}
+                disabled={runMutation.isPending || !runName}
+              >
+                {t('admin.tasks.dispatcher.run.submit', {
+                  defaultValue: 'Запустить',
+                })}
+              </MotionPress>
+            </div>
+          </div>
+        </div>
+      )}
+      {purgeBgOpen && (
+        <div
+          className="admin-modal-overlay"
+          role="dialog"
+          aria-modal="true"
+          onClick={() => setPurgeBgOpen(false)}
+        >
+          <div
+            className="admin-modal"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="admin-toolbar">
+              <h3>
+                {t('admin.tasks.dispatcher.purge.title', {
+                  defaultValue: 'Очистка background_jobs',
+                })}
+              </h3>
+              <MotionPress
+                variant="ghost"
+                className="admin-link"
+                onClick={() => setPurgeBgOpen(false)}
+              >
+                <Icon name="close" />
+              </MotionPress>
+            </div>
+            <p className="admin-card__sub">
+              {t('admin.tasks.dispatcher.purge.hint', {
+                defaultValue:
+                  'Удаление затрагивает только терминальные ' +
+                  'статусы (done/failed/failed_terminal/cancelled). ' +
+                  'Активные задачи защищены и не удаляются.',
+              })}
+            </p>
+            <label className="admin-field">
+              <span>
+                {t('admin.tasks.dispatcher.purge.ageLabel', {
+                  defaultValue: 'Старше, часов',
+                })}
+              </span>
+              <input
+                type="number"
+                min={1}
+                max={2160}
+                value={purgeBgHours}
+                onChange={(e) =>
+                  setPurgeBgHours(Number(e.target.value) || 1)
+                }
+              />
+            </label>
+            <label className="admin-field">
+              <span>
+                {t('admin.tasks.dispatcher.purge.nameLabel', {
+                  defaultValue: 'Имя (опционально)',
+                })}
+              </span>
+              <input
+                type="text"
+                value={purgeBgName}
+                onChange={(e) => setPurgeBgName(e.target.value)}
+                placeholder="repair_track_playback_task"
+              />
+            </label>
+            <fieldset className="admin-field">
+              <legend>
+                {t('admin.tasks.dispatcher.purge.statusesLabel', {
+                  defaultValue: 'Статусы',
+                })}
+              </legend>
+              {[
+                'done',
+                'failed',
+                'failed_terminal',
+                'cancelled',
+              ].map((s) => (
+                <label key={s} className="admin-checkbox">
+                  <input
+                    type="checkbox"
+                    checked={purgeBgStatuses.includes(s)}
+                    onChange={(e) =>
+                      setPurgeBgStatuses((cur) =>
+                        e.target.checked
+                          ? [...cur, s]
+                          : cur.filter((x) => x !== s),
+                      )
+                    }
+                  />
+                  <span className="admin-mono">{s}</span>
+                </label>
+              ))}
+            </fieldset>
+            <div className="admin-toolbar">
+              <MotionPress
+                variant="ghost"
+                className="admin-link"
+                onClick={() => setPurgeBgOpen(false)}
+              >
+                {t('admin.tasks.dispatcher.purge.cancel', {
+                  defaultValue: 'Отмена',
+                })}
+              </MotionPress>
+              <MotionPress
+                variant="danger"
+                onClick={handlePurgeBg}
+                disabled={
+                  purgeBgMutation.isPending ||
+                  purgeBgStatuses.length === 0
+                }
+              >
+                {t('admin.tasks.dispatcher.purge.submit', {
+                  defaultValue: 'Удалить',
+                })}
+              </MotionPress>
+            </div>
+            <p className="admin-card__sub">
+              {t('admin.tasks.dispatcher.purge.computeHint', {
+                defaultValue:
+                  'Compute-jobs (pending) очищаются отдельной ' +
+                  'кнопкой на дашборде или через POST ' +
+                  '/dashboard/compute-jobs/purge-pending.',
+              })}
+            </p>
+            <div className="admin-toolbar">
+              <MotionPress
+                variant="ghost"
+                className="admin-link"
+                onClick={() =>
+                  purgeComputeMutation.mutate({
+                    older_than_hours: purgeBgHours,
+                    status: 'pending',
+                  })
+                }
+                disabled={purgeComputeMutation.isPending}
+              >
+                {t('admin.tasks.dispatcher.purge.computePending', {
+                  hours: purgeBgHours,
+                  defaultValue:
+                    'Удалить compute_jobs(pending) старше {{hours}} ч',
+                })}
+              </MotionPress>
+            </div>
+          </div>
+        </div>
+      )}
       {activeJobId && (
         <LyricsJobDetail
           jobId={activeJobId}

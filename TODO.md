@@ -1311,6 +1311,37 @@
 - `[x]` - завершено
 - `[-]` - отменено / неактуально
 
+- [x] **Админ /tasks: диспетчерская панель + пауза типов задач (2026-05-17)**
+  — Бекенд: `app/services/task_pause_service.py` — Redis-хеш
+  ``bgjob:paused_tasks``; хуки в ``background_jobs.enqueue``
+  (raises ``TaskPaused``), ``compute_queue_service.claim_next``
+  (фильтрует ``job_type``) и ``compute_job_dispatcher.dispatch_compute_job``
+  (возвращает status=``paused``). Fail-open: Redis недоступен — пауза
+  считается пустой, прод не клинит.
+  — Новые admin-эндпоинты под ``/api/v1/admin/tasks``: ``GET /types``
+  (агрегат по имени из ``background_jobs`` + ``compute_jobs``, кол-во
+  по статусу, avg/max длительность, флаг pause), ``POST /types/{n}/pause``
+  и ``/types/{n}/resume`` (step-up + аудит), ``GET /workers`` (таблица
+  ``compute_workers`` + лидер scheduler-а из Redis), ``GET /audit``
+  (action-prefix фильтр, по умолчанию ``tasks.``), ``POST /jobs/purge``
+  (жёсткое удаление терминальных ``background_jobs`` старше окна,
+  активные защищены), ``POST /compute-jobs/purge`` (pending/failed/
+  succeeded compute jobs старше окна).
+  — Фронт: `frontend/src/admin/routes/TasksRoute.tsx` — новая секция
+  «Диспетчер» с таблицей типов (сортировка/фильтр/group-by-kind/
+  paused-only), кнопки Pause/Resume/Запустить/В Jobs на каждый ряд,
+  модалка Manual Enqueue (использует ``/tasks/allowed`` + ``/tasks/run/{n}``,
+  JSON-валидация payload), модалка Purge (по age + статусам + имени);
+  отдельные секции «Воркеры» (compute_workers + scheduler leader) и
+  «Аудит» (admin_actions_log с prefix ``tasks.``).
+  — Тесты: `tests/app/api/v1/admin/test_tasks_dispatcher.py` — 6 кейсов
+  (агрегат, pause/resume round-trip + audit log, purge только
+  терминальных, отказ при активных статусах, audit prefix-filter,
+  workers list).
+  — Связано с предыдущей задачей: kill-switch ``CATALOG_AUTO_SYNC_ENABLED``
+  остановил sweep-задачи; теперь админ может вручную приостанавливать
+  отдельные типы из UI и видеть реальные KPI по слою taskiq vs compute.
+
 - [x] **Импорт Telegram / Yandex: Docker internal API + outbound extras (2026-05-14)**
   — Telegram: backend бьётся в ``BOT_INTERNAL_URL``; бот по умолчанию
   слушал internal API только на ``127.0.0.1`` — из контейнера backend
