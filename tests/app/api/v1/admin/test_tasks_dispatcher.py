@@ -26,9 +26,7 @@ async def _setup_admin(
     headers = await admin_bearer_for_user(
         client, db_session, user_id=admin["id"]
     )
-    await grant_admin_capability(
-        db_session, admin["id"], "tasks.manage"
-    )
+    await grant_admin_capability(db_session, admin["id"], "tasks.manage")
     return admin["id"], headers
 
 
@@ -103,9 +101,7 @@ async def test_tasks_pause_and_resume_round_trip(
     client: AsyncClient,
     db_session: AsyncSession,
 ) -> None:
-    admin_id, headers = await _setup_admin(
-        client, db_session, 140102
-    )
+    admin_id, headers = await _setup_admin(client, db_session, 140102)
 
     pause_calls: dict[str, dict] = {}
 
@@ -152,28 +148,32 @@ async def test_tasks_pause_and_resume_round_trip(
         )
 
     assert rp.status_code == 200, rp.text
-    assert rp.json() == {
-        "task_name": "demo_task",
-        "paused": True,
-        "meta": {
-            "paused_at": "2026-05-17T00:00:00+00:00",
-            "by_admin_id": admin_id,
-            "reason": "test",
-        },
+    body = rp.json()
+    assert body["task_name"] == "demo_task"
+    assert body["paused"] is True
+    assert body["meta"] == {
+        "paused_at": "2026-05-17T00:00:00+00:00",
+        "by_admin_id": admin_id,
+        "reason": "test",
     }
+    assert body["drained"] is None
     assert rr.status_code == 200
     assert rr.json()["paused"] is False
     assert rr.json()["removed"] is True
 
     logged = (
-        await db_session.execute(
-            select(AdminActionLog).where(
-                AdminActionLog.action.in_(
-                    ("tasks.types.pause", "tasks.types.resume")
+        (
+            await db_session.execute(
+                select(AdminActionLog).where(
+                    AdminActionLog.action.in_(
+                        ("tasks.types.pause", "tasks.types.resume")
+                    )
                 )
             )
         )
-    ).scalars().all()
+        .scalars()
+        .all()
+    )
     assert {row.action for row in logged} == {
         "tasks.types.pause",
         "tasks.types.resume",
@@ -246,18 +246,22 @@ async def test_tasks_jobs_purge_only_terminal(
     assert body["deleted"] == 1
 
     remaining = (
-        await db_session.execute(
-            select(BackgroundJob.id).where(
-                BackgroundJob.id.in_(
-                    [
-                        "bg-p-old-done",
-                        "bg-p-old-active",
-                        "bg-p-fresh-done",
-                    ]
+        (
+            await db_session.execute(
+                select(BackgroundJob.id).where(
+                    BackgroundJob.id.in_(
+                        [
+                            "bg-p-old-done",
+                            "bg-p-old-active",
+                            "bg-p-fresh-done",
+                        ]
+                    )
                 )
             )
         )
-    ).scalars().all()
+        .scalars()
+        .all()
+    )
     assert set(remaining) == {"bg-p-old-active", "bg-p-fresh-done"}
 
 
@@ -286,9 +290,7 @@ async def test_tasks_audit_filters_by_prefix(
     client: AsyncClient,
     db_session: AsyncSession,
 ) -> None:
-    admin_id, headers = await _setup_admin(
-        client, db_session, 140105
-    )
+    admin_id, headers = await _setup_admin(client, db_session, 140105)
     now = datetime.now(UTC)
     db_session.add_all(
         [
@@ -346,9 +348,7 @@ async def test_tasks_workers_lists_compute_workers(
     )
     await db_session.commit()
 
-    r = await client.get(
-        "/api/v1/admin/tasks/workers", headers=headers
-    )
+    r = await client.get("/api/v1/admin/tasks/workers", headers=headers)
     assert r.status_code == 200
     body = r.json()
     ids = [w["id"] for w in body["workers"]]

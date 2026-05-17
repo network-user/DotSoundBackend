@@ -40,9 +40,7 @@ from app.middlewares.internal_api_allowlist import (
 from app.middlewares.request_logging import RequestLoggingMiddleware
 from app.middlewares.secure_static import SecureStaticMiddleware
 
-MINI_APP_STATIC_DIR = (
-    Path(__file__).resolve().parent / "static" / "mini_app"
-)
+MINI_APP_STATIC_DIR = Path(__file__).resolve().parent / "static" / "mini_app"
 from app.middlewares.security_headers import SecurityHeadersMiddleware
 
 logger: structlog.stdlib.BoundLogger = structlog.get_logger(__name__)
@@ -71,9 +69,7 @@ async def _warm_outbound_proxy_pool() -> None:
 
     from app.api.v1.tracks.playback import _get_audio_proxy_client
 
-    proxy_urls: list[str] = list(
-        settings.outbound_static_proxy_urls_list
-    )
+    proxy_urls: list[str] = list(settings.outbound_static_proxy_urls_list)
     if not proxy_urls:
         from app.services.tor_pool import get_tor_pool
 
@@ -198,6 +194,18 @@ async def lifespan(application: FastAPI) -> AsyncIterator[None]:
             logger.info("artist_link_backfill_enqueued")
     except Exception as exc:
         logger.warning("artist_link_backfill_enqueue_failed", error=str(exc))
+
+    try:
+        from app.services.background_jobs_cleanup_worker import (
+            ensure_default_cleanup_schedule,
+        )
+
+        await ensure_default_cleanup_schedule()
+    except Exception as exc:
+        logger.warning(
+            "background_jobs_cleanup_schedule_seed_failed",
+            error=str(exc)[:200],
+        )
 
     try:
         from app.core.db import AsyncSessionLocal as _ASL

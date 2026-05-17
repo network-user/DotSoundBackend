@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import contextlib
 from typing import Any
 
 import structlog
@@ -474,6 +475,88 @@ async def run_task(
         "task_id": task_id,
         "task_name": task_name,
         "queued": True,
+    }
+
+
+class ManualEnqueueRequest(BaseModel):
+    task_name: str = Field(min_length=1, max_length=96)
+    payload: dict[str, Any] = Field(default_factory=dict)
+    queue: str = Field(default="default", max_length=32)
+    max_attempts: int = Field(default=3, ge=1, le=10)
+
+
+@router.post("/manual")
+async def manual_enqueue_task(
+    body: ManualEnqueueRequest,
+    request: Request,
+    admin: User = Depends(require_step_up("tasks.run")),
+    session: AsyncSession = Depends(get_db),
+) -> dict[str, Any]:
+    """Manually enqueue an allowed task with full BackgroundJob tracking.
+
+    Unlike ``POST /run/{task_name}`` (raw ``task.kiq``), this path goes
+    through :func:`app.services.background_jobs.enqueue`, so the job is
+    visible in ``/tasks/jobs``, attributable via ``created_by_user_id``
+    and counted in ``/tasks/types`` aggregations.
+    """
+    if body.task_name not in ALLOWED_TASK_NAMES:
+        raise HTTPException(status_code=400, detail="task not in whitelist")
+    from app.core.tkq import broker
+    from app.services.background_jobs import (
+        IdempotencySkipped,
+        TaskPaused,
+        enqueue,
+    )
+
+    try:
+        task = broker.find_task(body.task_name)
+    except Exception:
+        task = None
+    if task is None:
+        raise HTTPException(
+            status_code=404,
+            detail="task not registered in broker",
+        )
+
+    try:
+        job_id = await enqueue(
+            task,
+            payload=body.payload,
+            queue=body.queue,
+            max_attempts=body.max_attempts,
+            created_by_user_id=admin.id,
+        )
+    except TaskPaused as exc:
+        raise HTTPException(
+            status_code=409,
+            detail=f"task type is paused: {exc.task_name}",
+        ) from exc
+    except IdempotencySkipped as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    except Exception as exc:
+        logger.exception(
+            "admin_manual_enqueue_failed",
+            task=body.task_name,
+        )
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
+
+    await AdminActionLogRepository(session).write(
+        user_id=admin.id,
+        action="tasks.manual.enqueue",
+        target_type="task_type",
+        target_id=body.task_name[:128],
+        ip=(request.client.host if request.client else None),
+        meta={
+            "job_id": job_id,
+            "queue": body.queue,
+            "payload_keys": sorted(body.payload.keys())[:32],
+        },
+    )
+    await session.commit()
+    return {
+        "job_id": job_id,
+        "task_name": body.task_name,
+        "queue": body.queue,
     }
 
 
@@ -1364,6 +1447,30 @@ async def list_task_types(
 
     paused = await list_paused_tasks()
 
+    schedule_rows = (
+        await session.execute(
+            select(
+                ScheduledJob.task_name,
+                ScheduledJob.id,
+                ScheduledJob.name,
+                ScheduledJob.cron,
+                ScheduledJob.enabled,
+                ScheduledJob.next_run_at,
+            )
+        )
+    ).all()
+    schedules_by_task: dict[str, list[dict[str, Any]]] = {}
+    for tn, sid, sname, cron, enabled, next_run in schedule_rows:
+        schedules_by_task.setdefault(str(tn), []).append(
+            {
+                "id": sid,
+                "name": sname,
+                "cron": cron,
+                "enabled": bool(enabled),
+                "next_run_at": (next_run.isoformat() if next_run else None),
+            }
+        )
+
     items: dict[str, dict[str, Any]] = {}
 
     def _ensure(name: str, kind: str) -> dict[str, Any]:
@@ -1379,6 +1486,7 @@ async def list_task_types(
                 "failed_period": 0,
                 "avg_duration_ms": None,
                 "max_duration_ms": None,
+                "schedules": [],
             },
         )
         if bucket["kind"] != kind:
@@ -1412,6 +1520,10 @@ async def list_task_types(
         bucket["paused"] = True
         bucket["paused_meta"] = meta
 
+    for task_name_key, schedules in schedules_by_task.items():
+        bucket = _ensure(task_name_key, "taskiq")
+        bucket["schedules"] = schedules
+
     sorted_items = sorted(
         items.values(),
         key=lambda b: (
@@ -1428,6 +1540,157 @@ async def list_task_types(
 
 class TaskPauseRequest(BaseModel):
     reason: str | None = Field(default=None, max_length=200)
+    drain: bool = Field(
+        default=False,
+        description=(
+            "If true, also cancel queued/running jobs of this type "
+            "after setting the pause flag (hard pause / drain)."
+        ),
+    )
+
+
+@router.get("/types/{task_name}/affected")
+async def task_affected_preview(
+    task_name: str,
+    _admin: User = Depends(require_capability("tasks.manage")),
+) -> dict[str, int]:
+    """How many jobs would be cancelled by a drain right now."""
+    from app.services.task_pause_service import affected_jobs_preview
+
+    return await affected_jobs_preview(task_name)
+
+
+@router.get("/types/{task_name}/timeseries")
+async def task_timeseries(
+    task_name: str,
+    period_hours: int = Query(6, ge=1, le=168),
+    bucket_minutes: int = Query(5, ge=1, le=60),
+    _admin: User = Depends(require_capability("tasks.manage")),
+    session: AsyncSession = Depends(get_db),
+) -> dict[str, Any]:
+    """Per-task time series for the dispatcher panel charts.
+
+    Returns one bucket per ``bucket_minutes`` for the trailing
+    ``period_hours``, plus per-period p95 / avg / max durations. Used
+    by the UI to render sparklines (throughput) and the latency
+    summary card. Empty buckets are present with ``0`` so the front
+    end can render contiguous x-axis without gap-handling logic.
+    """
+    from datetime import UTC, datetime, timedelta
+
+    from sqlalchemy import func as sa_func
+    from sqlalchemy import literal_column
+
+    hours = max(1, min(168, int(period_hours)))
+    bucket_s = max(1, min(60, int(bucket_minutes))) * 60
+    now = datetime.now(UTC)
+    start = now - timedelta(hours=hours)
+    bucket_count = max(1, (hours * 3600) // bucket_s)
+
+    created_rows = (
+        await session.execute(
+            select(
+                sa_func.floor(
+                    sa_func.extract("epoch", BackgroundJob.created_at)
+                    / bucket_s
+                ).label("bucket"),
+                sa_func.count(BackgroundJob.id),
+            )
+            .where(
+                BackgroundJob.name == task_name,
+                BackgroundJob.created_at >= start,
+            )
+            .group_by(literal_column("bucket"))
+        )
+    ).all()
+
+    succeeded_rows = (
+        await session.execute(
+            select(
+                sa_func.floor(
+                    sa_func.extract("epoch", BackgroundJob.finished_at)
+                    / bucket_s
+                ).label("bucket"),
+                sa_func.count(BackgroundJob.id),
+            )
+            .where(
+                BackgroundJob.name == task_name,
+                BackgroundJob.finished_at >= start,
+                BackgroundJob.status == "done",
+            )
+            .group_by(literal_column("bucket"))
+        )
+    ).all()
+
+    failed_rows = (
+        await session.execute(
+            select(
+                sa_func.floor(
+                    sa_func.extract("epoch", BackgroundJob.finished_at)
+                    / bucket_s
+                ).label("bucket"),
+                sa_func.count(BackgroundJob.id),
+            )
+            .where(
+                BackgroundJob.name == task_name,
+                BackgroundJob.finished_at >= start,
+                BackgroundJob.status.in_(("failed", "failed_terminal")),
+            )
+            .group_by(literal_column("bucket"))
+        )
+    ).all()
+
+    created_map = {int(b): int(c or 0) for b, c in created_rows}
+    succeeded_map = {int(b): int(c or 0) for b, c in succeeded_rows}
+    failed_map = {int(b): int(c or 0) for b, c in failed_rows}
+
+    end_bucket = int(now.timestamp() // bucket_s)
+    buckets: list[dict[str, Any]] = []
+    for i in range(bucket_count):
+        b = end_bucket - (bucket_count - 1 - i)
+        ts = b * bucket_s
+        buckets.append(
+            {
+                "ts": ts,
+                "created": created_map.get(b, 0),
+                "succeeded": succeeded_map.get(b, 0),
+                "failed": failed_map.get(b, 0),
+            }
+        )
+
+    perf_row = (
+        await session.execute(
+            select(
+                sa_func.percentile_disc(0.95)
+                .within_group(BackgroundJob.duration_ms.asc())
+                .label("p95"),
+                sa_func.avg(BackgroundJob.duration_ms),
+                sa_func.max(BackgroundJob.duration_ms),
+                sa_func.count(BackgroundJob.id),
+            ).where(
+                BackgroundJob.name == task_name,
+                BackgroundJob.status == "done",
+                BackgroundJob.finished_at >= start,
+            )
+        )
+    ).first()
+    if perf_row is not None:
+        p95, avg_ms, max_ms, n = perf_row
+    else:
+        p95 = avg_ms = max_ms = n = None
+
+    return {
+        "task_name": task_name,
+        "period_hours": hours,
+        "bucket_seconds": bucket_s,
+        "buckets": buckets,
+        "p95_duration_ms": (int(p95) if p95 is not None else None),
+        "avg_duration_ms": (
+            int(round(float(avg_ms))) if avg_ms is not None else None
+        ),
+        "max_duration_ms": (int(max_ms) if max_ms is not None else None),
+        "samples": int(n or 0),
+    }
 
 
 @router.post("/types/{task_name}/pause")
@@ -1438,23 +1701,36 @@ async def pause_task_endpoint(
     admin: User = Depends(require_step_up("tasks.manage")),
     session: AsyncSession = Depends(get_db),
 ) -> dict[str, Any]:
-    from app.services.task_pause_service import pause_task
+    from app.services.task_pause_service import drain_task, pause_task
 
     meta = await pause_task(
         task_name,
         by_admin_id=admin.id,
         reason=body.reason,
     )
+    drained: dict[str, int] | None = None
+    if body.drain:
+        drained = await drain_task(task_name)
     await AdminActionLogRepository(session).write(
         user_id=admin.id,
-        action="tasks.types.pause",
+        action=(
+            "tasks.types.pause_drain" if body.drain else "tasks.types.pause"
+        ),
         target_type="task_type",
         target_id=task_name[:128],
         ip=(request.client.host if request.client else None),
-        meta={"reason": body.reason},
+        meta={
+            "reason": body.reason,
+            "drained": drained,
+        },
     )
     await session.commit()
-    return {"task_name": task_name, "paused": True, "meta": meta}
+    return {
+        "task_name": task_name,
+        "paused": True,
+        "meta": meta,
+        "drained": drained,
+    }
 
 
 @router.post("/types/{task_name}/resume")
@@ -1488,7 +1764,23 @@ async def list_workers(
     _admin: User = Depends(require_capability("tasks.manage")),
     session: AsyncSession = Depends(get_db),
 ) -> dict[str, Any]:
-    """Compute workers + Taskiq scheduler leader presence."""
+    """Compute workers with live concurrency + Taskiq leader presence.
+
+    Per-worker fields added on top of the bare ``compute_workers`` row:
+
+    * ``current_claims`` — count of ``compute_jobs`` currently claimed
+      by this worker (status ``claimed``).
+    * ``recent_throughput_5m`` — successful jobs finished in the last
+      5 minutes (status ``succeeded``).
+    * ``anomaly_flags_in_window`` — current value of the Redis counter
+      from :mod:`app.services.compute_anomaly_service`; non-zero means
+      the worker is on the auto-suspend path.
+    """
+    from datetime import UTC, datetime, timedelta
+
+    from sqlalchemy import func as sa_func
+
+    from app.models.compute_job import ComputeJob
     from app.models.compute_worker import ComputeWorker
 
     rows = (
@@ -1503,6 +1795,62 @@ async def list_workers(
         .scalars()
         .all()
     )
+
+    claims_rows = (
+        await session.execute(
+            select(
+                ComputeJob.claimed_by,
+                sa_func.count(ComputeJob.id),
+            )
+            .where(
+                ComputeJob.status == "claimed",
+                ComputeJob.claimed_by.is_not(None),
+            )
+            .group_by(ComputeJob.claimed_by)
+        )
+    ).all()
+    claims_map = {str(w): int(c or 0) for w, c in claims_rows}
+
+    recent_cut = datetime.now(UTC) - timedelta(minutes=5)
+    throughput_rows = (
+        await session.execute(
+            select(
+                ComputeJob.claimed_by,
+                sa_func.count(ComputeJob.id),
+            )
+            .where(
+                ComputeJob.status == "succeeded",
+                ComputeJob.finished_at >= recent_cut,
+                ComputeJob.claimed_by.is_not(None),
+            )
+            .group_by(ComputeJob.claimed_by)
+        )
+    ).all()
+    throughput_map = {str(w): int(c or 0) for w, c in throughput_rows}
+
+    redis_client = None
+    with contextlib.suppress(Exception):
+        redis_client = get_redis_client()
+
+    anomaly_map: dict[str, int] = {}
+    if redis_client is not None:
+        try:
+            from app.services.compute_anomaly_service import (
+                FLAG_KEY_PREFIX,
+            )
+
+            pipe = redis_client.pipeline(transaction=False)
+            ids = [w.id for w in rows]
+            for wid in ids:
+                pipe.get(f"{FLAG_KEY_PREFIX}{wid}")
+            res = await pipe.execute()
+            for wid, raw in zip(ids, res, strict=False):
+                try:
+                    anomaly_map[wid] = int(raw) if raw else 0
+                except (TypeError, ValueError):
+                    anomaly_map[wid] = 0
+        except Exception:
+            logger.warning("admin_workers_anomaly_lookup_failed")
 
     workers: list[dict[str, Any]] = []
     for w in rows:
@@ -1521,20 +1869,25 @@ async def list_workers(
                 "claims_paused_until": w.claims_paused_until,
                 "claims_pause_reason": w.claims_pause_reason,
                 "worker_package_version": (w.worker_package_version),
+                "current_claims": claims_map.get(w.id, 0),
+                "recent_throughput_5m": throughput_map.get(w.id, 0),
+                "anomaly_flags_in_window": anomaly_map.get(w.id, 0),
             }
         )
 
     leader_owner: str | None = None
     leader_ttl: int | None = None
-    try:
-        redis = get_redis_client()
-        raw = await redis.get("bgjob:scheduler:leader")
-        if raw is not None:
-            leader_owner = raw.decode() if isinstance(raw, bytes) else str(raw)
-            ttl = await redis.ttl("bgjob:scheduler:leader")
-            leader_ttl = int(ttl) if ttl is not None else None
-    except Exception:
-        logger.warning("admin_workers_leader_lookup_failed")
+    if redis_client is not None:
+        try:
+            raw = await redis_client.get("bgjob:scheduler:leader")
+            if raw is not None:
+                leader_owner = (
+                    raw.decode() if isinstance(raw, bytes) else str(raw)
+                )
+                ttl = await redis_client.ttl("bgjob:scheduler:leader")
+                leader_ttl = int(ttl) if ttl is not None else None
+        except Exception:
+            logger.warning("admin_workers_leader_lookup_failed")
 
     return {
         "workers": workers,

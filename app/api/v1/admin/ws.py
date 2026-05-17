@@ -77,6 +77,7 @@ ALLOWED_CHANNELS: frozenset[str] = frozenset(
     {
         "overview",
         "containers",
+        "dispatcher",
         "logs",
         "tasks_progress",
         "alerts",
@@ -183,6 +184,66 @@ async def _push_containers(
             {
                 "channel": "containers",
                 "data": snapshot,
+            }
+        )
+    )
+
+
+async def _push_dispatcher(
+    websocket: WebSocket,
+    *,
+    last_signature: list[str],
+) -> None:
+    """Compact dispatcher tick: counts + paused set hash.
+
+    Sends a small payload (no full task type list) so the frontend
+    can decide to invalidate React Query caches without flooding the
+    socket. Heavy data still comes from REST endpoints on demand.
+    """
+    from sqlalchemy import func as sa_func
+
+    from app.models.background_job import BackgroundJob
+    from app.models.compute_job import ComputeJob
+    from app.services.task_pause_service import paused_task_set
+
+    async with AsyncSessionLocal() as session:
+        bg_active = (
+            await session.execute(
+                sa_func.count(BackgroundJob.id)
+                .select()
+                .where(
+                    BackgroundJob.status.in_(
+                        ("queued", "running", "cancelling")
+                    )
+                )
+            )
+        ).scalar_one() or 0
+        compute_active = (
+            await session.execute(
+                sa_func.count(ComputeJob.id)
+                .select()
+                .where(ComputeJob.status.in_(("pending", "claimed")))
+            )
+        ).scalar_one() or 0
+    paused = sorted(await paused_task_set())
+    payload = {
+        "bg_active": int(bg_active),
+        "compute_active": int(compute_active),
+        "paused_count": len(paused),
+        "ts": int(time.time()),
+    }
+    signature = (
+        f"{payload['bg_active']}:{payload['compute_active']}:"
+        f"{payload['paused_count']}:{':'.join(paused)}"
+    )
+    if signature == last_signature[0]:
+        return
+    last_signature[0] = signature
+    await websocket.send_text(
+        json.dumps(
+            {
+                "channel": "dispatcher",
+                "data": payload,
             }
         )
     )
@@ -394,9 +455,7 @@ async def _push_job_trace(
             "status_code": row.status_code,
             "meta": row.meta,
             "created_at": (
-                row.created_at.isoformat()
-                if row.created_at
-                else None
+                row.created_at.isoformat() if row.created_at else None
             ),
         }
         for row in audit
@@ -413,15 +472,9 @@ async def _push_job_trace(
         "attempts": job.attempts,
         "error": job.error,
         "audit": job_audit,
-        "created_at": (
-            job.created_at.isoformat()
-            if job.created_at
-            else None
-        ),
+        "created_at": (job.created_at.isoformat() if job.created_at else None),
         "finished_at": (
-            job.finished_at.isoformat()
-            if job.finished_at
-            else None
+            job.finished_at.isoformat() if job.finished_at else None
         ),
     }
     await websocket.send_text(
@@ -447,6 +500,7 @@ async def _broadcast_loop(
     state: dict[str, Any],
 ) -> None:
     last_task_seen = [""]
+    last_dispatcher = [""]
     log_since = state.setdefault("logs_since_ns", [_initial_log_since_ns()])
     worker_log_cursor = [
         state.get("worker_logs_last_id", "$"),
@@ -459,24 +513,23 @@ async def _broadcast_loop(
                 await _push_overview(websocket)
             if "containers" in subscriptions:
                 await _push_containers(websocket)
+            if "dispatcher" in subscriptions:
+                await _push_dispatcher(
+                    websocket,
+                    last_signature=last_dispatcher,
+                )
             if "tasks_progress" in subscriptions:
                 await _push_tasks_progress(
                     websocket,
                     last_seen_id=last_task_seen,
                 )
-            if (
-                "worker_logs" in subscriptions
-                and state.get("worker_logs_id")
-            ):
+            if "worker_logs" in subscriptions and state.get("worker_logs_id"):
                 await _push_worker_logs(
                     websocket,
                     worker_id=state["worker_logs_id"],
                     last_id=worker_log_cursor,
                 )
-            if (
-                "job_trace" in subscriptions
-                and state.get("job_trace_id")
-            ):
+            if "job_trace" in subscriptions and state.get("job_trace_id"):
                 await _push_job_trace(
                     websocket,
                     job_id=state["job_trace_id"],
@@ -500,10 +553,7 @@ async def _broadcast_loop(
                 return
         pause_s = (
             0.35
-            if (
-                "worker_logs" in subscriptions
-                and state.get("worker_logs_id")
-            )
+            if ("worker_logs" in subscriptions and state.get("worker_logs_id"))
             else 3.0
         )
         await asyncio.sleep(pause_s)
@@ -589,18 +639,12 @@ async def admin_ws(
                         state["logs_since_ns"][0] = _initial_log_since_ns()
                     if channel == "worker_logs":
                         wid = msg.get("worker_id")
-                        if (
-                            isinstance(wid, str)
-                            and wid.startswith("w_")
-                        ):
+                        if isinstance(wid, str) and wid.startswith("w_"):
                             state["worker_logs_id"] = wid
                             state["worker_logs_last_id"] = "$"
                     if channel == "job_trace":
                         jid = msg.get("job_id")
-                        if (
-                            isinstance(jid, str)
-                            and jid.startswith("lj_")
-                        ):
+                        if isinstance(jid, str) and jid.startswith("lj_"):
                             state["job_trace_id"] = jid
             elif cmd == "unsubscribe":
                 subscriptions.discard(channel)

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import type { TFunction } from 'i18next'
 import { useTranslation } from 'react-i18next'
 import {
@@ -12,6 +12,7 @@ import { MotionPress } from '@/components/ui/MotionPress'
 import { showIsland } from '@/lib/island'
 import { lyricsTierAdminTitle } from '../lib/lyricsAdminLabels'
 import { adminApi } from '../lib/adminApi'
+import { AdminWs } from '../lib/adminWs'
 import { useAdminPrompt } from '../components/layout/AdminPromptContext'
 import { DataTable } from '../components/widgets/DataTable'
 import { JsonViewer } from '../components/widgets/JsonViewer'
@@ -64,6 +65,13 @@ interface TaskTypeRow {
   failed_period: number
   avg_duration_ms: number | null
   max_duration_ms: number | null
+  schedules: Array<{
+    id: string
+    name: string
+    cron: string
+    enabled: boolean
+    next_run_at: string | null
+  }>
 }
 
 interface WorkerRow {
@@ -80,6 +88,9 @@ interface WorkerRow {
   claims_paused_until: string | null
   claims_pause_reason: string | null
   worker_package_version: string | null
+  current_claims: number
+  recent_throughput_5m: number
+  anomaly_flags_in_window: number
 }
 
 interface AuditRow {
@@ -655,7 +666,11 @@ export function TasksRoute() {
     refetchIntervalInBackground: false,
   })
 
-  const [typesPeriodHours, setTypesPeriodHours] = useState(24)
+  const [typesPeriodHours, setTypesPeriodHours] = useState(() => {
+    const raw = searchParams.get('typePeriod')
+    const n = raw ? Number(raw) : NaN
+    return Number.isFinite(n) && n >= 1 && n <= 168 ? n : 24
+  })
   const taskTypes = useQuery({
     queryKey: ['admin', 'tasks', 'types', typesPeriodHours],
     queryFn: () => adminApi.tasksListTypes(typesPeriodHours),
@@ -685,23 +700,115 @@ export function TasksRoute() {
     staleTime: 60_000,
   })
 
-  const [typeFilter, setTypeFilter] = useState('')
+  const [typeFilter, setTypeFilter] = useState(
+    () => searchParams.get('typeFilter') ?? '',
+  )
   const [typeKindFilter, setTypeKindFilter] = useState<
     'all' | 'taskiq' | 'compute' | 'mixed' | 'paused'
-  >('all')
+  >(
+    () =>
+      (searchParams.get('typeKind') as
+        | 'all'
+        | 'taskiq'
+        | 'compute'
+        | 'mixed'
+        | 'paused'
+        | null) || 'all',
+  )
   const [typeSort, setTypeSort] = useState<
     'volume' | 'name' | 'failed' | 'avg' | 'paused'
-  >('volume')
+  >(
+    () =>
+      (searchParams.get('typeSort') as
+        | 'volume'
+        | 'name'
+        | 'failed'
+        | 'avg'
+        | 'paused'
+        | null) || 'volume',
+  )
+
+  useEffect(() => {
+    setSearchParams((params) => {
+      const out = new URLSearchParams(params)
+      const pairs: Array<[string, string]> = [
+        ['typeFilter', typeFilter],
+        [
+          'typeKind',
+          typeKindFilter === 'all' ? '' : typeKindFilter,
+        ],
+        ['typeSort', typeSort === 'volume' ? '' : typeSort],
+        [
+          'typePeriod',
+          typesPeriodHours === 24 ? '' : String(typesPeriodHours),
+        ],
+      ]
+      for (const [k, v] of pairs) {
+        if (v) out.set(k, v)
+        else out.delete(k)
+      }
+      return out
+    })
+  }, [
+    typeFilter,
+    typeKindFilter,
+    typeSort,
+    typesPeriodHours,
+    setSearchParams,
+  ])
+
+  const wsRef = useRef<AdminWs | null>(null)
+  const lastInvalidateRef = useRef<number>(0)
+  useEffect(() => {
+    const ws = new AdminWs({
+      onEvent: (msg) => {
+        if (msg?.channel !== 'dispatcher') return
+        const now = Date.now()
+        if (now - lastInvalidateRef.current < 500) return
+        lastInvalidateRef.current = now
+        qc.invalidateQueries({
+          queryKey: ['admin', 'tasks', 'types'],
+        })
+        qc.invalidateQueries({
+          queryKey: ['admin', 'tasks', 'overview'],
+        })
+        qc.invalidateQueries({
+          queryKey: ['admin', 'tasks', 'workers'],
+        })
+        qc.invalidateQueries({
+          queryKey: ['admin', 'tasks', 'background-jobs'],
+        })
+      },
+    })
+    wsRef.current = ws
+    ws.subscribe('dispatcher')
+    ws.connect()
+    return () => {
+      ws.unsubscribe('dispatcher')
+      ws.close()
+      wsRef.current = null
+    }
+  }, [qc])
 
   const pauseTypeMutation = useMutation({
-    mutationFn: (params: { name: string; reason?: string }) =>
-      adminApi.tasksPauseType(params.name, params.reason),
+    mutationFn: (params: {
+      name: string
+      reason?: string
+      drain?: boolean
+    }) =>
+      adminApi.tasksPauseType(params.name, {
+        reason: params.reason,
+        drain: params.drain,
+      }),
     onSuccess: () => {
       qc.invalidateQueries({
         queryKey: ['admin', 'tasks', 'types'],
       })
       qc.invalidateQueries({
         queryKey: ['admin', 'tasks', 'audit'],
+      })
+      qc.invalidateQueries({
+        queryKey: ['admin', 'tasks', 'background-jobs'],
       })
     },
   })
@@ -717,21 +824,58 @@ export function TasksRoute() {
     },
   })
 
-  const handlePauseType = async (name: string) => {
-    const ok = await showConfirm(
-      t('admin.tasks.dispatcher.pauseConfirm', {
-        name,
-        defaultValue:
-          'Поставить тип задач "{{name}}" на паузу? Новые задачи ' +
-          'этого типа не будут планироваться. Уже исполняющиеся ' +
-          'продолжат работать до завершения.',
-      }),
-      { danger: true },
-    )
-    if (!ok) return
-    pauseTypeMutation.mutate({ name })
+  const [pauseDialog, setPauseDialog] = useState<{
+    name: string
+  } | null>(null)
+  const [pauseReason, setPauseReason] = useState('')
+  const [pauseDrain, setPauseDrain] = useState(false)
+  const affectedPreview = useQuery({
+    queryKey: [
+      'admin',
+      'tasks',
+      'affected',
+      pauseDialog?.name ?? '',
+    ],
+    queryFn: () =>
+      pauseDialog
+        ? adminApi.tasksAffectedPreview(pauseDialog.name)
+        : Promise.resolve({ background_jobs: 0, compute_jobs: 0 }),
+    enabled: !!pauseDialog,
+    staleTime: 1000,
+  })
+  const handlePauseType = (name: string) => {
+    setPauseDialog({ name })
+    setPauseReason('')
+    setPauseDrain(false)
   }
-  const handleResumeType = async (name: string) => {
+  const submitPause = () => {
+    if (!pauseDialog) return
+    pauseTypeMutation.mutate(
+      {
+        name: pauseDialog.name,
+        reason: pauseReason || undefined,
+        drain: pauseDrain,
+      },
+      {
+        onSuccess: (data) => {
+          if (data.drained) {
+            showIsland({
+              kind: 'toast',
+              title: t('admin.tasks.dispatcher.drainedToast', {
+                bg: data.drained.background_jobs,
+                compute: data.drained.compute_jobs,
+                defaultValue:
+                  'Отменено: bg={{bg}}, compute={{compute}}',
+              }),
+              durationMs: 3500,
+            })
+          }
+          setPauseDialog(null)
+        },
+      },
+    )
+  }
+  const handleResumeType = (name: string) => {
     resumeTypeMutation.mutate(name)
   }
 
@@ -827,7 +971,11 @@ export function TasksRoute() {
     mutationFn: (params: {
       name: string
       payload: Record<string, unknown>
-    }) => adminApi.tasksRunAllowed(params.name, params.payload),
+    }) =>
+      adminApi.tasksManualEnqueue({
+        task_name: params.name,
+        payload: params.payload,
+      }),
     onSuccess: () => {
       qc.invalidateQueries({
         queryKey: ['admin', 'tasks', 'background-jobs'],
@@ -1323,7 +1471,49 @@ export function TasksRoute() {
   return (
     <div>
       <h1>{t('admin.tasks.title')}</h1>
-      <section className="admin-card">
+      <nav
+        className="admin-toolbar admin-dispatcher-nav"
+        aria-label={
+          t('admin.tasks.dispatcher.navAria', {
+            defaultValue: 'Разделы диспетчера',
+          }) as string
+        }
+      >
+        <a className="admin-link" href="#dispatcher-overview">
+          {t('admin.tasks.overview.title')}
+        </a>
+        <a className="admin-link" href="#dispatcher-types">
+          {t('admin.tasks.dispatcher.navTypes', {
+            defaultValue: 'Типы',
+          })}
+        </a>
+        <a className="admin-link" href="#dispatcher-bg">
+          {t('admin.tasks.dispatcher.navBg', {
+            defaultValue: 'Background jobs',
+          })}
+        </a>
+        <a className="admin-link" href="#dispatcher-compute">
+          {t('admin.tasks.dispatcher.navCompute', {
+            defaultValue: 'Compute',
+          })}
+        </a>
+        <a className="admin-link" href="#dispatcher-schedules">
+          {t('admin.tasks.dispatcher.navSchedules', {
+            defaultValue: 'Schedules',
+          })}
+        </a>
+        <a className="admin-link" href="#dispatcher-workers">
+          {t('admin.tasks.dispatcher.navWorkers', {
+            defaultValue: 'Воркеры',
+          })}
+        </a>
+        <a className="admin-link" href="#dispatcher-audit">
+          {t('admin.tasks.dispatcher.navAudit', {
+            defaultValue: 'Аудит',
+          })}
+        </a>
+      </nav>
+      <section className="admin-card" id="dispatcher-overview">
         <h2>{t('admin.tasks.overview.title')}</h2>
         <p className="admin-card__sub">
           {t('admin.tasks.overview.hint')}
@@ -1589,6 +1779,60 @@ export function TasksRoute() {
                 (row.by_status.queued || 0) +
                 (row.by_status.claimed || 0) +
                 (row.by_status.cancelling || 0),
+              cell: (i) => {
+                const s = i.row.original.by_status
+                const chips: Array<[string, number, StatusKind]> = [
+                  ['queued', s.queued || 0, 'unknown'],
+                  ['running', s.running || 0, 'ok'],
+                  ['claimed', s.claimed || 0, 'ok'],
+                  ['cancelling', s.cancelling || 0, 'warn'],
+                ]
+                const visible = chips.filter(([, n]) => n > 0)
+                if (!visible.length)
+                  return (
+                    <span className="admin-card__sub">—</span>
+                  )
+                return (
+                  <div className="admin-toolbar admin-toolbar--compact">
+                    {visible.map(([label, n, kind]) => (
+                      <StatusPill key={label} kind={kind}>
+                        {label}: {n}
+                      </StatusPill>
+                    ))}
+                  </div>
+                )
+              },
+            },
+            {
+              header: t('admin.tasks.dispatcher.cols.schedules', {
+                defaultValue: 'Расп.',
+              }) as string,
+              id: 'schedules',
+              accessorFn: (row) =>
+                (row.schedules || [])
+                  .map((s) =>
+                    s.enabled ? s.cron : `(${s.cron})`,
+                  )
+                  .join(' '),
+              cell: (i) => {
+                const items = i.row.original.schedules || []
+                if (!items.length)
+                  return (
+                    <span className="admin-card__sub">—</span>
+                  )
+                return (
+                  <div className="admin-toolbar admin-toolbar--compact">
+                    {items.map((s) => (
+                      <StatusPill
+                        key={s.id}
+                        kind={s.enabled ? 'ok' : 'warn'}
+                      >
+                        {s.cron}
+                      </StatusPill>
+                    ))}
+                  </div>
+                )
+              },
             },
             {
               header: t('admin.tasks.dispatcher.cols.donePeriod', {
@@ -1718,7 +1962,7 @@ export function TasksRoute() {
             })}
         />
       </section>
-      <section className="admin-card">
+      <section className="admin-card" id="dispatcher-bg">
         <div className="admin-toolbar">
           <h2 style={{ flex: 1 }}>
             {t('admin.tasks.bg.active.title')}
@@ -2215,7 +2459,7 @@ export function TasksRoute() {
           emptyHint={t('admin.tasks.queuesEmpty')}
         />
       </section>
-      <section className="admin-card">
+      <section className="admin-card" id="dispatcher-compute">
         <h2>{t('admin.tasks.computeJobs')}</h2>
         <p className="admin-card__sub">
           {t('admin.tasks.computeJobsHint')}
@@ -2232,7 +2476,7 @@ export function TasksRoute() {
           emptyHint={t('admin.tasks.computeQueueEmpty')}
         />
       </section>
-      <section className="admin-card">
+      <section className="admin-card" id="dispatcher-schedules">
         <div className="admin-toolbar">
           <h2 style={{ flex: 1 }}>
             {t('admin.tasks.lyricsJobs')}
@@ -2320,6 +2564,56 @@ export function TasksRoute() {
             {
               header: 'max',
               accessorKey: 'max_concurrent_jobs',
+            },
+            {
+              header: t(
+                'admin.tasks.dispatcher.workers.cols.claims',
+                { defaultValue: 'В работе' },
+              ) as string,
+              accessorKey: 'current_claims',
+              cell: (i) => {
+                const n = i.row.original.current_claims
+                const max = i.row.original.max_concurrent_jobs
+                if (!n)
+                  return (
+                    <span className="admin-card__sub">0</span>
+                  )
+                return (
+                  <StatusPill
+                    kind={n >= max ? 'warn' : 'ok'}
+                  >
+                    {n}/{max}
+                  </StatusPill>
+                )
+              },
+            },
+            {
+              header: t(
+                'admin.tasks.dispatcher.workers.cols.throughput',
+                { defaultValue: '5м, OK' },
+              ) as string,
+              accessorKey: 'recent_throughput_5m',
+            },
+            {
+              header: t(
+                'admin.tasks.dispatcher.workers.cols.anomaly',
+                { defaultValue: 'Anomaly' },
+              ) as string,
+              accessorKey: 'anomaly_flags_in_window',
+              cell: (i) => {
+                const n = i.row.original.anomaly_flags_in_window
+                if (!n)
+                  return (
+                    <span className="admin-card__sub">0</span>
+                  )
+                return (
+                  <StatusPill
+                    kind={n >= 3 ? 'error' : 'warn'}
+                  >
+                    {n}
+                  </StatusPill>
+                )
+              },
             },
             {
               header: 'last_seen',
@@ -2438,6 +2732,137 @@ export function TasksRoute() {
           rows={(audit.data?.items || []) as AuditRow[]}
         />
       </section>
+      {pauseDialog && (
+        <div
+          className="admin-modal-overlay"
+          role="dialog"
+          aria-modal="true"
+          onClick={() => setPauseDialog(null)}
+        >
+          <div
+            className="admin-modal"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="admin-toolbar">
+              <h3>
+                {t('admin.tasks.dispatcher.pauseDialog.title', {
+                  name: pauseDialog.name,
+                  defaultValue:
+                    'Пауза типа: {{name}}',
+                })}
+              </h3>
+              <MotionPress
+                variant="ghost"
+                className="admin-link"
+                onClick={() => setPauseDialog(null)}
+              >
+                <Icon name="close" />
+              </MotionPress>
+            </div>
+            <p className="admin-card__sub">
+              {t('admin.tasks.dispatcher.pauseDialog.hint', {
+                defaultValue:
+                  'Пауза останавливает новые планирования. ' +
+                  'Включи «drain», чтобы дополнительно отменить ' +
+                  'уже поставленные и текущие задачи этого типа ' +
+                  '(только background_jobs и compute_jobs).',
+              })}
+            </p>
+            <div className="admin-kpi-row">
+              <div className="admin-kpi">
+                <div className="admin-kpi__label">
+                  {t(
+                    'admin.tasks.dispatcher.pauseDialog.bgInflight',
+                    { defaultValue: 'BG активные' },
+                  )}
+                </div>
+                <div className="admin-kpi__value">
+                  {affectedPreview.data?.background_jobs ?? '…'}
+                </div>
+              </div>
+              <div className="admin-kpi">
+                <div className="admin-kpi__label">
+                  {t(
+                    'admin.tasks.dispatcher.pauseDialog.computeInflight',
+                    { defaultValue: 'Compute активные' },
+                  )}
+                </div>
+                <div className="admin-kpi__value">
+                  {affectedPreview.data?.compute_jobs ?? '…'}
+                </div>
+              </div>
+            </div>
+            <label className="admin-field">
+              <span>
+                {t(
+                  'admin.tasks.dispatcher.pauseDialog.reasonLabel',
+                  { defaultValue: 'Причина (опц.)' },
+                )}
+              </span>
+              <input
+                type="text"
+                value={pauseReason}
+                onChange={(e) => setPauseReason(e.target.value)}
+                placeholder="перегрузка / hotfix / ..."
+                maxLength={200}
+              />
+            </label>
+            <label className="admin-checkbox">
+              <input
+                type="checkbox"
+                checked={pauseDrain}
+                onChange={(e) =>
+                  setPauseDrain(e.target.checked)
+                }
+              />
+              <span>
+                {t(
+                  'admin.tasks.dispatcher.pauseDialog.drainLabel',
+                  {
+                    bg:
+                      affectedPreview.data?.background_jobs ?? 0,
+                    compute:
+                      affectedPreview.data?.compute_jobs ?? 0,
+                    defaultValue:
+                      'Drain: также отменить уже активные ' +
+                      '({{bg}} + {{compute}})',
+                  },
+                )}
+              </span>
+            </label>
+            <div className="admin-toolbar">
+              <MotionPress
+                variant="ghost"
+                className="admin-link"
+                onClick={() => setPauseDialog(null)}
+              >
+                {t(
+                  'admin.tasks.dispatcher.pauseDialog.cancel',
+                  { defaultValue: 'Отмена' },
+                )}
+              </MotionPress>
+              <MotionPress
+                variant="danger"
+                onClick={submitPause}
+                disabled={pauseTypeMutation.isPending}
+              >
+                {pauseDrain
+                  ? t(
+                      'admin.tasks.dispatcher.pauseDialog.submitDrain',
+                      {
+                        defaultValue:
+                          'Пауза + drain',
+                      },
+                    )
+                  : t(
+                      'admin.tasks.dispatcher.pauseDialog.submit',
+                      { defaultValue: 'Только пауза' },
+                    )}
+              </MotionPress>
+            </div>
+          </div>
+        </div>
+      )}
       {runOpen && (
         <div
           className="admin-modal-overlay"

@@ -290,7 +290,45 @@ Internal services → scoped JWT (15 мин) + IP whitelist
 | `reindex_artist_task`        | Создание/обогащение артиста                                 |
 | `delete_track_es_task`       | Удаление трека из индекса                                   |
 | `reindex_backfill_all_task`  | Полный backfill (также с lifespan при флагах)               |
+| `cleanup_background_jobs_task` | Ночной cleanup терминальных `background_jobs` по расписанию |
 
+
+### Диспетчер задач (admin / tasks)
+
+Эндпоинты `/api/v1/admin/tasks/*` дают единую панель управления:
+
+- `GET /types` — агрегаты по типам задач (Taskiq + compute_jobs):
+  статусы, p95/avg, статус паузы, расписания.
+- `GET /types/{name}/timeseries` — 5-минутные бакеты throughput
+  и p95 за период (для sparklines в UI).
+- `GET /types/{name}/affected` — preview, сколько задач уйдёт под
+  отмену при drain-паузе.
+- `POST /types/{name}/pause` (step-up) — мягкая пауза. С
+  `drain=true` дополнительно отменяет уже поставленные и
+  исполняющиеся задачи этого типа (через `signal_cancel` для
+  background_jobs и прямой UPDATE для compute_jobs).
+- `POST /types/{name}/resume` (step-up) — снять паузу.
+- `POST /manual` (step-up) — ручной enqueue из white-list типов
+  через `background_jobs.enqueue()` (создаётся `BackgroundJob`
+  row, видно в `/jobs`, есть `created_by_user_id`).
+- `GET /workers` — компьют-воркеры с live-метриками: текущее
+  число claim'ов, throughput за 5 минут, `anomaly_flags_in_window`
+  (см. `compute_anomaly_service`), плюс Taskiq scheduler leader.
+- `GET /audit` — лог admin-действий с префиксом `tasks.`.
+- `POST /jobs/purge` / `POST /compute-jobs/purge` — массовая
+  чистка терминальных записей по возрасту/статусу.
+
+Пауза реализована Redis-хешем `bgjob:paused_tasks` через
+`app.services.task_pause_service`. Проверка вызывается в трёх
+точках: `background_jobs.enqueue` (TaskPaused), `compute_queue_service.claim_next`
+(фильтрует `job_type`-кандидатов), `compute_job_dispatcher.dispatch_compute_job`
+(short-circuit перед offload). Fail-open: при недоступном Redis
+паузы не действуют, чтобы не блокировать production.
+
+WS-канал `dispatcher` (`/api/v1/admin/ws`) шлёт компактный
+heartbeat (`bg_active`, `compute_active`, `paused_count`) с
+дедупликацией по сигнатуре; фронт диспетчера использует его
+для инвалидации React Query при изменениях.
 
 ---
 

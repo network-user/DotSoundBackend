@@ -128,6 +128,121 @@ async def resume_task(task_name: str) -> bool:
     return bool(removed)
 
 
+async def drain_task(task_name: str) -> dict[str, int]:
+    """Cancel queued + in-flight jobs of the given type.
+
+    Returns ``{"background_jobs": N, "compute_jobs": M}``. Caller is
+    expected to call :func:`pause_task` separately (drain is the
+    "hard" half of a hard-pause: pause first to stop the inflow, then
+    drain what is already in flight).
+
+    * ``background_jobs`` matching ``name == task_name`` AND status in
+      (``queued``, ``running``, ``cancelling``) are flagged via
+      :func:`app.services.cancellation.signal_cancel`. Taskiq
+      middleware will mark them ``cancelled`` once the worker checks
+      in (queued jobs flip immediately on next start).
+    * ``compute_jobs`` matching ``job_type == task_name`` (including
+      legacy aliases) AND status in (``pending``, ``claimed``) are set
+      directly to ``cancelled`` with ``next_attempt_at`` cleared so
+      they will not be re-claimed by ``claim_next``.
+    """
+    import contextlib
+
+    from sqlalchemy import update
+
+    from app.core.db import AsyncSessionLocal
+    from app.models.background_job import BackgroundJob
+    from app.models.compute_job import ComputeJob
+    from app.services import compute_queue_service as cq
+    from app.services.cancellation import signal_cancel
+
+    bg_drained = 0
+    compute_drained = 0
+    async with AsyncSessionLocal() as session:
+        bg_rows = (
+            await session.execute(
+                BackgroundJob.__table__.select().where(
+                    BackgroundJob.name == task_name,
+                    BackgroundJob.status.in_(
+                        ("queued", "running", "cancelling")
+                    ),
+                )
+            )
+        ).fetchall()
+        for row in bg_rows:
+            with contextlib.suppress(Exception):
+                await signal_cancel(row.id)
+                bg_drained += 1
+
+        canonical = cq.canonical_job_type(task_name)
+        candidates = {canonical, task_name}
+        for alias, canon in cq.LEGACY_JOB_TYPE_ALIASES.items():
+            if canon == canonical:
+                candidates.add(alias)
+        upd = (
+            update(ComputeJob)
+            .where(
+                ComputeJob.job_type.in_(sorted(candidates)),
+                ComputeJob.status.in_((cq.STATUS_PENDING, cq.STATUS_CLAIMED)),
+            )
+            .values(
+                status="cancelled",
+                next_attempt_at=None,
+                claim_deadline_at=None,
+            )
+            .execution_options(synchronize_session=False)
+        )
+        result = await session.execute(upd)
+        compute_drained = int(result.rowcount or 0)
+        await session.commit()
+
+    logger.warning(
+        "task_drained",
+        task_name=task_name,
+        background_jobs=bg_drained,
+        compute_jobs=compute_drained,
+    )
+    return {
+        "background_jobs": bg_drained,
+        "compute_jobs": compute_drained,
+    }
+
+
+async def affected_jobs_preview(task_name: str) -> dict[str, int]:
+    """Lightweight preview: how many jobs a drain would touch right now."""
+    from sqlalchemy import func, select
+
+    from app.core.db import AsyncSessionLocal
+    from app.models.background_job import BackgroundJob
+    from app.models.compute_job import ComputeJob
+    from app.services import compute_queue_service as cq
+
+    async with AsyncSessionLocal() as session:
+        bg = await session.execute(
+            select(func.count(BackgroundJob.id)).where(
+                BackgroundJob.name == task_name,
+                BackgroundJob.status.in_(("queued", "running", "cancelling")),
+            )
+        )
+        bg_count = int(bg.scalar_one() or 0)
+        canonical = cq.canonical_job_type(task_name)
+        candidates = {canonical, task_name}
+        for alias, canon in cq.LEGACY_JOB_TYPE_ALIASES.items():
+            if canon == canonical:
+                candidates.add(alias)
+        cj = await session.execute(
+            select(func.count(ComputeJob.id)).where(
+                ComputeJob.job_type.in_(sorted(candidates)),
+                ComputeJob.status.in_((cq.STATUS_PENDING, cq.STATUS_CLAIMED)),
+            )
+        )
+        cj_count = int(cj.scalar_one() or 0)
+    return {
+        "background_jobs": bg_count,
+        "compute_jobs": cj_count,
+    }
+
+
 __all__ = [
     "PAUSE_HASH_KEY",
     "TaskPaused",
@@ -136,4 +251,6 @@ __all__ = [
     "list_paused_tasks",
     "pause_task",
     "resume_task",
+    "drain_task",
+    "affected_jobs_preview",
 ]

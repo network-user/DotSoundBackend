@@ -1311,6 +1311,47 @@
 - `[x]` - завершено
 - `[-]` - отменено / неактуально
 
+- [x] **Админ /tasks: фоллоу-ап диспетчера — 15 пунктов (2026-05-17)**
+  — Бекенд:
+  * ``POST /tasks/manual`` — ручной запуск через ``background_jobs.enqueue()``,
+    создаёт BackgroundJob row (видно в ``/jobs``, ``created_by_user_id``),
+    идёт под whitelist ``ALLOWED_TASK_NAMES``.
+  * ``POST /types/{n}/pause`` принимает ``drain=true`` — Pause + отмена
+    активных через ``signal_cancel`` (background_jobs) и прямой UPDATE
+    (compute_jobs); ``GET /types/{n}/affected`` — preview сколько задач
+    попадёт. ``task_pause_service.drain_task`` + ``affected_jobs_preview``.
+  * ``GET /types/{n}/timeseries`` — 5-минутные бакеты created/succeeded/
+    failed + per-period p95/avg/max длительности (sparklines в UI).
+  * ``GET /workers`` расширен: ``current_claims`` (claimed compute_jobs),
+    ``recent_throughput_5m`` (succeeded за 5 мин), ``anomaly_flags_in_window``
+    (Redis-счётчик ``compute_anomaly_service``).
+  * ``GET /types`` теперь возвращает ``schedules[]`` (JOIN ``scheduled_jobs``)
+    и флаг ``enabled`` по каждому — UI показывает paused-schedules как warn.
+  * Nightly cleanup: ``app/services/background_jobs_cleanup_worker.py`` —
+    ``cleanup_background_jobs_task`` (done 7d, cancelled 2d, failed_terminal 30d,
+    LIMIT 50k/sweep). ``ensure_default_cleanup_schedule`` сидит ``17 3 * * *``
+    из lifespan идемпотентно.
+  * WS-канал ``dispatcher`` в ``/api/v1/admin/ws`` — компактный heartbeat
+    (bg_active / compute_active / paused_count) с дедупликацией по сигнатуре.
+  — Фронт (``TasksRoute.tsx``):
+  * Per-row chips (queued/running/claimed/cancelling) вместо одного числа.
+  * Колонка ``schedules`` (cron + paused-окраска).
+  * Sticky anchor-навигация по секциям (Обзор / Типы / BG / Compute / Schedules / Воркеры / Аудит).
+  * URL-персистентность фильтров типов (``typeFilter``, ``typeKind``, ``typeSort``,
+    ``typePeriod``) через ``useSearchParams``.
+  * Pause-модалка с превью кол-ва задач + чекбокс «drain»;
+    submit-кнопка меняет текст (Только пауза / Пауза + drain).
+  * Worker-таблица: новые колонки ``current_claims/max``, ``5м OK``,
+    ``Anomaly`` (warn/error при ненулевом счётчике).
+  * Manual Enqueue теперь идёт через ``/tasks/manual`` (трекаемая job).
+  * WS-подписка на ``dispatcher`` — инвалидирует React Query для types/
+    workers/overview/background-jobs не чаще, чем раз в 500мс.
+  — Тесты: ``tests/app/services/test_task_pause_chain.py`` (3 кейса:
+  claim_next пропускает paused job_type; после resume снова claim-ит;
+  enqueue → TaskPaused → resume → ok).
+  — Доки: ``docs/project_context.md`` — добавлена секция «Диспетчер задач»
+  с описанием эндпоинтов, drain-семантики, fail-open Redis и WS-канала.
+
 - [x] **Админ /tasks: диспетчерская панель + пауза типов задач (2026-05-17)**
   — Бекенд: `app/services/task_pause_service.py` — Redis-хеш
   ``bgjob:paused_tasks``; хуки в ``background_jobs.enqueue``

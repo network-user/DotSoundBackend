@@ -1755,17 +1755,76 @@ export const adminApi = {
         failed_period: number
         avg_duration_ms: number | null
         max_duration_ms: number | null
+        schedules: Array<{
+          id: string
+          name: string
+          cron: string
+          enabled: boolean
+          next_run_at: string | null
+        }>
       }>
     }>('/tasks/types', { query: { period_hours: periodHours } }),
-  tasksPauseType: (name: string, reason?: string) =>
+  tasksPauseType: (name: string, opts?: { reason?: string; drain?: boolean }) =>
     adminFetch<{
       task_name: string
       paused: boolean
       meta: Record<string, unknown>
-    }>(
-      `/tasks/types/${encodeURIComponent(name)}/pause`,
-      { method: 'POST', body: { reason: reason ?? null } },
+      drained: { background_jobs: number; compute_jobs: number } | null
+    }>(`/tasks/types/${encodeURIComponent(name)}/pause`, {
+      method: 'POST',
+      body: {
+        reason: opts?.reason ?? null,
+        drain: !!opts?.drain,
+      },
+    }),
+  tasksAffectedPreview: (name: string) =>
+    adminFetch<{ background_jobs: number; compute_jobs: number }>(
+      `/tasks/types/${encodeURIComponent(name)}/affected`,
     ),
+  tasksTypeTimeseries: (
+    name: string,
+    periodHours = 6,
+    bucketMinutes = 5,
+  ) =>
+    adminFetch<{
+      task_name: string
+      period_hours: number
+      bucket_seconds: number
+      buckets: Array<{
+        ts: number
+        created: number
+        succeeded: number
+        failed: number
+      }>
+      p95_duration_ms: number | null
+      avg_duration_ms: number | null
+      max_duration_ms: number | null
+      samples: number
+    }>(`/tasks/types/${encodeURIComponent(name)}/timeseries`, {
+      query: {
+        period_hours: periodHours,
+        bucket_minutes: bucketMinutes,
+      },
+    }),
+  tasksManualEnqueue: (params: {
+    task_name: string
+    payload?: Record<string, unknown>
+    queue?: string
+    max_attempts?: number
+  }) =>
+    adminFetch<{
+      job_id: string
+      task_name: string
+      queue: string
+    }>('/tasks/manual', {
+      method: 'POST',
+      body: {
+        task_name: params.task_name,
+        payload: params.payload ?? {},
+        queue: params.queue ?? 'default',
+        max_attempts: params.max_attempts ?? 3,
+      },
+    }),
   tasksResumeType: (name: string) =>
     adminFetch<{
       task_name: string
@@ -1791,6 +1850,9 @@ export const adminApi = {
         claims_paused_until: string | null
         claims_pause_reason: string | null
         worker_package_version: string | null
+        current_claims: number
+        recent_throughput_5m: number
+        anomaly_flags_in_window: number
       }>
       scheduler_leader: {
         owner: string | null
