@@ -258,7 +258,7 @@ class AppSettings(BaseSettings):
     # CDN audio fetch already runs without the API egress proxy, so
     # retrying just this step does not return us to the pre-proxy
     # exposure profile.
-    sc_stream_fallback_direct_on_tor_failure: bool = False
+    sc_stream_fallback_direct_on_tor_failure: bool = True
     # Extra same-mode retries after every SoundCloud transcoding
     # manifest returns 404 through one outbound identity.
     sc_stream_manifest_proxy_retries: int = 2

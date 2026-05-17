@@ -1,5 +1,23 @@
 # DotSound - TODO Tracker
 
+- [x] **Hotfix: SC Tor exhaustion from parallel recommendation imports (2026-05-17)**
+  - **Причина**: `_import_external_candidates` переведён на `asyncio.gather + Semaphore(5)`,
+    каждый импорт вызывал `_verify_imported_track_playback` → `_resolve_third_party_stream(use_cache=False)`
+    → захват `soundcloud_slot`. До 5 слотов из 10 уходило на один recommendation-запрос;
+    при нескольких одновременных пользователях пул Tor исчерпывался полностью, и live-стримы
+    тоже падали с «track not available» / IP/Tor-ошибками.
+  - **`app/services/soundcloud_service.py`**: добавлен параметр `skip_playback_verify: bool = False`
+    в `import_or_get_track`. Когда `True` — существующие треки получают только `schedule_reindex_track`
+    (без Tor-верификации), новые треки создаются с `_ingest_schedule` без `_verify_and_reindex`.
+    Вспомогательная функция `_reindex_only` для существующих треков.
+  - **`app/services/recommendation_service.py`**:
+    - `_import_external_candidates`: `max_concurrency` снижен с **5 → 2** (меньше параллельных Tor-слотов).
+    - `import_or_get_track` вызывается с `skip_playback_verify=True` — recommendation-импорты
+      больше не занимают `soundcloud_slot` для верификации стрима.
+  - **`app/config.py`**: `sc_stream_fallback_direct_on_tor_failure` изменён с `False → True` —
+    при исчерпании Tor-цепочек для transcoding-манифестов делается fallback на прямое соединение
+    вместо жёсткого «track not available».
+
 - [x] **Рекомендации: кеш-инвалидация, refresh-эндпоинты, DB-индексы, cache warmer (2026-05-17)**
   - **`app/services/onboarding_service.py`**: при сохранении жанровых/артистных предпочтений
     (`save_preferences`, `replay_onboarding`, `apply_smart_default_profile`) автоматически

@@ -2166,6 +2166,7 @@ class SoundCloudService:
         is_public: bool = True,
         *,
         skip_background_lyrics: bool = False,
+        skip_playback_verify: bool = False,
     ) -> Track:
         sc_url: str = sc_data.get("permalink_url", "")
 
@@ -2213,6 +2214,13 @@ class SoundCloudService:
             await schedule_reindex_track(t.id)
             return playback_verified
 
+        async def _reindex_only(t: Track) -> None:
+            from app.services.search_index_notify import (
+                schedule_reindex_track,
+            )
+
+            await schedule_reindex_track(t.id)
+
         async def _archive_existing_unplayable(t: Track) -> None:
             if t.access_mode != "third_party_stream":
                 t.access_mode = "third_party_stream"
@@ -2237,7 +2245,10 @@ class SoundCloudService:
                         sc_data=sc_data,
                         sc_url=sc_url,
                     )
-                await _verify_and_reindex(existing)
+                if skip_playback_verify:
+                    await _reindex_only(existing)
+                else:
+                    await _verify_and_reindex(existing)
                 return existing
 
         async def _ingest_schedule(t: Track) -> None:
@@ -2352,7 +2363,10 @@ class SoundCloudService:
                         sc_data=sc_data,
                         sc_url=sc_url,
                     )
-                await _verify_and_reindex(existing)
+                if skip_playback_verify:
+                    await _reindex_only(existing)
+                else:
+                    await _verify_and_reindex(existing)
                 return existing
             await self._session.refresh(track)
             logger.info(
@@ -2360,20 +2374,26 @@ class SoundCloudService:
                 sc_url=sc_url,
                 track_id=track.id,
             )
-            playback_verified = await _verify_and_reindex(track)
-            if not playback_verified and settings.sc_strict_import_verify:
-                await self._suppress_unverified_imported_track(
-                    track,
-                    sc_data=sc_data,
-                )
-                raise self._sc_unverified_http_exception(
-                    track=track,
-                    sc_data=sc_data,
-                    sc_url=sc_url,
-                )
-            await _ingest_schedule(track)
-            if playback_verified and track.access_mode == "third_party_stream":
-                await _maybe_enqueue_audio_cache(track.id)
+            if skip_playback_verify:
+                await _ingest_schedule(track)
+            else:
+                playback_verified = await _verify_and_reindex(track)
+                if not playback_verified and settings.sc_strict_import_verify:
+                    await self._suppress_unverified_imported_track(
+                        track,
+                        sc_data=sc_data,
+                    )
+                    raise self._sc_unverified_http_exception(
+                        track=track,
+                        sc_data=sc_data,
+                        sc_url=sc_url,
+                    )
+                await _ingest_schedule(track)
+                if (
+                    playback_verified
+                    and track.access_mode == "third_party_stream"
+                ):
+                    await _maybe_enqueue_audio_cache(track.id)
             return track
 
         external_id = new_values.get("external_id")
@@ -2419,7 +2439,10 @@ class SoundCloudService:
                         sc_data=sc_data,
                         sc_url=sc_url,
                     )
-                await _verify_and_reindex(existing)
+                if skip_playback_verify:
+                    await _reindex_only(existing)
+                else:
+                    await _verify_and_reindex(existing)
                 return existing
             await self._session.refresh(track)
         else:
@@ -2432,20 +2455,26 @@ class SoundCloudService:
             sc_url=sc_url,
             track_id=track.id,
         )
-        playback_verified = await _verify_and_reindex(track)
-        if not playback_verified and settings.sc_strict_import_verify:
-            await self._suppress_unverified_imported_track(
-                track,
-                sc_data=sc_data,
-            )
-            raise self._sc_unverified_http_exception(
-                track=track,
-                sc_data=sc_data,
-                sc_url=sc_url,
-            )
-        await _ingest_schedule(track)
-        if playback_verified and track.access_mode == "third_party_stream":
-            await _maybe_enqueue_audio_cache(track.id)
+        if skip_playback_verify:
+            await _ingest_schedule(track)
+        else:
+            playback_verified = await _verify_and_reindex(track)
+            if not playback_verified and settings.sc_strict_import_verify:
+                await self._suppress_unverified_imported_track(
+                    track,
+                    sc_data=sc_data,
+                )
+                raise self._sc_unverified_http_exception(
+                    track=track,
+                    sc_data=sc_data,
+                    sc_url=sc_url,
+                )
+            await _ingest_schedule(track)
+            if (
+                playback_verified
+                and track.access_mode == "third_party_stream"
+            ):
+                await _maybe_enqueue_audio_cache(track.id)
         return track
 
     async def _suppress_unverified_imported_track(

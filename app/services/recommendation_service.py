@@ -394,7 +394,7 @@ class RecommendationService:
         self,
         candidates: list,
         user_id: int,
-        max_concurrency: int = 5,
+        max_concurrency: int = 2,
     ) -> list[int]:
         from app.config import settings
         from app.services.soundcloud_service import SoundCloudService
@@ -442,6 +442,7 @@ class RecommendationService:
                         sc_data,
                         uploader_id=user_id,
                         skip_background_lyrics=True,
+                        skip_playback_verify=True,
                     )
                     return track.id
                 except Exception as exc:
