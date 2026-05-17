@@ -16,6 +16,7 @@ from app.core.tkq import broker
 from app.models.import_job import ImportJob
 from app.models.track import Track
 from app.repositories.import_job_item import ImportJobItemRepository
+from app.repositories.like import LikeRepository
 from app.repositories.track import TrackRepository
 from app.repositories.user_track_library import (
     UserTrackLibraryRepository,
@@ -140,6 +141,7 @@ async def process_import_job(job_id: int) -> None:
 
         headers = build_internal_headers(settings.bot_internal_secret)
         library_repo = UserTrackLibraryRepository(session)
+        like_repo = LikeRepository(session)
         track_repo = TrackRepository(session)
         blob_service = AudioBlobService(session)
 
@@ -240,6 +242,18 @@ async def process_import_job(job_id: int) -> None:
                                 track_id=existing.id,
                                 error=str(exc),
                             )
+                        try:
+                            await like_repo.add_idempotent(
+                                user_id=job.user_id,
+                                track_id=existing.id,
+                            )
+                        except Exception as exc:
+                            logger.warning(
+                                "import_like_add_failed",
+                                job_id=job_id,
+                                track_id=existing.id,
+                                error=str(exc),
+                            )
                         job.completed_tracks += 1
                         await items_repo.mark_deduped(
                             job.id,
@@ -284,6 +298,18 @@ async def process_import_job(job_id: int) -> None:
                     except Exception as exc:
                         logger.warning(
                             "import_library_add_failed",
+                            job_id=job_id,
+                            track_id=track.id,
+                            error=str(exc),
+                        )
+                    try:
+                        await like_repo.add_idempotent(
+                            user_id=job.user_id,
+                            track_id=track.id,
+                        )
+                    except Exception as exc:
+                        logger.warning(
+                            "import_like_add_failed",
                             job_id=job_id,
                             track_id=track.id,
                             error=str(exc),

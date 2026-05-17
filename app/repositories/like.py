@@ -2,6 +2,7 @@ from datetime import datetime
 
 import structlog
 from sqlalchemy import and_, delete, func, select
+from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.sql.elements import ColumnElement
 
@@ -50,6 +51,28 @@ class LikeRepository:
             track_id=track_id,
         )
         return like
+
+    async def add_idempotent(
+        self, user_id: int, track_id: int
+    ) -> bool:
+        stmt = (
+            pg_insert(Like)
+            .values(user_id=user_id, track_id=track_id)
+            .on_conflict_do_nothing(
+                index_elements=["user_id", "track_id"]
+            )
+        )
+        result = await self._session.execute(stmt)
+        inserted = bool(
+            (getattr(result, "rowcount", 0) or 0) > 0
+        )
+        logger.debug(
+            "db_like_idempotent",
+            user_id=user_id,
+            track_id=track_id,
+            inserted=inserted,
+        )
+        return inserted
 
     async def remove(
         self, user_id: int, track_id: int

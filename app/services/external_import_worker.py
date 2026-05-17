@@ -17,6 +17,7 @@ from app.core.tkq import broker
 from app.models.import_job import ImportJob
 from app.models.track import Track
 from app.repositories.import_job_item import ImportJobItemRepository
+from app.repositories.like import LikeRepository
 from app.repositories.track import TrackRepository
 from app.repositories.user_track_library import (
     UserTrackLibraryRepository,
@@ -403,6 +404,7 @@ async def _process_external_import_job_local(job_id: int) -> None:
 
         sc_service = SoundCloudService(settings.sc_client_id, session)
         library_repo = UserTrackLibraryRepository(session)
+        like_repo = LikeRepository(session)
         track_repo = TrackRepository(session)
 
         if cursor_count > 0:
@@ -478,6 +480,10 @@ async def _process_external_import_job_local(job_id: int) -> None:
                         user_id=job.user_id,
                         track_id=local_match.id,
                         source=job.source,
+                    )
+                    await like_repo.add_idempotent(
+                        user_id=job.user_id,
+                        track_id=local_match.id,
                     )
                     job.completed_tracks += 1
                     await items_repo.mark_done(
@@ -698,6 +704,10 @@ async def _process_external_import_job_local(job_id: int) -> None:
                         user_id=job.user_id,
                         track_id=track.id,
                         source=job.source,
+                    )
+                    await like_repo.add_idempotent(
+                        user_id=job.user_id,
+                        track_id=track.id,
                     )
                     await session.commit()
                 except Exception as exc:

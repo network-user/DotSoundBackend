@@ -57,6 +57,8 @@ _PROM_SC_DIRECT_FALLBACK = None
 
 _PROM_TOR_RECOVERY_TRIGGERED = None
 
+_PROM_AUDIO_EGRESS_TTFB = None
+
 _PROM_REGISTRY: object | None = None
 
 
@@ -408,6 +410,33 @@ def setup_metrics(application: object) -> None:
         (
             "Number of forced NEWNYM signals issued by the Backend "
             "auto-recovery loop after sustained outbound exhaustion."
+        ),
+        registry=registry,
+    )
+
+    global _PROM_AUDIO_EGRESS_TTFB
+    _PROM_AUDIO_EGRESS_TTFB = Histogram(
+        "audio_egress_ttfb_seconds",
+        (
+            "Time-to-first-byte for the upstream audio CDN GET in "
+            "the playback range proxy, labelled by egress identity "
+            "(direct or scheme://host:port) and outcome. Useful for "
+            "spotting a single slow proxy in an otherwise healthy "
+            "pool."
+        ),
+        ["egress", "outcome"],
+        buckets=(
+            0.05,
+            0.1,
+            0.2,
+            0.3,
+            0.5,
+            0.75,
+            1.0,
+            1.5,
+            2.5,
+            5.0,
+            10.0,
         ),
         registry=registry,
     )
@@ -931,3 +960,20 @@ def tor_recovery_triggered_observed() -> None:
     if _PROM_TOR_RECOVERY_TRIGGERED is None:
         return
     _PROM_TOR_RECOVERY_TRIGGERED.inc()
+
+
+def audio_egress_ttfb_observed(
+    *,
+    egress: str,
+    seconds: float,
+    ok: bool,
+) -> None:
+    """Record one upstream audio CDN GET latency observation."""
+    if _PROM_AUDIO_EGRESS_TTFB is None:
+        return
+    if not (seconds >= 0.0 and seconds < float("inf")):
+        return
+    _PROM_AUDIO_EGRESS_TTFB.labels(
+        egress=egress,
+        outcome="ok" if ok else "fail",
+    ).observe(seconds)

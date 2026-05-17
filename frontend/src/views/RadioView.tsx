@@ -124,7 +124,10 @@ export function RadioView() {
     : undefined
   const isLive = Boolean(currentTrack && isPlaying)
 
-  const nextTrack = queue[0] ?? radioPreviewTracks[0] ?? null
+  const nextTrack =
+    queue[0] ??
+    radioPreviewTracks.find((t) => t.id !== currentTrack?.id) ??
+    null
   const nextCover = nextTrack ? coverUrl(nextTrack.cover_key, 120) : null
   const prevTrack =
     radioSessionTimeline.length > 1
@@ -380,7 +383,7 @@ export function RadioView() {
                   }px) scale(${0.78 + Math.max(0, -dragRatio) * 0.1})`,
                 }}
               >
-                <img src={nextCover} alt="" />
+                <img key={nextTrack?.id} src={nextCover} alt="" />
               </div>
             ) : null}
 
@@ -578,7 +581,7 @@ export function RadioView() {
         >
           <div className="rh-radio-next-card__cover" aria-hidden>
             {nextCover ? (
-              <img src={nextCover} alt="" />
+              <img key={nextTrack.id} src={nextCover} alt="" />
             ) : (
               <Icon name="radio" size={22} />
             )}

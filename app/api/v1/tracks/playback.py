@@ -266,17 +266,42 @@ def _get_audio_proxy_client(proxy_url: str | None) -> httpx.AsyncClient:
     Reuses an existing client so the underlying TCP/TLS connections
     (and SOCKS5 tunnel for Tor/static proxies) are shared across
     requests instead of being re-negotiated on every audio stream.
+
+    Timeouts are tuned for audio CDN realities:
+
+    * ``connect=10s`` — was 30s; a healthy egress connects within
+      1–2s, anything past 5s is almost always a dead proxy URL or a
+      DNS hiccup. Failing fast lets the pool quarantine and rotate
+      to the next egress instead of making the user wait half a
+      minute for the inevitable failure.
+    * ``read=120s`` — was 300s. Even a 1h podcast chunked at the
+      typical 64KiB Range probe completes well under 60s on any
+      remotely usable link; 120s is generous enough to absorb a
+      single stalled segment without prematurely disconnecting a
+      slow listener on mobile data.
+    * ``write=15s`` and ``pool=15s`` — explicit ceilings instead of
+      inheriting the 300s default, so a wedged write or a saturated
+      keepalive pool cannot stall the request indefinitely.
+
+    Connection pool: ``max_keepalive_connections`` raised from 20 to
+    50 so concurrent listeners on the same egress reuse warm
+    sockets instead of paying the connect cost each time.
     """
     client = _audio_proxy_http_clients.get(proxy_url)
     if client is None or client.is_closed:
         client = httpx.AsyncClient(
-            timeout=httpx.Timeout(300.0, connect=30.0),
+            timeout=httpx.Timeout(
+                connect=10.0,
+                read=120.0,
+                write=15.0,
+                pool=15.0,
+            ),
             follow_redirects=True,
             trust_env=False,
             proxy=proxy_url,
             limits=httpx.Limits(
-                max_connections=50,
-                max_keepalive_connections=20,
+                max_connections=100,
+                max_keepalive_connections=50,
             ),
         )
         _audio_proxy_http_clients[proxy_url] = client
@@ -369,10 +394,28 @@ async def _http_proxy_range_get(
 
     client = _get_audio_proxy_client(out_proxy)
     started_at = time.monotonic()
+    egress_label = (
+        streaming_decision.egress_name
+        if streaming_decision is not None
+        else (out_proxy or "direct")
+    )
     try:
         req = client.build_request("GET", stream_url, headers=h)
         resp = await client.send(req, stream=True)
     except httpx.HTTPError as exc:
+        elapsed = time.monotonic() - started_at
+        try:
+            from app.core.observability import (
+                audio_egress_ttfb_observed,
+            )
+
+            audio_egress_ttfb_observed(
+                egress=egress_label,
+                seconds=elapsed,
+                ok=False,
+            )
+        except Exception:  # pragma: no cover - metrics best-effort
+            pass
         if proxy_service and streaming_decision is None:
             from app.services.outbound_proxy import (
                 record_outbound_proxy_error,
@@ -402,6 +445,20 @@ async def _http_proxy_range_get(
             status_code=status.HTTP_502_BAD_GATEWAY,
             detail=detail_error,
         ) from exc
+
+    elapsed_ttfb = time.monotonic() - started_at
+    try:
+        from app.core.observability import (
+            audio_egress_ttfb_observed,
+        )
+
+        audio_egress_ttfb_observed(
+            egress=egress_label,
+            seconds=elapsed_ttfb,
+            ok=resp.status_code in (200, 206),
+        )
+    except Exception:  # pragma: no cover - metrics best-effort
+        pass
 
     if resp.status_code not in (200, 206):
         if streaming_decision is not None:

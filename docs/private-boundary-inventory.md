@@ -71,9 +71,13 @@ which parts are owned by `DotSoundPrivateCore`.
   ``streaming_egress_quarantine_total``,
   ``streaming_egress_exhausted_total``,
   ``streaming_egress_in_flight``,
-  ``streaming_egress_failure_ratio``. Labels stay
+  ``streaming_egress_failure_ratio``,
+  ``audio_egress_ttfb_seconds`` (Histogram). Labels stay
   low-cardinality (egress identity = ``direct`` or
-  ``scheme://host:port``).
+  ``scheme://host:port``). The TTFB histogram is recorded by the
+  Backend playback range proxy right after the upstream
+  ``GET`` returns — useful for spotting one slow proxy in a
+  pool that otherwise looks healthy.
 - Catalog/API path (``api-v2.soundcloud.com`` resolve / search /
   transcoding metadata) keeps the legacy OutboundClient pool
   (Tor / static proxies) as the primary egress. When every

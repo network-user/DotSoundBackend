@@ -23,11 +23,17 @@ const LS_PLAYBACK_WARM_INDEX_LEGACY = 'ds:playback-warm-index:v1'
 const LS_PLAYBACK_WARM_CLEANED = 'ds:playback-warm-cleaned:v1'
 
 const PROGRESSIVE_SW_CACHE_NAME = 'progressive-audio-cache'
-// Cap full-body prefetches at ~12 MB so a misconfigured CDN can't
-// drain the user's data plan on a single skipped track. 12 MB covers
-// a 5-minute track at 320kbps with margin and matches the SW
-// CacheFirst quota expectations.
-const PROGRESSIVE_SW_PREFETCH_MAX_BYTES = 12 * 1024 * 1024
+// Cap full-body prefetches at ~32 MB so a misconfigured CDN can't
+// drain the user's data plan on a single skipped track. 32 MB covers
+// a 13-minute track at 320kbps and ~22min at 192kbps with margin.
+// Was 12 MB — bumped after listener reports that "already played"
+// tracks kept re-downloading because long tracks fell over the cap
+// and silently skipped caching.
+const PROGRESSIVE_SW_PREFETCH_MAX_BYTES = 32 * 1024 * 1024
+const PROGRESSIVE_SW_CACHED_IDS = new Set<number>()
+const PROGRESSIVE_SW_CACHED_LOAD_LOCK: { promise: Promise<void> | null } = {
+  promise: null,
+}
 
 type FetchPriority = 'low' | 'high' | 'auto'
 
@@ -164,6 +170,85 @@ export async function getCachedAudioUrl(
   } catch {
     return null
   }
+}
+
+// Progressive SW cache (``progressive-audio-cache``) is the warm
+// cache for tracks that are NOT pinned in IndexedDB — typically
+// third_party_stream tracks that legal policy forbids us from
+// downloading offline. We still want "already played" tracks to
+// start instantly, so we maintain an in-memory mirror of which
+// trackIds have a 200 OK entry there and surface them via
+// ``isCachedSync`` plus ``getCachedAudioUrl``. The audio element
+// can then bind a blob URL and skip the network round-trip
+// entirely.
+export async function ensureProgressiveCachedIdsLoaded(): Promise<void> {
+  if (typeof caches === 'undefined') return
+  if (PROGRESSIVE_SW_CACHED_LOAD_LOCK.promise) {
+    await PROGRESSIVE_SW_CACHED_LOAD_LOCK.promise
+    return
+  }
+  PROGRESSIVE_SW_CACHED_LOAD_LOCK.promise = (async () => {
+    try {
+      const cache = await caches.open(PROGRESSIVE_SW_CACHE_NAME)
+      const requests = await cache.keys()
+      PROGRESSIVE_SW_CACHED_IDS.clear()
+      const re = /\/api\/v1\/tracks\/(\d+)\/audio/
+      for (const req of requests) {
+        const m = re.exec(req.url)
+        if (!m) continue
+        const id = Number(m[1])
+        if (Number.isFinite(id) && id > 0) {
+          PROGRESSIVE_SW_CACHED_IDS.add(id)
+        }
+      }
+      notifyCacheChange()
+    } catch {
+      /* ignore — best effort */
+    }
+  })()
+  await PROGRESSIVE_SW_CACHED_LOAD_LOCK.promise
+}
+
+export function isProgressiveSwCachedSync(trackId: number): boolean {
+  return PROGRESSIVE_SW_CACHED_IDS.has(trackId)
+}
+
+async function _progressiveSwBlobUrl(
+  trackId: number,
+): Promise<string | null> {
+  if (typeof caches === 'undefined') return null
+  try {
+    const cache = await caches.open(PROGRESSIVE_SW_CACHE_NAME)
+    const url = trackProgressiveAudioUrl(trackId)
+    let res = await cache.match(url)
+    if (!res) {
+      res = await cache.match(LEGACY_AUDIO(trackId))
+    }
+    if (!res) {
+      PROGRESSIVE_SW_CACHED_IDS.delete(trackId)
+      return null
+    }
+    const blob = await res.blob()
+    if (!blob || blob.size === 0) {
+      PROGRESSIVE_SW_CACHED_IDS.delete(trackId)
+      return null
+    }
+    return URL.createObjectURL(blob)
+  } catch {
+    return null
+  }
+}
+
+export async function getProgressiveSwAudioUrl(
+  trackId: number,
+): Promise<string | null> {
+  if (!isProgressiveSwCachedSync(trackId)) {
+    if (PROGRESSIVE_SW_CACHED_LOAD_LOCK.promise) {
+      await ensureProgressiveCachedIdsLoaded()
+    }
+    if (!isProgressiveSwCachedSync(trackId)) return null
+  }
+  return _progressiveSwBlobUrl(trackId)
 }
 
 /**
@@ -325,6 +410,7 @@ export async function prefetchProgressiveBodyForCache(
     )
     if (
       Number.isFinite(lenHeader) &&
+      lenHeader > 0 &&
       lenHeader > PROGRESSIVE_SW_PREFETCH_MAX_BYTES
     ) {
       try {
@@ -335,8 +421,22 @@ export async function prefetchProgressiveBodyForCache(
       return false
     }
     if (!res.body) return false
+    // Read the whole body into one buffer so we can write it into
+    // Cache API explicitly. We used to rely on the Workbox SW's
+    // CacheFirst route to intercept this fetch and persist the
+    // response — but that only works when the SW request handler
+    // sees the same Request mode/credentials/scope as the audio
+    // element. In practice the audio element runs with
+    // ``crossOrigin='anonymous'`` (mode=cors) while this fetch ran
+    // mode=same-origin → the SW could (and did) miss the route, and
+    // already-played tracks kept refetching. Writing into the cache
+    // ourselves removes that dependency entirely; the audio element
+    // still hits the SW route on subsequent plays and Workbox just
+    // returns our entry.
     const reader = res.body.getReader()
+    const chunks: Uint8Array[] = []
     let received = 0
+    let oversized = false
     while (true) {
       if (signal?.aborted) {
         try {
@@ -359,16 +459,45 @@ export async function prefetchProgressiveBodyForCache(
       if (value) {
         received += value.byteLength
         if (received > PROGRESSIVE_SW_PREFETCH_MAX_BYTES) {
+          oversized = true
           try {
             await reader.cancel()
           } catch {
             /* ignore */
           }
-          return false
+          break
         }
+        chunks.push(value)
       }
     }
-    return received > 0
+    if (oversized || received === 0) return false
+    const contentType =
+      res.headers.get('content-type') || 'audio/mpeg'
+    const headers = new Headers({
+      'content-type': contentType,
+      'content-length': String(received),
+    })
+    const etag = res.headers.get('etag')
+    if (etag) headers.set('etag', etag)
+    const acceptRanges = res.headers.get('accept-ranges')
+    if (acceptRanges) headers.set('accept-ranges', acceptRanges)
+    headers.set('x-dotsound-cache-source', 'prefetch')
+    const cachedResponse = new Response(
+      new Blob(chunks as BlobPart[]),
+      {
+        status: 200,
+        statusText: 'OK',
+        headers,
+      },
+    )
+    try {
+      await cache.put(url, cachedResponse)
+    } catch {
+      return false
+    }
+    PROGRESSIVE_SW_CACHED_IDS.add(trackId)
+    notifyCacheChange()
+    return true
   } catch {
     return false
   }

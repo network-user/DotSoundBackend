@@ -466,7 +466,7 @@ describe('PrefetchManager', () => {
     expect(m.wasWarm(700)).toBe(false)
   })
 
-  it('warms full body for the first card on cold home feed', async () => {
+  it('does not full-body prefetch on cold home feed (perf)', async () => {
     const { spy } = _buildFetchSpy()
     vi.stubGlobal('fetch', spy)
 
@@ -483,12 +483,8 @@ describe('PrefetchManager', () => {
       { context: 'home' },
     )
 
-    await vi.waitFor(() => {
-      expect(_prefetchProgressiveBodyForCacheMock).toHaveBeenCalledTimes(1)
-    })
-    expect(
-      (_prefetchProgressiveBodyForCacheMock.mock.calls[0]! as unknown as [number, ...unknown[]])[0],
-    ).toBe(900)
+    await new Promise((r) => setTimeout(r, 30))
+    expect(_prefetchProgressiveBodyForCacheMock).not.toHaveBeenCalled()
   })
 
   it('hot context (queue) keeps the full policy budget', async () => {

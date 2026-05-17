@@ -82,14 +82,19 @@ const _HOT_FULL_DOWNLOAD_CONTEXTS: ReadonlySet<PrefetchContextName> = new Set(
   ],
 )
 
-// Cold-feed contexts (home, library, search, …) get one full-body
-// download per enqueue call when the budget allows. The user
-// commonly clicks the FIRST card in a feed and expects the second
-// click on the same card to start instantly, so warming a single
-// neighbour shifts "play / leave / come back" from a fresh network
-// fetch to a cache hit. Stays gated behind save-data / 2g / quota
-// inside the prefetch helper.
-const _COLD_FULL_DOWNLOAD_BUDGET = 1
+// Cold-feed contexts (home, library, search, …) used to get one
+// full-body download per enqueue call to make "play / leave / come
+// back" feel instant. Disabled in 2026-05-17 perf pass: the
+// concurrent full-body fetch was eating one of the ~6 HTTP/1.1
+// connection slots in the browser and made the FIRST click on a
+// neighbouring track wait for the previous warm to finish. Cold
+// feeds now only get the lighter head-warm (initial bytes via
+// Range), which keeps the SW cache hot enough for fast preview
+// without blocking the next /audio request. Hot contexts
+// (playback / queue / radio / continue / deep_link) still use
+// ``policy.fullDownloadAhead`` because there the user's next track
+// is statistically certain.
+const _COLD_FULL_DOWNLOAD_BUDGET = 0
 
 
 interface FetchPolicyArgs {

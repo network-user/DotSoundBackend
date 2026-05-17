@@ -1043,6 +1043,7 @@
     "sourceAll": "All",
     "sourceTelegram": "Telegram",
     "sourceSoundcloud": "SoundCloud",
+    "sourceYandex": "Yandex Music",
     "sourceOther": "Other",
     "sourceFilterAria": "Filter by source"
   },

@@ -1,5 +1,90 @@
 # DotSound - TODO Tracker
 
+- [x] **Caching: явный cache.put + blob URL fast-path для прослушанных треков (2026-05-18, regression fix)**
+  - **Symptom**: «уже прослушанные треки приходится заново загружать»
+    — повторный play любого трека (особенно SoundCloud) шёл в сеть
+    с самого начала, как будто warm-кеш просто не существовал.
+    Корневая причина: `prefetchProgressiveBodyForCache` после
+    скачивания тела **не писал в Cache API**, а полагался на то,
+    что Workbox SW CacheFirst-route сам перехватит fetch и
+    положит ответ в `progressive-audio-cache`. На практике
+    audio element шёл с `crossOrigin='anonymous'` (mode=cors), а
+    наш fetch — mode=same-origin. SW route в этих условиях
+    нестабильно матчила запросы → 200 OK не сохранялись, и при
+    re-play `<audio>` снова шёл за свежим upstream'ом.
+  - **Frontend** — `frontend/src/lib/offlineCache.ts`:
+    `prefetchProgressiveBodyForCache` теперь вычитывает body в
+    буфер и **явно** пишет `cache.put(url, Response)` в
+    `progressive-audio-cache`. Лимит размера поднят с 12 МБ до
+    32 МБ (старый лимит резал любой 5+-минутный 320kbps трек).
+    Добавлены публичные хелперы `ensureProgressiveCachedIdsLoaded`,
+    `isProgressiveSwCachedSync`, `getProgressiveSwAudioUrl` —
+    in-memory mirror SW-кеша + blob URL для синхронной выдачи
+    в hot-path play.
+  - **Frontend** — `frontend/src/store/PlayerContext.tsx`: в hot
+    path `playTrack` после неудачи `isCachedSync` (IndexedDB)
+    добавлен fallback на `isProgressiveSwCachedSync` →
+    `getProgressiveSwAudioUrl` → blob URL. Re-play уже
+    прослушанного третьепартийного трека стартует мгновенно,
+    без `getStream` и без сетевого Range. На mount
+    PlayerProvider подгружается список cached id'шек одним
+    проходом по `cache.keys()`. В `armProgressiveBodyCacheWarm`
+    добавлена развилка: для UGC/licensed треков
+    (`access_mode=internal_stream` && `catalog_type≠external_reference`)
+    после 6с прослушивания запускается `queueAutoCache(track,
+    {source:'recommendation'})` — трек кладётся в IndexedDB
+    `offline-tracks-v1` с TTL 7 дней; для third_party_stream
+    остался прежний путь — warm SW cache.
+  - **Tests** — `frontend/src/lib/offlineCache.test.ts` +4
+    кейса: `isProgressiveSwCachedSync` в пустой среде,
+    `ensureProgressiveCachedIdsLoaded` без Cache API,
+    `getProgressiveSwAudioUrl` без Cache API, и интеграционный
+    тест что `prefetchProgressiveBodyForCache` действительно
+    дергает `cache.put` ровно один раз и регистрирует id.
+    Frontend 45/45 ✓.
+
+- [x] **Playback latency: убрано двойное скачивание + sane backend timeouts + TTFB-метрика (2026-05-17, perf pass)**
+  - **Symptom**: после нескольких треков `next` начинает «висеть» секунды
+    до старта нового. Корневая причина — на каждом треке в полёте
+    одновременно: (1) Range-stream через `<audio>`, (2)
+    `armProgressiveBodyCacheWarm` full-body для текущего, (3)
+    PrefetchManager full-body x2 для соседей, (4) cold-feed full-body
+    для одного соседа из feed. На HTTP/1.1 с 6 connection slots на
+    origin это превращается в очередь — новый /audio ждёт пока
+    старый прогрев освободит соединение.
+  - **Frontend** — `frontend/src/store/PlayerContext.tsx`:
+    `armProgressiveBodyCacheWarm` переписан. Запуск переехал с
+    `canplay` на отложенный `setTimeout(armDelay, 6000ms)` после
+    первого `playing` event. Если за 6с пользователь скипнул, paused,
+    или `audio.currentTime < 5` — прогрев не запускается. Каждый
+    запуск получает свой `AbortController`, привязанный к жизни
+    трека: на смене `lastTrackIdRef` старый controller форсированно
+    abort'ится через карту `_armedFullBodyControllers`. Dedup с
+    `getPrefetchManager().wasWarm(trackId)` — если PrefetchManager
+    уже прогрел трек, повторный full-body GET не делается. Long-listened
+    треки всё ещё кешируются в Workbox; drive-by скипы — нет.
+  - **Frontend** — `frontend/src/lib/prefetch/PrefetchManager.ts`:
+    `_COLD_FULL_DOWNLOAD_BUDGET = 0` (был 1). Cold-feed контексты
+    (home, library, search, …) больше не делают full-body для
+    соседнего трека и довольствуются head-warm initial bytes.
+    Hot-context (playback / queue / radio / continue / deep_link)
+    оставлен с `policy.fullDownloadAhead`, потому что там next track
+    статистически почти гарантированно сыграет.
+  - **Backend** — `app/api/v1/tracks/playback.py` (`_get_audio_proxy_client`):
+    `httpx.Timeout(300, connect=30)` → `Timeout(connect=10, read=120,
+    write=15, pool=15)`. 30с connect был причиной long-tail
+    «трек висит 25 секунд → 502» когда какой-то egress отвалился.
+    `max_keepalive_connections` 20 → 50 (concurrent listeners на
+    тот же egress теперь переиспользуют warm sockets).
+  - **Backend** — `app/core/observability.py`: новый Histogram
+    `audio_egress_ttfb_seconds{egress, outcome}` (buckets 50ms…10s).
+    Пишется из `_http_proxy_range_get` сразу после `client.send(req,
+    stream=True)` — позволяет в Grafana увидеть p99 TTFB по каждому
+    egress'у и поймать одну больную прокси в здоровом пуле.
+  - **Tests** — `tests/lib/prefetch/PrefetchManager.test.ts` обновлён
+    (cold-feed test теперь проверяет что full-body НЕ вызывается).
+    Frontend 41/41 ✓, Backend 57/57 ✓ по затронутым модулям.
+
 - [x] **Стриминг: alerts + auto-recovery + grace-period retry (2026-05-17, high-priority follow-up)**
   - **Prometheus alerts** — `infra/prometheus/streaming_alerts.yml` (новый),
     подключен через `rule_files` в `infra/prometheus/prometheus.yml` и

@@ -15,13 +15,17 @@ vi.mock('@/lib/api', () => ({
 import {
   cancelAutoCache,
   DownloadAbortedError,
+  ensureProgressiveCachedIdsLoaded,
   getAutoCacheEnabled,
   getAutoCacheOnboardingShown,
   getCacheLimitChoice,
   getCachedIdsSync,
   getEffectiveCacheLimit,
+  getProgressiveSwAudioUrl,
   isOfflineCacheSupported,
+  isProgressiveSwCachedSync,
   markAutoCacheOnboardingShown,
+  prefetchProgressiveBodyForCache,
   queueAutoCache,
   setAutoCacheEnabled,
   setCacheLimitChoice,
@@ -121,6 +125,58 @@ describe('DownloadAbortedError', () => {
     const err = new DownloadAbortedError()
     expect(err).toBeInstanceOf(Error)
     expect(err.name).toBe('DownloadAbortedError')
+  })
+})
+
+describe('progressive SW cache helpers', () => {
+  beforeEach(() => {
+    ;(globalThis as { caches?: unknown }).caches = undefined
+  })
+
+  it('isProgressiveSwCachedSync returns false in fresh env', () => {
+    expect(isProgressiveSwCachedSync(123)).toBe(false)
+  })
+
+  it('ensureProgressiveCachedIdsLoaded is a no-op without Cache API', async () => {
+    await expect(
+      ensureProgressiveCachedIdsLoaded(),
+    ).resolves.toBeUndefined()
+  })
+
+  it('getProgressiveSwAudioUrl returns null without Cache API', async () => {
+    const url = await getProgressiveSwAudioUrl(123)
+    expect(url).toBeNull()
+  })
+
+  it('writes 200 OK into Cache API explicitly on prefetch', async () => {
+    const cacheStore = new Map<string, Response>()
+    const cache = {
+      match: vi.fn(async (url: string) => cacheStore.get(url)),
+      put: vi.fn(async (url: string, res: Response) => {
+        cacheStore.set(url, res)
+      }),
+      keys: vi.fn(async () => []),
+    }
+    ;(globalThis as { caches?: unknown }).caches = {
+      open: vi.fn(async () => cache),
+    }
+    const fetchSpy = vi
+      .spyOn(globalThis, 'fetch')
+      .mockResolvedValue(
+        new Response(new Uint8Array([1, 2, 3]), {
+          status: 200,
+          headers: {
+            'content-type': 'audio/mpeg',
+            'content-length': '3',
+          },
+        }),
+      )
+    const ok = await prefetchProgressiveBodyForCache(777)
+    expect(ok).toBe(true)
+    expect(cache.put).toHaveBeenCalledTimes(1)
+    expect(cacheStore.size).toBe(1)
+    expect(isProgressiveSwCachedSync(777)).toBe(true)
+    fetchSpy.mockRestore()
   })
 })
 

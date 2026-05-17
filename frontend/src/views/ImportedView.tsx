@@ -10,7 +10,12 @@ interface ImportedViewProps {
   embedded?: boolean
 }
 
-type SourceFilter = 'all' | 'telegram' | 'soundcloud' | 'other'
+type SourceFilter =
+  | 'all'
+  | 'telegram'
+  | 'soundcloud'
+  | 'yandex_music'
+  | 'other'
 
 const PAGE_SIZE = 50
 
@@ -30,10 +35,19 @@ const SOURCE_FILTERS: {
     labelKey: 'imported.sourceSoundcloud',
     apiValue: 'soundcloud',
   },
+  {
+    key: 'yandex_music',
+    labelKey: 'imported.sourceYandex',
+    apiValue: 'yandex_music',
+  },
   { key: 'other', labelKey: 'imported.sourceOther' },
 ]
 
-const OTHER_SOURCES = new Set(['telegram', 'soundcloud'])
+const OTHER_SOURCES = new Set([
+  'telegram',
+  'soundcloud',
+  'yandex_music',
+])
 
 function isOther(track: Track): boolean {
   const src = (

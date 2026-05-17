@@ -15,11 +15,15 @@ import { getInternalUserId } from '@/lib/telegram'
 import { dismissIsland, showIsland, updateIsland } from '@/lib/island'
 import i18n from '@/lib/i18n'
 import {
+  ensureProgressiveCachedIdsLoaded,
   getCachedAudioUrl,
   getCachedIdsSync,
+  getProgressiveSwAudioUrl,
   isCachedSync,
+  isProgressiveSwCachedSync,
   markPlayed as markCachePlayed,
   prefetchProgressiveBodyForCache,
+  queueAutoCache,
   trackProgressiveAudioUrl,
 } from '@/lib/offlineCache'
 import { queueOrSend } from '@/lib/pendingEvents'
@@ -501,6 +505,27 @@ const _QUEUE_PERSIST_TTL_MS = 7 * 24 * 60 * 60 * 1000
 // current tab; cleared on page reload, which is fine because the SW
 // cache survives reloads.
 const _armedFullBodyCacheTrackIds = new Set<number>()
+
+// Live AbortControllers for in-flight full-body warm fetches, keyed
+// by track id. Lets us cancel a still-running warm GET when the
+// user skips to the next track before the warm fetch reaches the
+// real ``prefetchProgressiveBodyForCache`` call. Without this, every
+// skip leaks one warm GET that competes with the new track's main
+// stream for the (browser-bound) ~6 HTTP/1.1 connection slots —
+// which was the dominant reason "next" felt slow on busy sessions.
+const _armedFullBodyControllers = new Map<number, AbortController>()
+
+// We do NOT start the warm GET on canplay anymore. The user often
+// skips within the first few seconds (radio scrolling, "wrong song"
+// reflex), and starting a full-body fetch immediately ends up
+// duplicating the audio download we are already doing via Range
+// while the user has zero intent of staying on the track. Wait
+// until the track has actually been playing for this many ms with
+// at least ``ARM_FULL_BODY_MIN_PROGRESS_S`` seconds elapsed before
+// arming. Long-listened tracks still get cached, drive-by skips
+// don't.
+const ARM_FULL_BODY_DELAY_MS = 6000
+const ARM_FULL_BODY_MIN_PROGRESS_S = 5
 
 const _RADIO_STATE_KEY = 'player-radio-state'
 
@@ -1611,6 +1636,10 @@ export function PlayerProvider({
   }, [loadEqSettings])
 
   useEffect(() => {
+    void ensureProgressiveCachedIdsLoaded()
+  }, [])
+
+  useEffect(() => {
     if (!isEqOpen) return
     void loadEqSettings(true)
   }, [isEqOpen, loadEqSettings])
@@ -2283,29 +2312,127 @@ export function PlayerProvider({
       if (track.access_mode === 'external_link') return
       if (isCachedSync(trackId)) return
       if (_armedFullBodyCacheTrackIds.has(trackId)) return
-      let armed = false
-      const trigger = () => {
-        if (armed) return
-        armed = true
-        cleanup()
-        if (lastTrackIdRef.current !== trackId) return
-        _armedFullBodyCacheTrackIds.add(trackId)
-        void prefetchProgressiveBodyForCache(trackId).catch(
-          () => undefined,
-        )
+      try {
+        if (getPrefetchManager().wasWarm(trackId)) return
+      } catch {
+        /* prefetch manager singleton not ready, fall through */
       }
-      const cleanup = () => {
-        audio.removeEventListener('canplay', trigger)
-        audio.removeEventListener('playing', trigger)
-        if (timeoutId != null) {
-          window.clearTimeout(timeoutId)
+
+      const armDelayMs = ARM_FULL_BODY_DELAY_MS
+      const minPlaybackProgressSec = ARM_FULL_BODY_MIN_PROGRESS_S
+      let armed = false
+      let waitingForPlay = true
+      let delayTimeoutId: number | null = null
+      const controller = new AbortController()
+      const previousController = _armedFullBodyControllers.get(trackId)
+      if (previousController) {
+        try {
+          previousController.abort()
+        } catch {
+          /* ignore */
         }
       }
-      audio.addEventListener('canplay', trigger, { once: true })
-      audio.addEventListener('playing', trigger, { once: true })
-      const timeoutId = window.setTimeout(() => {
-        cleanup()
-      }, 30_000)
+      _armedFullBodyControllers.set(trackId, controller)
+
+      const cleanup = (reason: 'done' | 'cancel') => {
+        audio.removeEventListener('playing', onPlaying)
+        audio.removeEventListener('pause', onPause)
+        audio.removeEventListener('error', onCancel)
+        if (delayTimeoutId != null) {
+          window.clearTimeout(delayTimeoutId)
+          delayTimeoutId = null
+        }
+        if (reason === 'cancel' && !armed) {
+          try {
+            controller.abort()
+          } catch {
+            /* ignore */
+          }
+        }
+        if (_armedFullBodyControllers.get(trackId) === controller) {
+          _armedFullBodyControllers.delete(trackId)
+        }
+      }
+
+      const fire = () => {
+        if (armed) return
+        armed = true
+        if (
+          lastTrackIdRef.current !== trackId ||
+          controller.signal.aborted
+        ) {
+          cleanup('cancel')
+          return
+        }
+        if (audio.currentTime < minPlaybackProgressSec) {
+          cleanup('cancel')
+          return
+        }
+        _armedFullBodyCacheTrackIds.add(trackId)
+        cleanup('done')
+        // Tracks the user owns or licensed catalog tracks served
+        // from our own MinIO/CDN may go into IndexedDB
+        // (``offline-tracks-v1``). Next play then resolves
+        // synchronously via ``isCachedSync`` → blob URL → instant
+        // start, no network round-trip at all. Backend's offline
+        // eligibility check is the source of truth and will reject
+        // the request if policy disallows persisting this track,
+        // so this branch is safe to take optimistically.
+        const eligibleForLocalDownload =
+          track.access_mode === 'internal_stream' &&
+          track.catalog_type !== 'external_reference'
+        if (eligibleForLocalDownload) {
+          queueAutoCache(track, {
+            source: 'recommendation',
+            pinned: false,
+          })
+          return
+        }
+        // Third-party streams (SoundCloud, Bandcamp, YouTube)
+        // cannot be persisted to IndexedDB by legal policy. They
+        // still benefit from the warm Workbox cache so a re-play
+        // hits ``progressive-audio-cache`` instead of negotiating
+        // a fresh upstream stream URL.
+        void prefetchProgressiveBodyForCache(trackId, {
+          signal: controller.signal,
+        }).catch(() => undefined)
+      }
+
+      const scheduleFire = () => {
+        if (delayTimeoutId != null) return
+        delayTimeoutId = window.setTimeout(() => {
+          delayTimeoutId = null
+          fire()
+        }, armDelayMs)
+      }
+
+      const onPlaying = () => {
+        if (!waitingForPlay) return
+        waitingForPlay = false
+        scheduleFire()
+      }
+      const onPause = () => {
+        if (!waitingForPlay && delayTimeoutId == null) return
+        if (delayTimeoutId != null) {
+          window.clearTimeout(delayTimeoutId)
+          delayTimeoutId = null
+        }
+        waitingForPlay = true
+      }
+      const onCancel = () => {
+        cleanup('cancel')
+      }
+
+      audio.addEventListener('playing', onPlaying)
+      audio.addEventListener('pause', onPause)
+      audio.addEventListener('error', onCancel)
+      controller.signal.addEventListener('abort', onCancel, {
+        once: true,
+      })
+
+      if (!audio.paused && audio.readyState >= 2) {
+        onPlaying()
+      }
     },
     [],
   )
@@ -3473,7 +3600,22 @@ export function PlayerProvider({
     }
     streamExpiresAtRef.current = null
     lastStreamUrlRef.current = null
+    const previousTrackId = lastTrackIdRef.current
     lastTrackIdRef.current = newTrack.id
+    if (
+      previousTrackId !== null &&
+      previousTrackId !== newTrack.id
+    ) {
+      const stale = _armedFullBodyControllers.get(previousTrackId)
+      if (stale) {
+        try {
+          stale.abort()
+        } catch {
+          /* ignore */
+        }
+        _armedFullBodyControllers.delete(previousTrackId)
+      }
+    }
     streamLoadFailedTrackIdRef.current = null
     setHlsError(null)
     void loadEqSettings()
@@ -3650,9 +3792,22 @@ export function PlayerProvider({
       // by ensureCachedIdsLoaded(), so on the radio hot path we
       // shave another async barrier off the gap between the user
       // gesture and audio.src=newUrl.
-      const cachedUrl = isCachedSync(newTrack.id)
+      let cachedUrl: string | null = isCachedSync(newTrack.id)
         ? await getCachedAudioUrl(newTrack.id)
         : null
+      // If the track is not in IndexedDB (e.g. it's a third_party
+      // stream which legal policy forbids us from pinning offline),
+      // fall back to the warm Workbox cache. That cache is populated
+      // by ``prefetchProgressiveBodyForCache`` after the user
+      // actually finishes ~5+ seconds of the track, so a re-visit to
+      // an already-played track starts instantly from a blob URL —
+      // no SoundCloud round-trip, no Tor hop, no /audio request.
+      if (
+        !cachedUrl &&
+        isProgressiveSwCachedSync(newTrack.id)
+      ) {
+        cachedUrl = await getProgressiveSwAudioUrl(newTrack.id)
+      }
       if (bail()) return
       if (cachedUrl) {
         setIsPlayingFromCache(true)
