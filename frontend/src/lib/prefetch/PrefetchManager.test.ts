@@ -16,6 +16,10 @@ vi.mock('./storage', () => ({
   clearWarmIndex: vi.fn(async () => undefined),
 }))
 
+const { _prefetchProgressiveBodyForCacheMock } = vi.hoisted(() => ({
+  _prefetchProgressiveBodyForCacheMock: vi.fn(async () => true),
+}))
+
 vi.mock('@/lib/offlineCache', () => ({
   getCachedIdsSync: vi.fn(() => new Set<number>()),
   warmProgressiveAudioForPlayback: vi.fn(
@@ -41,7 +45,7 @@ vi.mock('@/lib/offlineCache', () => ({
       }
     },
   ),
-  prefetchProgressiveBodyForCache: vi.fn(async () => false),
+  prefetchProgressiveBodyForCache: _prefetchProgressiveBodyForCacheMock,
 }))
 
 vi.mock('@/lib/playbackSourcePolicy', () => ({
@@ -181,6 +185,7 @@ beforeEach(() => {
   } catch {
     /* ignore */
   }
+  _prefetchProgressiveBodyForCacheMock.mockClear()
 })
 
 afterEach(() => {
@@ -217,6 +222,7 @@ describe('PrefetchManager', () => {
   it('falls back to progressive warm when HLS is gated off for the track', async () => {
     const { spy, calls } = _buildFetchSpy()
     vi.stubGlobal('fetch', spy)
+    _prefetchProgressiveBodyForCacheMock.mockResolvedValueOnce(false)
 
     const m = new PrefetchManager()
     m.configurePolicyFetcher(_makePolicyFetcher(_policy()))
@@ -458,6 +464,55 @@ describe('PrefetchManager', () => {
 
     await new Promise((r) => setTimeout(r, 20))
     expect(m.wasWarm(700)).toBe(false)
+  })
+
+  it('warms full body for the first card on cold home feed', async () => {
+    const { spy } = _buildFetchSpy()
+    vi.stubGlobal('fetch', spy)
+
+    const m = new PrefetchManager()
+    m.configurePolicyFetcher(_makePolicyFetcher(_policy()))
+    await m.start()
+
+    await m.enqueue(
+      [
+        { id: 900, is_public: false },
+        { id: 901, is_public: false },
+        { id: 902, is_public: false },
+      ],
+      { context: 'home' },
+    )
+
+    await vi.waitFor(() => {
+      expect(_prefetchProgressiveBodyForCacheMock).toHaveBeenCalledTimes(1)
+    })
+    expect(
+      (_prefetchProgressiveBodyForCacheMock.mock.calls[0]! as unknown as [number, ...unknown[]])[0],
+    ).toBe(900)
+  })
+
+  it('hot context (queue) keeps the full policy budget', async () => {
+    const { spy } = _buildFetchSpy()
+    vi.stubGlobal('fetch', spy)
+
+    const m = new PrefetchManager()
+    m.configurePolicyFetcher(
+      _makePolicyFetcher(_policy({ fullDownloadAhead: 2 })),
+    )
+    await m.start()
+
+    await m.enqueue(
+      [
+        { id: 910, is_public: false },
+        { id: 911, is_public: false },
+        { id: 912, is_public: false },
+      ],
+      { context: 'queue' },
+    )
+
+    await vi.waitFor(() => {
+      expect(_prefetchProgressiveBodyForCacheMock).toHaveBeenCalledTimes(2)
+    })
   })
 
   it('respects user toggle off (smart-buffering disabled)', async () => {

@@ -1214,6 +1214,22 @@ export function PlayerProvider({
   // on every track change so the next track gets its own chance to
   // trigger an early transition.
   const crossfadeFiredForRef = useRef<number | null>(null)
+  // Second audio element for gapless dual-source crossfade.
+  // el1 = the DOM node that React initially assigned to audioRef;
+  // el2 = the permanent second DOM node added for preloading.
+  // audioRef.current is MANUALLY swapped between el1/el2 so all
+  // existing code continues to operate on the "active" element.
+  const audioEl1Ref = useRef<HTMLAudioElement | null>(null)
+  const audioEl2Ref = useRef<HTMLAudioElement | null>(null)
+  // WebAudio GainNodes: one per element, permanently wired into the
+  // EQ chain. Crossfade is done by ramping el1Gain/el2Gain instead
+  // of touching audio.volume (which would fight _tweenVolume).
+  const el1GainRef = useRef<GainNode | null>(null)
+  const el2GainRef = useRef<GainNode | null>(null)
+  const el2MediaSrcRef = useRef<MediaElementAudioSourceNode | null>(null)
+  // Guards the ended handler from double-advancing when gapless
+  // crossfade already popped the queue.
+  const gaplessGuardRef = useRef(false)
   // Records when we entered ``playTrack`` for a given trackId, so
   // the first ``playing`` event can compute "time from user-visible
   // tap/swipe to first audible frame" and emit it as telemetry.
@@ -1386,6 +1402,8 @@ export function PlayerProvider({
     const audio = audioRef.current
     if (!audio || audioCtxRef.current) return
     audio.crossOrigin = 'anonymous'
+    const audio2 = audioEl2Ref.current
+    if (audio2) audio2.crossOrigin = 'anonymous'
     const perfLite =
       typeof document !== 'undefined' &&
       document.body.classList.contains('ds-perf-lite')
@@ -1393,6 +1411,24 @@ export function PlayerProvider({
     audioCtxRef.current = ctx
     const src = ctx.createMediaElementSource(audio)
     sourceRef.current = src
+
+    // Insert per-element gain node for gapless crossfade.
+    // Both gains feed into the same EQ chain; crossfade is a
+    // simple linearRamp on the two gain values so neither
+    // element needs to be paused during a track transition.
+    const g1 = ctx.createGain()
+    g1.gain.value = 1
+    el1GainRef.current = g1
+    src.connect(g1)
+
+    if (audio2) {
+      const src2 = ctx.createMediaElementSource(audio2)
+      el2MediaSrcRef.current = src2
+      const g2 = ctx.createGain()
+      g2.gain.value = 0
+      el2GainRef.current = g2
+      src2.connect(g2)
+    }
 
     const filters = EQ_FREQUENCIES.map((freq) => {
       const f = ctx.createBiquadFilter()
@@ -1414,16 +1450,42 @@ export function PlayerProvider({
       : 0.86
     analyserRef.current = analyser
 
-    let prev: AudioNode = src
-    for (const f of filters) {
-      prev.connect(f)
-      prev = f
+    // g1 (+ g2 if present) → filters[0] → … → filters[n] → out
+    g1.connect(filters[0])
+    if (el2GainRef.current) el2GainRef.current.connect(filters[0])
+    let prev: AudioNode = filters[0]
+    for (let i = 1; i < filters.length; i += 1) {
+      prev.connect(filters[i])
+      prev = filters[i]
     }
     prev.connect(out)
     out.connect(ctx.destination)
     out.connect(analyser)
     applyEqBands()
   }, [applyEqBands])
+
+  // Helpers to get the idle / active audio element and their
+  // corresponding WebAudio GainNodes. After a gapless swap
+  // audioRef.current may point to el2, so all lookups go through
+  // these helpers instead of hardcoding el1/el2 roles.
+  const _getIdleAudio = (): HTMLAudioElement | null => {
+    const el1 = audioEl1Ref.current
+    const el2 = audioEl2Ref.current
+    if (!el1 || !el2) return null
+    return audioRef.current === el1 ? el2 : el1
+  }
+  const _getActiveGain = (): GainNode | null => {
+    const el1 = audioEl1Ref.current
+    return audioRef.current === el1
+      ? el1GainRef.current
+      : el2GainRef.current
+  }
+  const _getIdleGain = (): GainNode | null => {
+    const el1 = audioEl1Ref.current
+    return audioRef.current === el1
+      ? el2GainRef.current
+      : el1GainRef.current
+  }
 
   // Silent-audio heartbeat. Android Chromium downgrades the PWA
   // process priority once the AudioContext stops emitting any
@@ -2102,6 +2164,61 @@ export function PlayerProvider({
     [requestPlayback, volume],
   )
 
+  // Once the audio element has reached canplay for ``trackId`` we
+  // kick off a no-Range full-body GET against the same URL so the
+  // Workbox ``progressive-audio-cache`` route can store a 200 OK
+  // response (its ``cacheableResponse: { statuses: [200] }`` filter
+  // intentionally drops the 206 partial responses produced by the
+  // <audio> element's Range probes — without this companion fetch
+  // the cache for played tracks stayed empty and every revisit
+  // re-downloaded the file over the network).
+  //
+  // Skipped when:
+  //   - track is already pinned offline in our IndexedDB store
+  //     (downloadTrack already wrote the body);
+  //   - track has an HLS manifest, so progressive Cache API entries
+  //     would not be hit on subsequent playback anyway;
+  //   - the network reports save-data / 2g (handled inside
+  //     ``prefetchProgressiveBodyForCache``);
+  //   - the canplay event never fires within the 30 s window.
+  const armProgressiveBodyCacheWarm = useCallback(
+    (
+      audio: HTMLAudioElement,
+      trackId: number,
+      track: Track,
+    ) => {
+      if (typeof window === 'undefined') return
+      if (typeof caches === 'undefined') return
+      if (shouldUseInternalHlsPlayback(track)) return
+      if (track.access_mode === 'official_embed') return
+      if (track.access_mode === 'external_link') return
+      if (isCachedSync(trackId)) return
+      let armed = false
+      const trigger = () => {
+        if (armed) return
+        armed = true
+        cleanup()
+        if (lastTrackIdRef.current !== trackId) return
+        void prefetchProgressiveBodyForCache(trackId).catch(
+          () => undefined,
+        )
+      }
+      const cleanup = () => {
+        audio.removeEventListener('canplay', trigger)
+        audio.removeEventListener('playing', trigger)
+        if (timeoutId != null) {
+          window.clearTimeout(timeoutId)
+        }
+      }
+      audio.addEventListener('canplay', trigger, { once: true })
+      audio.addEventListener('playing', trigger, { once: true })
+      const timeoutId = window.setTimeout(() => {
+        cleanup()
+      }, 30_000)
+    },
+    [],
+  )
+
   const recordPlaybackSourceTelemetry = useCallback(
     (
       audio: HTMLAudioElement,
@@ -2600,6 +2717,10 @@ export function PlayerProvider({
       sendListenSignal()
     }
     const onEnded = () => {
+      // Gapless transition already popped the queue and started the
+      // next track. The old element fires ended during the fade-out
+      // tail — ignore it to prevent a double-advance.
+      if (gaplessGuardRef.current) return
       setIsPlaying(false)
       setCurrentTime(0)
       sendListenSignal()
@@ -2790,7 +2911,14 @@ export function PlayerProvider({
       // user swipe that just landed) -- that would double-advance.
       if (playNextInFlightRef.current) return
       crossfadeFiredForRef.current = currentId
-      void playNext({ afterNaturalEnd: true })
+      // Attempt gapless crossfade; if preconditions are not met
+      // (idle element not buffered yet) fall back to playNext which
+      // pauses the current track and loads the new one normally.
+      void _tryGaplessTransition().then((handled) => {
+        if (!handled) {
+          void playNext({ afterNaturalEnd: true })
+        }
+      })
     }
 
     const onTime = () => {
@@ -2891,6 +3019,195 @@ export function PlayerProvider({
     }
     void requestPlayback(a)
   }, [isCardOpen, requestPlayback, track, rebindThirdPartyStream])
+
+  // Duration of the WebAudio gain ramp for gapless crossfade (ms).
+  const GAPLESS_FADE_MS = 350
+
+  // Attempt a gapless/overlap transition to the next queued track.
+  // Returns true if the transition was started (caller must NOT call
+  // playNext afterwards); false if preconditions were not met and the
+  // caller should fall back to playNext({ afterNaturalEnd: true }).
+  //
+  // Preconditions checked here (any failure → return false):
+  //   • A next track is queued in manualQueueRef
+  //   • The idle <audio> element has a preloaded HLS instance or a
+  //     buffered progressive src for that track
+  //   • The WebAudio context and GainNodes are initialised
+  //   • No other gapless transition is in progress
+  const _tryGaplessTransition = async (): Promise<boolean> => {
+    if (gaplessGuardRef.current) return false
+    if (playNextInFlightRef.current) return false
+
+    const nextTrack = manualQueueRef.current[0]
+    if (!nextTrack) return false
+
+    const activeEl = audioRef.current
+    const idleEl = _getIdleAudio()
+    const activeGain = _getActiveGain()
+    const idleGain = _getIdleGain()
+    const ctx = audioCtxRef.current
+
+    if (!activeEl || !idleEl || !activeGain || !idleGain || !ctx) {
+      return false
+    }
+
+    const hlsReady =
+      preloadHlsRef.current !== null &&
+      preloadHlsTrackIdRef.current === nextTrack.id
+    const progressiveReady =
+      !hlsReady &&
+      idleEl.readyState >= 2 &&
+      idleEl.src !== '' &&
+      idleEl.src.includes(`/tracks/${nextTrack.id}/`)
+
+    if (!hlsReady && !progressiveReady) return false
+
+    gaplessGuardRef.current = true
+
+    // Replicate sendListenSignal for the outgoing track before
+    // the element's currentTime changes.
+    if (!listenSignalSentRef.current && track && track.id > 0) {
+      const listened = Math.floor(
+        activeEl.currentTime - listenStartTimeRef.current,
+      )
+      if (listened > 0) {
+        listenSignalSentRef.current = true
+        void queueOrSend(
+          'record-listen',
+          '/api/v1/signals/listen',
+          {
+            track_id: track.id,
+            duration_listened: listened,
+            total_duration: track.duration_seconds,
+            source_context: 'player',
+            last_position: Math.max(
+              0,
+              Math.floor(activeEl.currentTime),
+            ),
+          },
+        )
+      }
+    }
+
+    // Pop next track from queue.
+    manualQueueRef.current.splice(0, 1)
+    setQueue([...manualQueueRef.current])
+
+    // Unmute and configure idle element for real playback.
+    idleEl.muted = false
+    idleEl.volume =
+      activeEl.volume > 0 ? activeEl.volume : volume
+    idleEl.playbackRate = playbackRate
+    _applyPitchPreservation(idleEl)
+
+    try {
+      await idleEl.play()
+    } catch (e) {
+      if (!isBenignPlayError(e)) {
+        // Unable to start playback; undo queue pop and bail.
+        gaplessGuardRef.current = false
+        manualQueueRef.current.unshift(nextTrack)
+        setQueue([...manualQueueRef.current])
+        return false
+      }
+    }
+
+    // Begin WebAudio crossfade: active gain 1→0, idle gain 0→1.
+    const now = ctx.currentTime
+    const fadeEnd = now + GAPLESS_FADE_MS / 1000
+    activeGain.gain.cancelScheduledValues(now)
+    idleGain.gain.cancelScheduledValues(now)
+    activeGain.gain.setValueAtTime(activeGain.gain.value, now)
+    idleGain.gain.setValueAtTime(idleGain.gain.value, now)
+    activeGain.gain.linearRampToValueAtTime(0, fadeEnd)
+    idleGain.gain.linearRampToValueAtTime(1, fadeEnd)
+
+    // Transfer HLS ownership to hlsRef so later teardown works.
+    const oldHls = hlsRef.current
+    if (hlsReady) {
+      hlsRef.current = preloadHlsRef.current
+    }
+    preloadHlsRef.current = null
+    preloadHlsTrackIdRef.current = null
+
+    // Update bookkeeping refs immediately (before React re-render).
+    lastTrackIdRef.current = nextTrack.id
+    crossfadeFiredForRef.current = null
+    playCountSentRef.current = false
+    listenSignalSentRef.current = false
+    listenStartTimeRef.current = idleEl.currentTime
+    streamLoadFailedTrackIdRef.current = null
+    streamExpiresAtRef.current = null
+    lastStreamUrlRef.current = null
+
+    setCurrentTime(0)
+    setDuration(nextTrack.duration_seconds ?? 0)
+    setIsPlaying(true)
+    setHlsError(null)
+    _saveState(nextTrack, 0)
+    setTrackChangeSlide((c) => ({ bump: c.bump + 1, dir: 0 }))
+    _warmCoverArtwork(nextTrack)
+
+    if ('mediaSession' in navigator) {
+      try {
+        _updateMediaSession(
+          nextTrack,
+          idleEl,
+          () => playNext(),
+          () => playPrev(),
+        )
+        navigator.mediaSession.playbackState = 'playing'
+      } catch {
+        /* mediaSession optional */
+      }
+    }
+
+    // Swap audioRef so all subsequent player operations (playNext,
+    // playTrack, event rebinding) use the new active element.
+    // Cast to MutableRefObject: audioRef is declared with null
+    // initial value (RefObject<T>), but we intentionally manage
+    // the active-element pointer manually across gapless swaps.
+    ;(
+      audioRef as React.MutableRefObject<HTMLAudioElement | null>
+    ).current = idleEl
+
+    // Update React track state last so the cleanup of the audio
+    // event useEffect removes listeners from the OLD element
+    // (captured in the previous effect run) and the new run binds
+    // to audioRef.current which is now idleEl.
+    setTrack((prev) => {
+      if (prev) {
+        const h = historyRef.current
+        if (
+          h.length === 0 ||
+          h[h.length - 1].id !== prev.id
+        ) {
+          h.push(prev)
+          if (h.length > 50) h.shift()
+          setHistory([...h])
+        }
+      }
+      return nextTrack
+    })
+
+    // After the fade completes: stop and clean up the old element.
+    const oldActiveEl = activeEl
+    window.setTimeout(() => {
+      gaplessGuardRef.current = false
+      try { oldActiveEl.pause() } catch { /* ignore */ }
+      if (oldHls) {
+        try { oldHls.destroy() } catch { /* ignore */ }
+      } else {
+        try { oldActiveEl.src = '' } catch { /* ignore */ }
+      }
+      // Snap gain to 0 (the ramp already brought it there, but
+      // cancel any residual scheduled value for safety).
+      activeGain.gain.cancelScheduledValues(ctx.currentTime)
+      activeGain.gain.value = 0
+    }, GAPLESS_FADE_MS + 80)
+
+    return true
+  }
 
   const playTrack = async (
     newTrack: Track,
@@ -3065,6 +3382,22 @@ export function PlayerProvider({
     }
     playCountSentRef.current = false
     listenSignalSentRef.current = false
+    // If a gapless transition was in progress (e.g. the user
+    // manually tapped a new track while the crossfade was running),
+    // abort it: reset both gain nodes to a clean state so the new
+    // playTrack path (single element, audio.volume tween) takes over.
+    gaplessGuardRef.current = false
+    const ctxNow = audioCtxRef.current?.currentTime ?? 0
+    const ag = _getActiveGain()
+    const ig = _getIdleGain()
+    if (ag) {
+      ag.gain.cancelScheduledValues(ctxNow)
+      ag.gain.value = 1
+    }
+    if (ig) {
+      ig.gain.cancelScheduledValues(ctxNow)
+      ig.gain.value = 0
+    }
     // Capture the volume the user actually wants to hear before we
     // touch ``audio.volume`` for the cross-track fade. Falls back to
     // the React-state ``volume`` if the audio element is currently
@@ -3274,6 +3607,7 @@ export function PlayerProvider({
           newTrack.id,
           'third_party_stream',
         )
+        armProgressiveBodyCacheWarm(audio, newTrack.id, newTrack)
         const HlsMod = await loadHlsClass()
         if (
           stream.stream_type === 'hls' &&
@@ -3317,6 +3651,7 @@ export function PlayerProvider({
           newTrack.id,
           'progressive',
         )
+        armProgressiveBodyCacheWarm(audio, newTrack.id, newTrack)
         await startDirectPlayback(audio, stream.url)
         if (bail()) return
         finishMediaSessionSwitch(newTrack, audio)
@@ -3334,6 +3669,9 @@ export function PlayerProvider({
         newTrack.id,
         useHls ? 'hls' : 'progressive',
       )
+      if (!useHls) {
+        armProgressiveBodyCacheWarm(audio, newTrack.id, newTrack)
+      }
       if (useHls) {
         const hlsUrl = `/api/v1/tracks/${newTrack.id}/hls/master.m3u8`
         // Fast path: a preloaded Hls instance already attached to a
@@ -3944,6 +4282,20 @@ export function PlayerProvider({
       pa.src = trackProgressiveAudioUrl(next.id)
       _applyPitchPreservation(pa)
       prefetchAudioRef.current = pa
+      // Also warm the persistent idle element for gapless handoff
+      // on progressive tracks (non-HLS). The idle element stays
+      // muted/paused; gapless transition unmutes and plays it.
+      if (!shouldUseInternalHlsPlayback(next)) {
+        const idleEl = _getIdleAudio()
+        if (idleEl && idleEl !== audioRef.current) {
+          try { idleEl.pause() } catch { /* ignore */ }
+          idleEl.muted = true
+          idleEl.volume = 0
+          idleEl.src = trackProgressiveAudioUrl(next.id)
+          idleEl.preload = 'auto'
+          idleEl.load()
+        }
+      }
 
       // Real SW Cache prefetch: full-body GET (status 200) so
       // workbox's CacheFirst route writes the entire file into
@@ -4026,8 +4378,17 @@ export function PlayerProvider({
           hls.loadSource(
             `/api/v1/tracks/${next.id}/hls/master.m3u8`,
           )
-          const sink = document.createElement('audio')
+          // Prefer the persistent idle <audio> element as the
+          // preload sink so that gapless crossfade can play it
+          // directly without src reassignment. Fall back to a
+          // throwaway element if the second element is not yet
+          // mounted (first render) or is in use as main.
+          const idleSink = _getIdleAudio()
+          const sink: HTMLAudioElement =
+            idleSink ?? document.createElement('audio')
+          try { sink.pause() } catch { /* ignore */ }
           sink.muted = true
+          sink.volume = 0
           sink.preload = 'auto'
           hls.attachMedia(sink)
           preloadHlsRef.current = hls
@@ -4640,20 +5001,29 @@ export function PlayerProvider({
             <PlayerActionsCtx.Provider value={actionsValue}>
               <PlayerMetaCtx.Provider value={metaValue}>
                 <audio
-                  ref={audioRef}
-                  // ``auto`` lets the browser start fetching the
-                  // first segment / Range request as soon as the
-                  // src is assigned, without waiting for a play()
-                  // call. On a track switch this trims the gap
-                  // between ``audio.src = newUrl`` and ``canplay``
-                  // by ~150-400 ms on cold connections and is the
-                  // single most impactful knob for "next track
-                  // plays now" feel. The user explicitly accepted
-                  // the extra mobile data trade-off; we already
-                  // stop the previous src as soon as we set the
-                  // new one, so there is no double-load overlap.
+                  ref={(el) => {
+                    // Capture the stable el1 reference once on mount.
+                    // audioRef.current is manually swapped between el1
+                    // and el2 during gapless transitions; el1Ref always
+                    // identifies which DOM node is el1 so _getIdleAudio
+                    // can determine the current idle/active split.
+                    if (el && !audioEl1Ref.current) {
+                      audioEl1Ref.current = el
+                    }
+                    const mutable = audioRef as React.MutableRefObject<HTMLAudioElement | null>
+                    mutable.current = mutable.current ?? el
+                  }}
                   preload="auto"
                   crossOrigin="anonymous"
+                />
+                {/* Second audio element wired into the same WebAudio
+                    EQ chain via el2GainRef (gain=0 at rest). Used as
+                    the idle/preload sink for gapless crossfade. */}
+                <audio
+                  ref={audioEl2Ref}
+                  preload="auto"
+                  crossOrigin="anonymous"
+                  muted
                 />
                 {children}
               </PlayerMetaCtx.Provider>
