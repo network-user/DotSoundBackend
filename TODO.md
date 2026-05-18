@@ -1,5 +1,21 @@
 # DotSound - TODO Tracker
 
+- [x] **Bugfix: backfill старых Telegram-импортов без MP3/HLS (2026-05-18)**
+  - Добавлен `app/services/telegram_import_backfill_service.py`: ищет
+    активные Telegram-треки с `internal_stream`, у которых нет HLS или
+    progressive-ключ не `.mp3`, и ставит их в repair-транскодинг.
+  - Repair сначала копирует текущий объект в `tmp-transcode/{uuid}.{ext}`:
+    существующая задача может удалить только временную копию, не исходный
+    CAS/legacy-объект. После постановки также планируется reindex трека для
+    поиска.
+  - Добавлен CLI `scripts/backfill_telegram_import_transcodes.py`: dry-run
+    по умолчанию, применение через `--apply`, лимит через `--limit`.
+  - `docker-compose.yml` регистрирует repair-модуль в Taskiq worker, чтобы
+    поставленные CLI задачи реально исполнялись.
+  - Тесты: `tests/app/services/test_telegram_import_backfill_service.py`;
+    обновлён smoke-тест loudnorm после переноса логики в
+    `transcode_and_upload_local`.
+
 - [x] **Bugfix: Telegram-импортированные треки не воспроизводятся (2026-05-18)**
   - **Причина**: `import_worker.py` сохранял OGG-аудио из Telegram без транскодирования. iOS
     Safari / Telegram WebView не поддерживают `audio/ogg` → `MEDIA_ERR_SRC_NOT_SUPPORTED` →

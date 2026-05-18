@@ -320,10 +320,10 @@ def test_loudnorm_filter_in_ffmpeg_args() -> None:
 
     from app.services import transcoding as mod
 
-    src = inspect.getsource(mod.transcode_and_upload)
-    assert mod._LOUDNORM_FILTER in src
+    src = inspect.getsource(mod.transcode_and_upload_local)
+    assert "_LOUDNORM_FILTER" in src
     src_hls = inspect.getsource(mod.transcode_hls_only)
-    assert mod._LOUDNORM_FILTER in src_hls
+    assert "_LOUDNORM_FILTER" in src_hls
 
 
 @patch(

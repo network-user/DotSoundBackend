@@ -148,6 +148,7 @@ services:
       - "${TASKIQ_MAX_ASYNC_TASKS:-50}"
       - app.core.tkq:broker
       - app.services.transcoding
+      - app.services.telegram_import_backfill_service
       - app.services.import_worker
       - app.services.external_import_worker
       - app.services.import_lyrics_worker
