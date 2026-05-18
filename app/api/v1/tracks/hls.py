@@ -9,9 +9,11 @@ from fastapi.responses import Response, StreamingResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core import s3
+from app.core.db import AsyncSessionLocal
 from app.core.observability import offline_eligibility_observed
 from app.core.rate_limit import limiter
 from app.dependencies import get_db, get_optional_user
+from app.models.track import Track
 from app.models.user import User
 from app.repositories.track import TrackRepository
 from app.services.track_playback_health_service import (
@@ -179,13 +181,51 @@ async def hls_master(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail="Playback temporarily unavailable for this track",
         )
-    return await _stream_hls_object(
-        request,
-        track.hls_manifest_key,
-        media_type=_HLS_MIME,
-        extra_headers=_offline_header(track),
-        cache_control=_MANIFEST_CACHE_CONTROL,
-    )
+    try:
+        return await _stream_hls_object(
+            request,
+            track.hls_manifest_key,
+            media_type=_HLS_MIME,
+            extra_headers=_offline_header(track),
+            cache_control=_MANIFEST_CACHE_CONTROL,
+        )
+    except HTTPException as exc:
+        if exc.status_code == status.HTTP_404_NOT_FOUND:
+            # Bundle key on the row points at an object that no longer
+            # exists in S3 (lost segment, stale CAS reference, etc.).
+            # Clear it so the next play resolves ``has_hls=false`` on
+            # the schema and the frontend goes straight to progressive
+            # /audio instead of looping HLS startup-timeouts forever.
+            await _clear_stale_hls_manifest(track_id, track.hls_manifest_key)
+        raise
+
+
+async def _clear_stale_hls_manifest(
+    track_id: int,
+    expected_key: str,
+) -> None:
+    """Best-effort: drop a dangling ``hls_manifest_key`` so the next
+    play falls back to progressive without a fresh round-trip through
+    the broken bundle.
+    """
+    try:
+        async with AsyncSessionLocal() as session:
+            t = await session.get(Track, track_id)
+            if t is None or t.hls_manifest_key != expected_key:
+                return
+            t.hls_manifest_key = None
+            await session.commit()
+            logger.warning(
+                "hls_manifest_key_cleared_on_404",
+                track_id=track_id,
+                manifest_key=expected_key,
+            )
+    except Exception as exc:  # noqa: BLE001
+        logger.warning(
+            "hls_manifest_key_cleanup_failed",
+            track_id=track_id,
+            error=str(exc),
+        )
 
 
 @router.get(

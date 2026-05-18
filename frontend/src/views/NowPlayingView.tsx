@@ -105,7 +105,9 @@ export function NowPlayingView() {
     'queue',
   )
 
-  const [tab, setTab] = useState<Tab>('now')
+  const [tab, setTab] = useState<Tab>(
+    () => track?.has_lyrics ? 'lyrics' : 'now',
+  )
   const [likeBurst, setLikeBurst] = useState(false)
   const [swipeDx, setSwipeDx] = useState(0)
   const swipeDirRef = useRef<'left' | 'right' | null>(null)
@@ -268,6 +270,11 @@ export function NowPlayingView() {
       setTab('now')
     }
   }, [tab, canLyricsChrome])
+
+  useEffect(() => {
+    if (!track) return
+    setTab(track.has_lyrics ? 'lyrics' : 'now')
+  }, [track?.id])
 
   return (
     <m.section

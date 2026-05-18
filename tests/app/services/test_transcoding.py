@@ -220,6 +220,11 @@ async def test_update_track_status_not_found(
 
 
 @patch(
+    f"{_MOD}._verify_hls_bundle",
+    new_callable=AsyncMock,
+    return_value=True,
+)
+@patch(
     f"{_MOD}._upload_hls",
     new_callable=AsyncMock,
     return_value="hls/1/master.m3u8",
@@ -239,8 +244,14 @@ async def test_update_track_status_not_found(
     new_callable=AsyncMock,
 )
 @patch(f"{_MOD}.asyncio.create_subprocess_exec")
-@patch("app.services.search_index_notify.schedule_reindex_track", new_callable=AsyncMock)
-@patch("app.services.waveform_worker.generate_waveform_task.kiq", new_callable=AsyncMock)
+@patch(
+    "app.services.search_index_notify.schedule_reindex_track",
+    new_callable=AsyncMock,
+)
+@patch(
+    "app.services.waveform_worker.generate_waveform_task.kiq",
+    new_callable=AsyncMock,
+)
 @patch(f"{_MOD}.AsyncSessionLocal")
 async def test_transcode_success(
     mock_session_local: AsyncMock,
@@ -251,6 +262,7 @@ async def test_transcode_success(
     mock_dl: AsyncMock,
     _mock_cas: AsyncMock,
     mock_hls: AsyncMock,
+    mock_verify: AsyncMock,
     session: AsyncSession,
     tmp_path: Path,
 ) -> None:
@@ -312,6 +324,119 @@ def test_loudnorm_filter_in_ffmpeg_args() -> None:
     assert mod._LOUDNORM_FILTER in src
     src_hls = inspect.getsource(mod.transcode_hls_only)
     assert mod._LOUDNORM_FILTER in src_hls
+
+
+@patch(
+    f"{_MOD}.s3.object_exists",
+    new_callable=AsyncMock,
+)
+async def test_verify_hls_bundle_all_present(
+    mock_exists: AsyncMock,
+) -> None:
+    mock_exists.return_value = True
+    from app.services.transcoding import _verify_hls_bundle
+
+    ok = await _verify_hls_bundle(42, "hls/42/master.m3u8")
+    assert ok is True
+    assert mock_exists.await_count == 5
+
+
+@patch(
+    f"{_MOD}.s3.object_exists",
+    new_callable=AsyncMock,
+)
+async def test_verify_hls_bundle_missing_segment(
+    mock_exists: AsyncMock,
+) -> None:
+    mock_exists.side_effect = [True, True, True, True, False]
+    from app.services.transcoding import _verify_hls_bundle
+
+    ok = await _verify_hls_bundle(42, "hls/42/master.m3u8")
+    assert ok is False
+
+
+@patch(
+    f"{_MOD}._verify_hls_bundle",
+    new_callable=AsyncMock,
+    return_value=False,
+)
+@patch(
+    f"{_MOD}._upload_hls",
+    new_callable=AsyncMock,
+    return_value="hls/1/master.m3u8",
+)
+@patch(
+    "app.core.s3.put_cas_audio",
+    new_callable=AsyncMock,
+    side_effect=_put_cas_side,
+)
+@patch(
+    f"{_MOD}.s3.download_object",
+    new_callable=AsyncMock,
+    return_value=_RAW,
+)
+@patch(
+    f"{_MOD}.s3.delete_object",
+    new_callable=AsyncMock,
+)
+@patch(f"{_MOD}.asyncio.create_subprocess_exec")
+@patch(
+    "app.services.search_index_notify.schedule_reindex_track",
+    new_callable=AsyncMock,
+)
+@patch(
+    "app.services.waveform_worker.generate_waveform_task.kiq",
+    new_callable=AsyncMock,
+)
+@patch(f"{_MOD}.AsyncSessionLocal")
+async def test_transcode_invalid_hls_bundle_keeps_progressive(
+    mock_session_local: AsyncMock,
+    _mock_waveform_kiq: AsyncMock,
+    _mock_reindex: AsyncMock,
+    mock_exec: AsyncMock,
+    _mock_del: AsyncMock,
+    _mock_dl: AsyncMock,
+    _mock_cas: AsyncMock,
+    _mock_hls: AsyncMock,
+    _mock_verify: AsyncMock,
+    session: AsyncSession,
+    tmp_path: Path,
+) -> None:
+    """If the freshly uploaded HLS bundle is missing parts, the track
+    must NOT keep a dangling ``hls_manifest_key`` — otherwise every
+    play attempt would loop through HLS startup-timeouts before the
+    progressive fallback kicks in.
+    """
+    track = await _make_track(session)
+
+    mock_ctx = AsyncMock()
+    mock_ctx.__aenter__ = AsyncMock(return_value=session)
+    mock_ctx.__aexit__ = AsyncMock(return_value=False)
+    mock_session_local.return_value = mock_ctx
+
+    mp3_path = tmp_path / "output.mp3"
+    mp3_path.write_bytes(b"\xff\xfb" + b"\x00" * 50)
+
+    mock_proc = AsyncMock()
+    mock_proc.communicate = AsyncMock(return_value=(b"", b""))
+    mock_proc.returncode = 0
+    mock_exec.return_value = mock_proc
+
+    from app.services.transcoding import transcode_and_upload
+
+    with patch(
+        f"{_MOD}.tempfile.mkdtemp",
+        return_value=str(tmp_path),
+    ), patch(f"{_MOD}.shutil.rmtree"), patch(f"{_MOD}.os.makedirs"):
+        (tmp_path / "hi").mkdir(exist_ok=True)
+        (tmp_path / "lo").mkdir(exist_ok=True)
+        await transcode_and_upload(
+            track.id, "temp/raw.mp3", "t.mp3"
+        )
+
+    await session.refresh(track)
+    assert track.processing_status == "active"
+    assert track.hls_manifest_key is None
 
 
 def test_parse_loudnorm_stats_valid() -> None:

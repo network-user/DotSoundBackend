@@ -355,6 +355,7 @@ export function TrackCardSheet({
     setCoverVer((v) => v + 1)
     setCoverFailed(false)
     setShowEdit(false)
+    setShowLyrics(false)
     setVideoReady(false)
     setLoading(true)
     const requestId = activeTrackRequestRef.current + 1
@@ -366,6 +367,7 @@ export function TrackCardSheet({
           return
         }
         setCard(c)
+        setShowLyrics(Boolean(c.has_lyrics))
         if (c.cover_url) {
           try {
             const u = new URL(c.cover_url, window.location.origin)

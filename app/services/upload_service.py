@@ -198,6 +198,9 @@ class UploadService:
             "active" if existing_blob is not None else "processing"
         )
 
+        provisional_file_key = (
+            None if existing_blob is not None else raw_key
+        )
         track = await self._repo.create(
             title=title,
             artist=artist,
@@ -205,7 +208,7 @@ class UploadService:
             source="internal",
             catalog_type="ugc",
             access_mode="internal_stream",
-            file_key=None,
+            file_key=provisional_file_key,
             cover_key=cover_key,
             uploaded_by_id=uploader_id,
             is_public=is_public,

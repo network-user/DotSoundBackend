@@ -565,6 +565,19 @@ class AppSettings(BaseSettings):
     radio_enabled: bool = True
     radio_youtube_mix_enabled: bool = True
     radio_max_suggestions: int = 10
+    #: Hard wall-clock budget the radio handler is allowed to spend
+    #: materialising the YouTube mix for a seed. When the budget is
+    #: blown we return the catalog-only base immediately so the user
+    #: still gets a queue in <1 s; the next refill will pick up the
+    #: cached result if a parallel materialisation has finished by
+    #: then. Lower values trade a slightly worse mix on first-tap for
+    #: a snappier "tap Radio → first sound" UX.
+    radio_yt_mix_budget_seconds: float = 0.8
+    #: TTL of the Redis cache that stores ``{seed_external_id ->
+    #: comma-separated track_ids}`` snapshots of a fresh YouTube-mix
+    #: materialisation. The next radio call for the same seed reuses
+    #: it instead of paying the full materialisation cost again.
+    radio_yt_mix_cache_ttl_seconds: int = 300
     playback_repair_sweep_limit: int = 30
 
     snippet_ffmpeg_enabled: bool = True

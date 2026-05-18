@@ -123,3 +123,49 @@ async def test_upload_track_too_large(
         )
 
     assert exc.value.status_code == 413
+
+
+@patch(
+    "app.services.lyrics_worker.catalog_only_lyrics_task.kiq",
+    new_callable=AsyncMock,
+)
+@patch(f"{_MOD}.s3.upload_object", new_callable=AsyncMock)
+@patch(f"{_MOD}.transcode_and_upload.kiq", new_callable=AsyncMock)
+@patch(f"{_MOD}.generate_and_upload_cover.kiq", new_callable=AsyncMock)
+async def test_upload_track_sets_provisional_file_key(
+    mock_cover: AsyncMock,
+    mock_transcode: AsyncMock,
+    mock_s3: AsyncMock,
+    mock_lyrics_kiq: AsyncMock,
+    session: AsyncSession,
+) -> None:
+    """Regression: a freshly uploaded UGC track must be playable
+    BEFORE the background transcode finishes. Storing the raw S3 key
+    as the provisional ``file_key`` lets ``/audio?force_progressive``
+    stream the original file immediately; the transcode pipeline
+    overwrites ``file_key`` with the MP3 blob key when it completes.
+    Without this, the player hangs on "buffering" forever for tracks
+    uploaded via Telegram while the transcode queue catches up.
+    """
+    _t = MagicMock()
+    _t.task_id = "test-lyrics-task"
+    mock_lyrics_kiq.return_value = _t
+    from app.repositories.user import UserRepository
+
+    repo = UserRepository(session)
+    user, _ = await repo.upsert(1701, "u2", "Probe", None)
+
+    svc = UploadService(session)
+    track = await svc.upload_track(
+        file=_audio_upload(),
+        title="Probe",
+        artist=None,
+        uploader_id=user.id,
+    )
+
+    assert track.file_key, (
+        "UGC track must expose a playable file_key right after upload"
+    )
+    assert track.file_key.startswith("temp/raw/"), (
+        f"expected provisional raw_key, got {track.file_key!r}"
+    )

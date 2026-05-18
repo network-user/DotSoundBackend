@@ -28,10 +28,20 @@ async def test_stream_track_not_found(
 
 async def test_stream_no_file_key_returns_422(
     client: AsyncClient,
+    db_session: AsyncSession,
 ) -> None:
+    """A freshly uploaded UGC track now has a provisional ``file_key``
+    pointing at the raw S3 object so it can be played before the
+    transcode finishes; the 422 branch only fires when something has
+    actually wiped the key (corrupt row, admin-side cleanup).
+    """
     user = await create_test_user(client, 50001)
     track = await create_test_track(client, "StreamMe", user["id"])
     track_id = track["id"]
+    await db_session.execute(
+        update(Track).where(Track.id == track_id).values(file_key=None)
+    )
+    await db_session.commit()
 
     response = await client.get(f"/api/v1/tracks/{track_id}/stream")
     assert response.status_code == 422
@@ -261,9 +271,18 @@ async def test_audio_stream_not_found(
 
 async def test_audio_stream_no_file_key(
     client: AsyncClient,
+    db_session: AsyncSession,
 ) -> None:
+    """422 only when ``file_key`` is genuinely missing; uploads now
+    write the provisional raw key so the player never sees this case
+    while the transcode is still pending.
+    """
     user = await create_test_user(client, 50018)
     t = await create_test_track(client, "NoAudio", user["id"])
+    await db_session.execute(
+        update(Track).where(Track.id == t["id"]).values(file_key=None)
+    )
+    await db_session.commit()
 
     r = await client.get(f"/api/v1/tracks/{t['id']}/audio")
     assert r.status_code == 422

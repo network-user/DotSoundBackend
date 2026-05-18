@@ -79,8 +79,10 @@ const TRACK_FADE_IN_MS = 180
 // Pro-active refill threshold for the radio queue. When the manual
 // queue drops below this many remaining tracks we fire a background
 // ``api.getRadio`` to top it up, so the next-track tap never has to
-// wait for a fresh network round-trip.
-const RADIO_REFILL_THRESHOLD = 5
+// wait for a fresh network round-trip. Tuned up from 5 to 8 because
+// rapid skips empty the queue faster than a single 5-tap window and
+// the in-band refill blocks the next-tap UX for 2-5 s on a cold cache.
+const RADIO_REFILL_THRESHOLD = 8
 // Gapless crossfade: two lead-time constants for the dual-audio
 // crossfade path.
 //
@@ -1245,6 +1247,10 @@ export function PlayerProvider({
   const [radioSessionTimeline, setRadioSessionTimeline] = useState<
     Track[]
   >([])
+  // Holds the in-flight ``api.getRadio`` promise so a rapid sequence
+  // of skips can re-await the same network round-trip instead of
+  // racing N parallel refills. ``null`` when no refill is pending.
+  const radioRefillInFlightRef = useRef<Promise<void> | null>(null)
   const playTrackSlideInjectRef = useRef<1 | -1 | null>(null)
   const playNextInFlightRef = useRef(false)
   const mediaSessionSwitchHoldUntilRef = useRef(0)
@@ -2236,6 +2242,15 @@ export function PlayerProvider({
       audio.crossOrigin = 'anonymous'
       srcAssignedAtRef.current = Date.now()
       audio.src = url
+      // Belt-and-suspenders against the residual-currentTime bug:
+      // a fresh ``src`` should reset the clock, but in practice the
+      // ``timeupdate`` we get back from a still-decoded buffer
+      // sometimes carries the previous position for ~1 frame.
+      try {
+        audio.currentTime = 0
+      } catch {
+        /* ignore — element may not be ready yet */
+      }
       audio.volume = volume
       await requestPlayback(audio)
     },
@@ -2675,6 +2690,11 @@ export function PlayerProvider({
         hlsRef.current = hls
         hls.loadSource(sourceUrl)
         hls.attachMedia(audio)
+        try {
+          audio.currentTime = 0
+        } catch {
+          /* ignore — element may still be HAVE_NOTHING */
+        }
         hls.on(
           Hls.Events.MANIFEST_PARSED,
           () => {
@@ -3689,6 +3709,18 @@ export function PlayerProvider({
     if (!paused && previousVolume > 0) {
       void _tweenVolume(audio, 0, TRACK_FADE_OUT_MS).catch(() => {})
     }
+    // Hard reset of the element clock so a residual currentTime from
+    // the previous track cannot leak into the new one. Without this,
+    // changing audio.src on the same element keeps the old position
+    // in some scenarios (HLS detach/attach reuse, Safari quirks),
+    // and the very next ``timeupdate`` overwrites our setCurrentTime(0)
+    // with the stale value — surfacing as "the new track plays from
+    // 1:23" + "progress bar shows the old position".
+    try {
+      audio.currentTime = 0
+    } catch {
+      /* ignore — some readyStates throw, the load() below resets */
+    }
     setIsPlaying(false)
     setIsPlayingFromCache(false)
     setCurrentTime(0)
@@ -3969,6 +4001,14 @@ export function PlayerProvider({
           try {
             preloaded.detachMedia()
             preloaded.attachMedia(audio)
+            // detach/attach reuses the same <audio> element and does
+            // NOT zero its clock — without an explicit reset the new
+            // track plays from the previous track's currentTime.
+            try {
+              audio.currentTime = 0
+            } catch {
+              /* ignore */
+            }
             // Keep the volume at 0 here -- ``scheduleFadeIn`` below
             // takes the element from silence to ``targetVolume``
             // once the audio is actually playing. Setting full
@@ -4103,31 +4143,80 @@ export function PlayerProvider({
     setRadioMode(true)
     setRadioSeedTrackId(seedTrack.id)
     _saveRadioState(true, seedTrack.id)
-    try {
-      const result = await api.getRadio(
-        seedTrack.id,
-        RADIO_BATCH_SIZE,
-      )
-      const newTracks = result.tracks.filter(
-        (t) => !radioPlayedIdsRef.current.has(t.id),
-      )
-      for (const t of newTracks) {
-        radioPlayedIdsRef.current.add(t.id)
-      }
-      manualQueueRef.current = [...newTracks]
-      setQueue([...newTracks])
-      try {
-        void getPrefetchManager().enqueue(newTracks, {
-          context: 'radio',
-          replaceContext: true,
+
+    // Kick off the seed's stream-URL resolve synchronously with the
+    // user gesture. ``playTrack`` below would otherwise eat one more
+    // ``api.getStream`` RTT inside the third_party_stream / private
+    // branch before assigning ``audio.src``. The prefetch lands in
+    // ``prefetchedStreamsRef`` and is consumed inside playTrack via
+    // ``_consumePrefetchedStream``, collapsing two sequential RTTs
+    // into one for the radio cold-start path. HLS-internal seeds
+    // skip this — they don't hit getStream at all.
+    const needsStreamPrefetch =
+      seedTrack.access_mode === 'third_party_stream' ||
+      seedTrack.is_public === false
+    if (needsStreamPrefetch) {
+      void api
+        .getStream(seedTrack.id)
+        .then((stream) => {
+          if (radioSeedTrackIdRef.current !== seedTrack.id) return
+          prefetchedStreamsRef.current.set(seedTrack.id, {
+            trackId: seedTrack.id,
+            url: stream.url,
+            streamType: stream.stream_type,
+            expiresAt: stream.expires_in
+              ? Date.now() + stream.expires_in * 1000
+              : null,
+            resolvedAt: Date.now(),
+          })
         })
-      } catch {
-        /* ignore prefetch errors */
-      }
-    } catch {
-      /* best-effort */
+        .catch(() => {
+          /* playTrack will fall back to its own getStream call */
+        })
     }
+
+    // Hot path: do NOT block the seed-track playback on the radio
+    // queue refill. ``api.getRadio`` can take 2-5 s on the backend
+    // (YouTube mix materialisation, SoundCloud variant resolution),
+    // and previously the user had to wait for that on top of the
+    // ~1-2 s stream resolve + buffering before hearing anything.
+    // Now the seed plays immediately and the queue fills in the
+    // background, so "tap Radio" -> "first sound" is bound by the
+    // single stream RTT instead of two sequential ones.
+    const queuePromise: Promise<void> = api
+      .getRadio(seedTrack.id, RADIO_BATCH_SIZE)
+      .then((result) => {
+        if (!radioModeRef.current) return
+        if (radioSeedTrackIdRef.current !== seedTrack.id) return
+        const newTracks = result.tracks.filter(
+          (t) => !radioPlayedIdsRef.current.has(t.id),
+        )
+        for (const t of newTracks) {
+          radioPlayedIdsRef.current.add(t.id)
+        }
+        manualQueueRef.current = [...newTracks]
+        setQueue([...newTracks])
+        try {
+          void getPrefetchManager().enqueue(newTracks, {
+            context: 'radio',
+            replaceContext: true,
+          })
+        } catch {
+          /* ignore prefetch errors */
+        }
+      })
+      .catch(() => {
+        /* best-effort; user can still skip the seed and we'll
+         * retry through the playNext refill branch. */
+      })
+    radioRefillInFlightRef.current = queuePromise
+    void queuePromise.finally(() => {
+      if (radioRefillInFlightRef.current === queuePromise) {
+        radioRefillInFlightRef.current = null
+      }
+    })
     await playTrack(seedTrack, { preserveQueue: true })
+    void queuePromise
   }
 
   const stopRadio = () => {
@@ -4263,13 +4352,14 @@ export function PlayerProvider({
         if (
           radioModeRef.current &&
           radioSeedTrackIdRef.current &&
-          manualQueueRef.current.length <= RADIO_REFILL_THRESHOLD
+          manualQueueRef.current.length <= RADIO_REFILL_THRESHOLD &&
+          radioRefillInFlightRef.current === null
         ) {
           const seedId = radioSeedTrackIdRef.current
           const excludeIds = Array.from(
             radioPlayedIdsRef.current,
           ).slice(-60)
-          api
+          const topUp: Promise<void> = api
             .getRadio(seedId, RADIO_BATCH_SIZE, excludeIds)
             .then((result) => {
               if (!radioModeRef.current) return
@@ -4307,11 +4397,45 @@ export function PlayerProvider({
               /* best-effort top-up; the in-band refill in the empty-
                * queue branch below will still cover the worst case. */
             })
+          radioRefillInFlightRef.current = topUp
+          void topUp.finally(() => {
+            if (radioRefillInFlightRef.current === topUp) {
+              radioRefillInFlightRef.current = null
+            }
+          })
         }
         return await advance(next)
       }
 
       if (radioModeRef.current && radioSeedTrackIdRef.current) {
+        // Empty queue & next-tap: if a refill is already in flight
+        // (proactive top-up or startRadio), re-await it instead of
+        // racing a second ``api.getRadio`` round-trip — that second
+        // call was the dominant factor in the 3-6 s "tap next, hear
+        // silence" gap users reported on rapid skipping.
+        const pending = radioRefillInFlightRef.current
+        if (pending) {
+          try {
+            await pending
+          } catch {
+            /* will fall through to a fresh in-band call */
+          }
+          if (
+            manualQueueRef.current.length > 0 &&
+            radioModeRef.current
+          ) {
+            const reusable = manualQueueRef.current.findIndex(
+              (item) => !unavailableTrackIdsRef.current.has(item.id),
+            )
+            if (reusable >= 0) {
+              const [next] = manualQueueRef.current.splice(reusable, 1)
+              if (next) {
+                setQueue([...manualQueueRef.current])
+                return await advance(next)
+              }
+            }
+          }
+        }
         const seedId = radioSeedTrackIdRef.current
         const excludeIds = Array.from(
           radioPlayedIdsRef.current,

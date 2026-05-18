@@ -9,6 +9,7 @@ import {
 import { AnimatePresence } from 'framer-motion'
 import { useTranslation } from 'react-i18next'
 import { useLocation, useNavigate } from 'react-router-dom'
+import '@/styles/redesign-home.css'
 import { Icon } from '@/components/Icon/Icon'
 import { TrackList } from '@/components/TrackList/TrackList'
 import { Waveform } from '@/components/Waveform/Waveform'

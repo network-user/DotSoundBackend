@@ -159,3 +159,153 @@ async def test_radio_service_build_queue_catalog_path_calls_repo(
     service._repo.get_next_tracks.assert_awaited_once_with(seed.id, 5)
     assert result == expected
     assert source == "catalog"
+
+
+def _yt_seed(track_id: int = 99) -> object:
+    """YT-platform seed eligible for the youtube_mix branch."""
+    return SimpleNamespace(
+        id=track_id,
+        access_mode="external_link",
+        is_active=True,
+        is_public=True,
+        source_platform="youtube",
+        external_id="dQw4w9WgXcQ",
+        title="Track",
+        artist="Artist",
+        uploaded_by_id=1,
+        _suppressed=False,
+    )
+
+
+def _yt_service_kwargs() -> MagicMock:
+    """RadioService settings flipped so the youtube_mix branch runs."""
+    s = MagicMock()
+    s.radio_enabled = True
+    s.radio_youtube_mix_enabled = True
+    s.youtube_enabled = True
+    s.radio_max_suggestions = 10
+    s.radio_yt_mix_budget_seconds = 0.5
+    s.radio_yt_mix_cache_ttl_seconds = 300
+    return s
+
+
+async def test_resolve_youtube_upstream_cache_hit_skips_materialize(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Warm cache must short-circuit the heavy yt-dlp pipeline and
+    return ``youtube_mix_cached`` so future refills are <1 ms."""
+    from app.services.radio_service import RadioService
+
+    mock_session = MagicMock()
+    service = RadioService(session=mock_session, settings=_yt_service_kwargs())
+
+    cached_tracks = [_make_track(10), _make_track(11)]
+    service._repo = MagicMock()
+    service._repo.get_by_ids_preserve_order = AsyncMock(
+        return_value=cached_tracks
+    )
+    service._materialize_youtube_upstream = AsyncMock(
+        return_value=([], None)
+    )
+
+    monkeypatch.setattr(
+        "app.services.radio_service.get_redis_client",
+        lambda: MagicMock(
+            get=AsyncMock(return_value="10,11"),
+            setex=AsyncMock(),
+        ),
+    )
+
+    seed = _yt_seed()
+    result, source = await service._resolve_youtube_upstream(
+        seed=seed, current=None, cap=10, up_cap=10
+    )
+
+    assert source == "youtube_mix_cached"
+    assert [t.id for t in result] == [10, 11]
+    service._materialize_youtube_upstream.assert_not_awaited()
+
+
+async def test_resolve_youtube_upstream_cold_writes_cache(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Cold path: materialize succeeds → result is stored in Redis
+    so the next call within the TTL avoids the cost again."""
+    from app.services.radio_service import RadioService
+
+    mock_session = MagicMock()
+    service = RadioService(session=mock_session, settings=_yt_service_kwargs())
+
+    materialized = [_make_track(20), _make_track(21)]
+    service._materialize_youtube_upstream = AsyncMock(
+        return_value=(materialized, "youtube_mix")
+    )
+
+    setex_mock = AsyncMock()
+    monkeypatch.setattr(
+        "app.services.radio_service.get_redis_client",
+        lambda: MagicMock(
+            get=AsyncMock(return_value=None),
+            setex=setex_mock,
+        ),
+    )
+    monkeypatch.setattr(
+        "app.services.radio_service.radio_request_observed",
+        MagicMock(),
+    )
+
+    seed = _yt_seed()
+    result, source = await service._resolve_youtube_upstream(
+        seed=seed, current=None, cap=10, up_cap=10
+    )
+
+    assert source == "youtube_mix"
+    assert [t.id for t in result] == [20, 21]
+    setex_mock.assert_awaited_once()
+    _, value = setex_mock.await_args.args[1], setex_mock.await_args.args[2]
+    assert value == "20,21"
+
+
+async def test_resolve_youtube_upstream_budget_exceeded_returns_pending(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Hard budget: if materialize blows the wall-clock budget the
+    radio response must still come back quickly with an empty
+    upstream and a ``youtube_mix_pending`` tag, so the catalog base
+    alone is sent to the client instead of timing out."""
+    import asyncio
+
+    from app.services.radio_service import RadioService
+
+    settings = _yt_service_kwargs()
+    settings.radio_yt_mix_budget_seconds = 0.05
+    mock_session = MagicMock()
+    service = RadioService(session=mock_session, settings=settings)
+
+    async def _slow(*_a: object, **_kw: object) -> tuple[list, str]:
+        await asyncio.sleep(0.5)
+        return [_make_track(30)], "youtube_mix"
+
+    service._materialize_youtube_upstream = _slow  # type: ignore[assignment]
+
+    setex_mock = AsyncMock()
+    monkeypatch.setattr(
+        "app.services.radio_service.get_redis_client",
+        lambda: MagicMock(
+            get=AsyncMock(return_value=None),
+            setex=setex_mock,
+        ),
+    )
+    monkeypatch.setattr(
+        "app.services.radio_service.radio_request_observed",
+        MagicMock(),
+    )
+
+    seed = _yt_seed()
+    result, source = await service._resolve_youtube_upstream(
+        seed=seed, current=None, cap=10, up_cap=10
+    )
+
+    assert result == []
+    assert source == "youtube_mix_pending"
+    setex_mock.assert_not_awaited()

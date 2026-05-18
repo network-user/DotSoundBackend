@@ -171,9 +171,21 @@ async def transcode_and_upload_local(
         # Upload HLS segments and playlists. When we know the source
         # hash we write to a CAS prefix so the bundle can be reused by
         # later uploads of the same source.
-        manifest_key = await _upload_hls(
+        manifest_key_uploaded = await _upload_hls(
             track_id, hi_dir, lo_dir, source_sha256
         )
+        bundle_ok = await _verify_hls_bundle(
+            track_id, manifest_key_uploaded
+        )
+        manifest_key: str | None = (
+            manifest_key_uploaded if bundle_ok else None
+        )
+        if not bundle_ok:
+            logger.warning(
+                "hls_bundle_verify_failed_skip_link",
+                track_id=track_id,
+                manifest_key=manifest_key_uploaded,
+            )
 
         # CAS MP3 blob: shared across users and imports when bytes match
         async with AsyncSessionLocal() as session:
@@ -187,9 +199,10 @@ async def transcode_and_upload_local(
             )
             if source_sha256:
                 await svc.claim_source(blob=ab, source_sha256=source_sha256)
-            await svc.set_hls_manifest_key(
-                blob=ab, hls_manifest_key=manifest_key
-            )
+            if manifest_key:
+                await svc.set_hls_manifest_key(
+                    blob=ab, hls_manifest_key=manifest_key
+                )
             # If the track was previously linked to a different blob (e.g.
             # an imported track that was temporarily attached to the raw OGG
             # blob while waiting for transcoding), release the old ref first
@@ -370,6 +383,12 @@ async def transcode_hls_only(
         manifest_key = await _upload_hls(
             track_id, hi_dir, lo_dir, source_sha256
         )
+        if not await _verify_hls_bundle(track_id, manifest_key):
+            logger.error(
+                "hls_transcode_bundle_invalid",
+                manifest_key=manifest_key,
+            )
+            return
 
         async with AsyncSessionLocal() as session:
             track = await session.get(Track, track_id)
@@ -453,6 +472,48 @@ async def _upload_hls(
         content_type="application/vnd.apple.mpegurl",
     )
     return manifest_key
+
+
+async def _verify_hls_bundle(
+    track_id: int,
+    manifest_key: str,
+) -> bool:
+    """Sanity-check that the bundle we just uploaded is actually
+    playable. If any of the master/variant/first-segment objects are
+    missing we treat the bundle as broken so the Track row stays
+    HLS-less and the frontend gracefully falls back to progressive
+    playback instead of hanging on a 15 s startup timeout on every
+    track switch (the long-standing "UGC stuck on buffering" bug).
+    """
+    prefix = manifest_key[: -len("/master.m3u8")] if manifest_key.endswith(
+        "/master.m3u8"
+    ) else f"hls/{track_id}"
+    required = [
+        manifest_key,
+        f"{prefix}/hi/playlist.m3u8",
+        f"{prefix}/lo/playlist.m3u8",
+        f"{prefix}/hi/000.ts",
+        f"{prefix}/lo/000.ts",
+    ]
+    for key in required:
+        try:
+            ok = await s3.object_exists(key)
+        except Exception as exc:  # noqa: BLE001
+            logger.warning(
+                "hls_bundle_verify_storage_error",
+                track_id=track_id,
+                key=key,
+                error=str(exc),
+            )
+            return False
+        if not ok:
+            logger.warning(
+                "hls_bundle_verify_missing",
+                track_id=track_id,
+                key=key,
+            )
+            return False
+    return True
 
 
 def _parse_loudnorm_stats(stderr: bytes) -> dict | None:
