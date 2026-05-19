@@ -1,4 +1,5 @@
 from datetime import UTC, datetime
+from typing import Any
 
 from dotsound_private_core.services.playcount_policy import (
     USER_CHOICE_SCORE_VERSION,
@@ -9,6 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.rate_limit import limiter
 from app.core.redis import get_redis_client
 from app.dependencies import get_current_user, get_db, get_optional_user
+from app.models.track import Track
 from app.models.user import User
 from app.repositories.artist import ArtistRepository
 from app.repositories.artist_stats import ArtistStatsRepository
@@ -36,10 +38,14 @@ from app.schemas.recommendation import (
     WeeklyPlaylistResponse,
     WeeklyTopPlaylistResponse,
 )
+from app.services.playback_variant_service import (
+    PlaybackVariantService,
+)
 from app.services.recommendation_service import (
     RecommendationService,
 )
 from app.services.track_response_build import (
+    build_track_responses,
     dedupe_and_build_track_list,
 )
 
@@ -52,7 +58,7 @@ router = APIRouter(
 async def _home_section_response(
     db: AsyncSession,
     user_id: int,
-    section: dict,
+    section: dict[str, Any],
 ) -> HomeSectionResponse:
     tracks_out = await dedupe_and_build_track_list(db, section["tracks"])
     if section["section_type"] == "continue" and tracks_out:
@@ -83,7 +89,7 @@ async def _home_section_response(
 async def get_home(
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
-):
+) -> HomePageResponse:
     svc = RecommendationService(db)
     data = await svc.get_home_sections(user.id)
 
@@ -91,18 +97,35 @@ async def get_home(
     for s in data["sections"]:
         sections.append(await _home_section_response(db, user.id, s))
 
-    highlights = []
+    pvs = PlaybackVariantService(db)
+    highlight_primaries: list[tuple[Track, dict[str, object]]] = []
     for h in data.get("highlights", []):
-        track_out = await dedupe_and_build_track_list(db, [h["track"]])
-        if track_out:
-            highlights.append(
-                {
-                    "track": track_out[0],
-                    "label": h["label"],
-                    "reason": h.get("reason"),
-                    "hero_image_key": h.get("hero_image_key"),
-                }
-            )
+        deduped = await pvs.dedupe_track_rows_for_display([h["track"]])
+        if deduped:
+            highlight_primaries.append((deduped[0], h))
+    unique_highlight_tracks: list[Track] = []
+    seen_highlight_ids: set[int] = set()
+    for t, _ in highlight_primaries:
+        if t.id not in seen_highlight_ids:
+            seen_highlight_ids.add(t.id)
+            unique_highlight_tracks.append(t)
+    highlight_responses = await build_track_responses(
+        db, unique_highlight_tracks
+    )
+    highlight_response_by_id = {r.id: r for r in highlight_responses}
+    highlights = []
+    for t, h in highlight_primaries:
+        resp = highlight_response_by_id.get(t.id)
+        if resp is None:
+            continue
+        highlights.append(
+            {
+                "track": resp,
+                "label": h["label"],
+                "reason": h.get("reason"),
+                "hero_image_key": h.get("hero_image_key"),
+            }
+        )
 
     return HomePageResponse(
         sections=sections,
@@ -144,7 +167,7 @@ async def get_similar(
     track_id: int,
     limit: int = Query(default=10, le=30),
     db: AsyncSession = Depends(get_db),
-):
+) -> SimilarTracksResponse:
     svc = RecommendationService(db)
     tracks = await svc.get_similar(track_id, limit)
     return SimilarTracksResponse(
@@ -160,7 +183,7 @@ async def get_similar(
 async def get_daily_mix(
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
-):
+) -> DailyMixResponse:
     svc = RecommendationService(db)
     tracks = await svc.get_daily_mix(user.id)
     return DailyMixResponse(
@@ -176,7 +199,7 @@ async def get_daily_mix(
 async def get_genre_mixes(
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
-):
+) -> GenreMixesResponse:
     svc = RecommendationService(db)
     mixes = await svc.get_genre_mixes(user.id)
     result = []
@@ -200,7 +223,7 @@ async def get_genre_mix(
     genre: str,
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
-):
+) -> GenreMixItemResponse:
     svc = RecommendationService(db)
     mix = await svc.get_genre_mix(
         user_id=user.id,
@@ -228,7 +251,7 @@ async def save_genre_mix_override(
     body: GenreMixOverrideRequest,
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
-):
+) -> GenreMixItemResponse:
     if not user.is_admin:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
@@ -262,7 +285,7 @@ async def get_radio(
     exclude_ids: str = Query(default=""),
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
-):
+) -> RadioQueueResponse:
     exclude: list[int] = []
     if exclude_ids:
         try:
@@ -292,7 +315,7 @@ async def get_radio(
 async def get_daily_playlist(
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
-):
+) -> DailyPlaylistResponse:
     svc = RecommendationService(db)
     payload = await svc.get_daily_playlist(user.id)
     repo = RecommendationRepository(db)
@@ -321,7 +344,7 @@ async def get_daily_playlist(
 async def get_weekly_playlist(
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
-):
+) -> WeeklyPlaylistResponse:
     svc = RecommendationService(db)
     payload = await svc.get_weekly_playlist(user.id)
     repo = RecommendationRepository(db)
@@ -347,7 +370,7 @@ async def get_user_choice_playlist(
     _user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
     limit: int = Query(default=100, ge=1, le=200),
-):
+) -> UserChoicePlaylistResponse:
     svc = RecommendationService(db)
     tracks = await svc.get_user_choice_playlist(limit=limit)
     return UserChoicePlaylistResponse(
@@ -365,7 +388,7 @@ async def get_weekly_top_playlist(
     _user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
     limit: int = Query(default=50, ge=1, le=100),
-):
+) -> WeeklyTopPlaylistResponse:
     svc = RecommendationService(db)
     payload = await svc.get_weekly_top_playlist(limit=limit)
     repo = RecommendationRepository(db)
@@ -387,7 +410,7 @@ async def get_forgotten_treasures_playlist(
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
     limit: int = Query(default=50, ge=1, le=100),
-):
+) -> ForgottenTreasuresPlaylistResponse:
     svc = RecommendationService(db)
     payload = await svc.get_forgotten_treasures_playlist(
         user.id,
@@ -433,7 +456,7 @@ async def get_home_highlight(
 async def refresh_daily_playlist(
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
-):
+) -> None:
     if not user.is_admin:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
@@ -451,7 +474,7 @@ async def refresh_daily_playlist(
 async def refresh_daily_mix(
     request: Request,
     user: User = Depends(get_current_user),
-):
+) -> None:
     redis = get_redis_client()
     await redis.delete(f"rec:daily_mix:{user.id}")
 
@@ -464,7 +487,7 @@ async def refresh_daily_mix(
 async def refresh_genre_mixes(
     request: Request,
     user: User = Depends(get_current_user),
-):
+) -> None:
     redis = get_redis_client()
     await redis.delete(f"rec:genre_mixes:{user.id}")
 
@@ -487,13 +510,12 @@ async def get_discover(
     trending_out = await dedupe_and_build_track_list(db, trending_raw)
 
     artists_raw = await artist_repo.list_popular(limit=artist_limit)
+    listeners_map: dict[int, int] = {}
     if artists_raw:
         stats_repo = ArtistStatsRepository(db)
         listeners_map = await stats_repo.get_latest_listeners_batch(
             [a.id for a in artists_raw]
         )
-    else:
-        listeners_map: dict[int, int] = {}
     artists_out = [
         ArtistResponse.model_validate(
             a,

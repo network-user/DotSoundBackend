@@ -65,6 +65,7 @@ from app.models.playlist_collab import (
     PlaylistCollaborator,
     PlaylistInviteToken,
 )
+from app.models.promotion import Promotion, PromotionEvent
 from app.models.recommendation_impression import (
     RecommendationImpression,
 )
@@ -137,6 +138,8 @@ __all__ = [
     "PlaylistInviteToken",
     "PlaylistTrack",
     "PlaylistCollaborator",
+    "Promotion",
+    "PromotionEvent",
     "RecommendationImpression",
     "ScheduledJob",
     "SearchEvent",

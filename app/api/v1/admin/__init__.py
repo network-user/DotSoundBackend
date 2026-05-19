@@ -35,6 +35,9 @@ from . import (
     playlists as admin_playlists,
 )
 from . import (
+    promotions as admin_promotions,
+)
+from . import (
     soundcloud as admin_soundcloud,
 )
 
@@ -46,6 +49,7 @@ router.include_router(artist_catalog.router)
 router.include_router(artist_discography.router)
 router.include_router(admin_albums.router)
 router.include_router(admin_playlists.router)
+router.include_router(admin_promotions.router)
 router.include_router(tracks.router)
 router.include_router(genre_samples.router)
 router.include_router(users.router)

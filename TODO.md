@@ -2870,11 +2870,23 @@
   Все 14 хендлеров теперь не содержат `select()`, `session.execute()`
   или `session.get()`. Внутренние модели остаются только для
   серилизаторов и factory (ScheduledJob ctor) — это разрешено.
-- [ ] **P-3 recommendations build batching:** сейчас секции в
-  `/recommendations/home` собираются последовательно (loop по
-  sections с `dedupe_and_build_track_list` на каждой). Можно
-  объединить в один build-pass — но требует snapshot-теста на
-  состав/порядок ответа до рефактора.
+- [ ] **`/discover` runtime bug — `ArtistResponse.model_validate(a, update=...)`
+  (2026-05-19):** `app/api/v1/recommendations.py:520` использует
+  несуществующий kwarg `update=` у Pydantic v2 `model_validate`, что
+  должно бросать `TypeError` при любом запросе с непустым
+  `artists_raw`. Фикс: `ArtistResponse.model_validate(a).model_copy(update={"monthly_listeners": listeners_map.get(a.id, 0)})`.
+  Обнаружено при mypy-cleanup рекомендейшнс-роутера; не патчилось, чтобы
+  не сваливать в один коммит с cosmetic.
+- [ ] **P-3 recommendations build batching (partial, 2026-05-19):**
+  highlights в `/recommendations/home` теперь собираются одним
+  `build_track_responses(N треков)` вместо N×`dedupe_and_build_track_list([1 трек])`
+  (per-highlight dedup сохранён, поведение endpoint identical) —
+  `app/api/v1/recommendations.py:get_home`.
+  Sections остаются последовательными (loop по sections с
+  `_home_section_response` на каждой): глобальный dedup на уровне
+  endpoint изменит поведение (тот же primary не появится в двух
+  секциях), поэтому до рефактора нужен endpoint-snapshot-тест на
+  состав и порядок sections + highlights.
 - [-] **F-2/F-3/F-11 frontend race (false positive на bug-severity):**
   при второй проверке закрытое `let cancelled = false` в каждом
   effect run + `if (!cancelled) setState(...)` гард корректно
