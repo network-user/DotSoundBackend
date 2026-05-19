@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import asyncio
+
 import structlog
 from dotsound_private_core.services.upload_policy import (
     is_audio_mime_allowed,
@@ -95,6 +97,15 @@ def _detect_mime(data: bytes) -> str:
     if detected is not None:
         return detected
     return "application/octet-stream"
+
+
+async def detect_mime_async(data: bytes) -> str:
+    """Async wrapper offloading libmagic/Pillow probing to a worker.
+
+    Used by upload handlers so a slow magic-database lookup or a
+    pathological Pillow decode does not stall the event loop.
+    """
+    return await asyncio.to_thread(_detect_mime, data)
 
 
 def validate_audio(
@@ -210,3 +221,24 @@ def validate_video(
             detail=f"File content is {detected}, not video",
         )
     return detected
+
+
+async def validate_audio_async(
+    data: bytes,
+    filename: str | None = None,
+) -> str:
+    return await asyncio.to_thread(validate_audio, data, filename)
+
+
+async def validate_image_async(
+    data: bytes,
+    filename: str | None = None,
+) -> str:
+    return await asyncio.to_thread(validate_image, data, filename)
+
+
+async def validate_video_async(
+    data: bytes,
+    filename: str | None = None,
+) -> str:
+    return await asyncio.to_thread(validate_video, data, filename)

@@ -452,8 +452,8 @@ async def upload_track_video(
             detail=f"Video exceeds {_MAX_VIDEO_BYTES // (1024 * 1024)} MB limit",
         )
 
-    from app.services.file_validator import validate_video
-    validate_video(data, video.filename)
+    from app.services.file_validator import validate_video_async
+    await validate_video_async(data, video.filename)
 
     if track.video_key:
         try:

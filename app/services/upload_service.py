@@ -98,10 +98,10 @@ class UploadService:
 
         from app.services.file_validator import (
             scan_for_malware,
-            validate_audio,
+            validate_audio_async,
         )
 
-        validate_audio(data, file.filename)
+        await validate_audio_async(data, file.filename)
         await scan_for_malware(data, file.filename)
 
         if uploader_id is not None:
@@ -344,10 +344,10 @@ class UploadService:
             logger.warning("cover_rejected_size", size_bytes=len(data))
             return None
 
-        from app.services.file_validator import validate_image
+        from app.services.file_validator import validate_image_async
 
         try:
-            validate_image(data, cover.filename)
+            await validate_image_async(data, cover.filename)
         except Exception:
             logger.warning(
                 "cover_rejected_magic",

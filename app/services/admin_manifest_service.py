@@ -12,17 +12,25 @@ from __future__ import annotations
 
 import hashlib
 import hmac
+import json
 import time
 
+import structlog
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import settings
+from app.core.redis import get_redis_client
 from app.models.admin_capability import AdminCapability
 from app.models.user import User
 from app.repositories.admin_capability import (
     AdminCapabilityRepository,
 )
+
+logger: structlog.stdlib.BoundLogger = structlog.get_logger(__name__)
+
+_CAPS_CACHE_KEY = "admin:capabilities:{user_id}"
+_CAPS_CACHE_TTL_SECONDS = 30
 
 KNOWN_CAPABILITIES: frozenset[str] = frozenset(
     {
@@ -37,6 +45,7 @@ KNOWN_CAPABILITIES: frozenset[str] = frozenset(
         "users.message",
         "tracks.manage",
         "tracks.delete",
+        "promotions.manage",
         "complaints.moderate",
         "artists.enrich",
         "audio_compute.manage",
@@ -141,6 +150,24 @@ async def _effective_capabilities(
 ) -> set[str]:
     if not user.is_admin:
         return set()
+    redis = get_redis_client()
+    cache_key = _CAPS_CACHE_KEY.format(user_id=user.id)
+    try:
+        cached = await redis.get(cache_key)
+    except Exception:
+        cached = None
+    if cached:
+        try:
+            payload = json.loads(
+                cached if isinstance(cached, str) else cached.decode()
+            )
+            if isinstance(payload, list):
+                return {
+                    cap for cap in payload if cap in KNOWN_CAPABILITIES
+                }
+        except (TypeError, ValueError):
+            pass
+
     result = await session.execute(
         select(AdminCapability).where(AdminCapability.user_id == user.id)
     )
@@ -148,7 +175,28 @@ async def _effective_capabilities(
     caps = {
         row.capability for row in rows if row.capability in KNOWN_CAPABILITIES
     }
+    try:
+        await redis.set(
+            cache_key,
+            json.dumps(sorted(caps)),
+            ex=_CAPS_CACHE_TTL_SECONDS,
+        )
+    except Exception:
+        logger.debug("admin_capabilities_cache_write_failed")
     return caps
+
+
+async def invalidate_admin_capabilities_cache(user_id: int) -> None:
+    """Drop the per-user capabilities cache.
+
+    Call after granting/revoking a capability so the change is
+    visible before the natural TTL expires.
+    """
+    redis = get_redis_client()
+    try:
+        await redis.delete(_CAPS_CACHE_KEY.format(user_id=user_id))
+    except Exception:
+        logger.debug("admin_capabilities_cache_invalidate_failed")
 
 
 def _filter_menu(caps: set[str], locale: str) -> list[dict]:
@@ -194,7 +242,7 @@ def _filter_menu(caps: set[str], locale: str) -> list[dict]:
             "id": "promotions",
             "label": labels["menu.promotions"],
             "route": f"{base}/promotions",
-            "capability": "tracks.manage",
+            "capability": "promotions.manage",
             "icon": "sparkle",
         },
         {
@@ -424,6 +472,7 @@ __all__ = [
     "KNOWN_CAPABILITIES",
     "build_manifest",
     "ensure_admin_capabilities_for_initialized",
+    "invalidate_admin_capabilities_cache",
     "sign_bundle_token",
     "verify_bundle_token",
 ]

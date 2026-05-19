@@ -336,12 +336,12 @@ class AdminArtistCatalogService:
         data: bytes,
         admin_user_id: int,
     ) -> AdminArtistCatalogOverviewResponse | None:
-        from app.services.file_validator import validate_image
+        from app.services.file_validator import validate_image_async
 
         artist = await self._artists.get_by_id(artist_id)
         if artist is None:
             return None
-        validate_image(data, filename=None)
+        await validate_image_async(data, filename=None)
         img_key, _, _, _ = await s3.upload_image(
             data=data,
             prefix="artists",

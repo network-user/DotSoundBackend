@@ -103,6 +103,7 @@ import type {
   RadioResponse,
   MyComplaintsResponse,
   UserPresenceResponse,
+  UsersPresenceBatchResponse,
   TrackQueueResponse,
   UnreadCountResponse,
   UserListeningStatsResponse,
@@ -2123,6 +2124,15 @@ export const api = {
 
   getUserPresence(userId: number): Promise<UserPresenceResponse> {
     return request(`/api/v1/users/${userId}/presence`)
+  },
+
+  getUsersPresenceBatch(
+    userIds: number[],
+  ): Promise<UsersPresenceBatchResponse> {
+    return request('/api/v1/users/presence/batch', {
+      method: 'POST',
+      body: JSON.stringify({ user_ids: userIds }),
+    })
   },
 
   getChatPresence(convId: number): Promise<ChatPresenceResponse> {

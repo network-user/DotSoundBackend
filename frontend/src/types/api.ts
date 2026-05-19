@@ -695,6 +695,10 @@ export interface ChatPresenceResponse {
   members: Record<string, ChatPresenceMember>
 }
 
+export interface UsersPresenceBatchResponse {
+  members: Record<string, ChatPresenceMember>
+}
+
 export interface SimilarTracksResponse {
   seed_track_id: number
   tracks: Track[]
