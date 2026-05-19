@@ -1,5 +1,16 @@
 # DotSound - TODO Tracker
 
+- [x] **Home page progressive section loading (2026-05-19)**
+  - Backend: added `GET /api/v1/recommendations/home/sections/{section_type}`
+    so the Mini App can request one home section at a time instead of
+    waiting for the full `/recommendations/home` payload.
+  - Frontend: Home loads the hero inputs first, lazy-loads genre mixes,
+    followed artists and recommendation rows near the viewport, and keeps
+    skeletons while each chunk is pending.
+  - Tests: `poetry run pytest tests/app/api/v1/test_recommendations.py`;
+    `poetry run ruff check --ignore ANN201 ...`; frontend
+    `npm run build`.
+
 - [x] **Playback live-proxy truncated stream guard (2026-05-19)**
   - Third-party audio proxy responses no longer forward upstream
     `Content-Length` for live streaming, so a CDN/proxy disconnect

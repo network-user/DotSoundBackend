@@ -99,6 +99,15 @@ _EXTERNAL_DISCOVERY_TIMEOUT = 8
 _EXTERNAL_IMPORT_TIMEOUT = 15
 _GENRE_MIXES_CACHE_TTL = 3 * 60 * 60
 _GENRE_MIXES_CACHE_PATTERN = "rec:genre_mixes:*"
+_HOME_SECTION_TITLES = {
+    "continue": "РџСЂРѕРґРѕР»Р¶РёС‚СЊ СЃР»СѓС€Р°С‚СЊ",
+    "personalized": "Р”Р»СЏ РІР°СЃ",
+    "new_releases": "РќРѕРІС‹Рµ СЂРµР»РёР·С‹",
+    "genre_popular": "РџРѕРїСѓР»СЏСЂРЅРѕРµ",
+    "user_choice": "Р’С‹Р±РѕСЂ РїРѕР»СЊР·РѕРІР°С‚РµР»РµР№",
+    "fav_artists": "Р›СЋР±РёРјС‹Рµ РёСЃРїРѕР»РЅРёС‚РµР»Рё",
+    "popular": "РџРѕРїСѓР»СЏСЂРЅРѕРµ",
+}
 
 
 async def _purge_genre_mixes_cache() -> int:
@@ -825,6 +834,106 @@ class RecommendationService:
             "sections": sections,
             "highlights": highlights,
             "maturity": maturity,
+        }
+
+    async def get_home_section(
+        self,
+        user_id: int,
+        section_type: str,
+        limit: int = 15,
+    ) -> dict[str, Any]:
+        size = max(1, min(int(limit), 50))
+        if section_type not in _HOME_SECTION_TITLES:
+            raise ValueError("Unknown home section")
+
+        if section_type == "continue":
+            tracks = await self._rec_repo.get_incomplete_listens(
+                user_id, limit=size
+            )
+            return {
+                "title": _HOME_SECTION_TITLES[section_type],
+                "section_type": section_type,
+                "tracks": tracks,
+            }
+
+        (
+            user_prefs,
+            user_locale,
+        ) = await self._build_user_prefs(user_id)
+
+        if section_type == "new_releases":
+            tracks = await self._rec_repo.get_recent_tracks(
+                days=7, limit=size
+            )
+            return {
+                "title": _HOME_SECTION_TITLES[section_type],
+                "section_type": section_type,
+                "tracks": tracks,
+            }
+
+        if section_type == "user_choice":
+            tracks = await self.get_user_choice_playlist(limit=size)
+            return {
+                "title": _HOME_SECTION_TITLES[section_type],
+                "section_type": section_type,
+                "tracks": tracks,
+            }
+
+        if section_type == "fav_artists":
+            tracks = []
+            if user_prefs.preferred_artist_ids:
+                tracks = await self._rec_repo.get_tracks_by_artist_ids(
+                    user_prefs.preferred_artist_ids,
+                    limit=size,
+                )
+            return {
+                "title": _HOME_SECTION_TITLES[section_type],
+                "section_type": section_type,
+                "tracks": tracks,
+            }
+
+        if section_type == "popular":
+            tracks = await self._rec_repo.get_candidate_tracks_stratified(
+                total_limit=size,
+            )
+            return {
+                "title": _HOME_SECTION_TITLES[section_type],
+                "section_type": section_type,
+                "tracks": tracks,
+            }
+
+        pref = await self._pref_repo.get_by_user_id(user_id)
+        genre_filter = (
+            pref.preferred_genres if pref and pref.preferred_genres else None
+        )
+        candidates = await self._scoring_candidate_tracks(
+            user_id,
+            max(100, size * 6),
+            genre_filter,
+            user_prefs,
+            user_locale,
+        )
+
+        if section_type == "genre_popular":
+            title = _HOME_SECTION_TITLES[section_type]
+            if genre_filter:
+                title = f"РџРѕРїСѓР»СЏСЂРЅРѕРµ: {genre_filter[0]}"
+            return {
+                "title": title,
+                "section_type": section_type,
+                "tracks": candidates[:size] if genre_filter else [],
+            }
+
+        history = await self._build_listen_history(user_id)
+        features = await self._tracks_to_features(candidates)
+        scored = score_tracks_for_user(user_prefs, history, features)
+        scored_ids = [s.track_id for s in scored[:size]]
+        track_map = {t.id: t for t in candidates}
+        tracks = [track_map[tid] for tid in scored_ids if tid in track_map]
+        return {
+            "title": _HOME_SECTION_TITLES[section_type],
+            "section_type": section_type,
+            "tracks": tracks,
         }
 
     async def get_user_choice_playlist(self, limit: int = 100) -> list[Track]:

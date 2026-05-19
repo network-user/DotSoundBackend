@@ -22,6 +22,7 @@ import { m, VARIANTS_FADE_UP } from '@/lib/motion'
 import { usePlayerActions } from '@/store/PlayerContext'
 import { usePrefetchTracks } from '@/store/PrefetchContext'
 import { trackActivationEvent } from '@/lib/activation'
+import { useAutoLoadMore } from '@/hooks/useAutoLoadMore'
 import { usePullToRefresh } from '@/hooks/usePullToRefresh'
 import { PullToRefreshIndicator } from '@/components/ui/PullToRefreshIndicator'
 import { useDesktopFinePointer } from '@/hooks/useDesktopFinePointer'
@@ -106,13 +107,6 @@ async function resolveHomeRadioSeedTrack(
   } catch {
     return null
   }
-}
-
-function normalizeHomeSections(
-  raw: HomeSection[] | null | undefined,
-): HomeSection[] {
-  if (!Array.isArray(raw)) return []
-  return raw
 }
 
 function SkeletonBlock({ className }: { className: string }) {
@@ -377,6 +371,99 @@ const HOME_TRACK_SECTIONS: HomeSectionConfig[] = [
   { key: 'popular' },
 ]
 
+interface HomeLazyTrackSectionProps {
+  sectionKey: string
+  initialSection: HomeSection | null
+  fallbackTitle: string
+  onLoaded: (section: HomeSection) => void
+  onPlay: (track: Track) => void
+  onMore?: () => void
+  moreLabel: string
+}
+
+function HomeLazyTrackSection({
+  sectionKey,
+  initialSection,
+  fallbackTitle,
+  onLoaded,
+  onPlay,
+  onMore,
+  moreLabel,
+}: HomeLazyTrackSectionProps) {
+  const [section, setSection] = useState<HomeSection | null>(
+    initialSection,
+  )
+  const [loaded, setLoaded] = useState(Boolean(initialSection))
+  const [loading, setLoading] = useState(false)
+
+  useEffect(() => {
+    if (!initialSection) return
+    setSection(initialSection)
+    setLoaded(true)
+  }, [initialSection])
+
+  const load = useCallback(async () => {
+    if (loading || loaded) return
+    setLoading(true)
+    try {
+      const next = await api.getHomeSection(sectionKey, 15)
+      setSection(next)
+      onLoaded(next)
+    } catch {
+      setSection({
+        title: fallbackTitle,
+        section_type: sectionKey,
+        tracks: [],
+      })
+    } finally {
+      setLoaded(true)
+      setLoading(false)
+    }
+  }, [fallbackTitle, loaded, loading, onLoaded, sectionKey])
+
+  const sentinelRef = useAutoLoadMore({
+    enabled: !loaded,
+    loading,
+    onLoadMore: load,
+    rootMargin: '900px',
+  })
+
+  if (loaded && (!section || section.tracks.length === 0)) {
+    return null
+  }
+
+  if (!section || section.tracks.length === 0) {
+    return (
+      <div ref={sentinelRef}>
+        <div className="rh-home-section-head">
+          <span className="rh-home-section-head__title">
+            {fallbackTitle}
+          </span>
+        </div>
+        <div className="rh-home-skel-row home-skeleton-row">
+          {[1, 2, 3, 4].map((i) => (
+            <SkeletonBlock
+              key={i}
+              className="home-skeleton-tile"
+            />
+          ))}
+        </div>
+      </div>
+    )
+  }
+
+  return (
+    <HomeTrackSnapSection
+      title={section.title}
+      tracks={section.tracks}
+      onPlay={onPlay}
+      onMore={onMore}
+      moreLabel={moreLabel}
+      snapAria={section.title}
+    />
+  )
+}
+
 interface HomeViewProps {
   onOpenArtist?: (id: number) => void
 }
@@ -392,9 +479,12 @@ export function HomeView({ onOpenArtist }: HomeViewProps) {
   const [me, setMe] = useState<UserResponse | null>(null)
   const [sections, setSections] = useState<HomeSection[] | null>(null)
   const [genreMixes, setGenreMixes] = useState<GenreMixItem[] | null>(null)
+  const [genreMixesLoading, setGenreMixesLoading] = useState(false)
   const [followedArtists, setFollowedArtists] = useState<
     FollowedArtistItem[] | null
   >(null)
+  const [followedArtistsLoading, setFollowedArtistsLoading] =
+    useState(false)
   const [recentlyPlayed, setRecentlyPlayed] = useState<Track[] | null>(null)
   const [fallbackTracks, setFallbackTracks] = useState<Track[] | null>(null)
   const [highlight, setHighlight] = useState<{
@@ -410,16 +500,63 @@ export function HomeView({ onOpenArtist }: HomeViewProps) {
   const [headerStuck, setHeaderStuck] = useState(false)
   const sentinelRef = useRef<HTMLDivElement | null>(null)
 
+  const upsertHomeSection = useCallback((section: HomeSection) => {
+    setSections((prev) => {
+      const current = prev ?? []
+      const next = current.filter(
+        (s) => s.section_type !== section.section_type,
+      )
+      return [...next, section]
+    })
+  }, [])
+
+  const loadGenreMixes = useCallback(async () => {
+    if (genreMixes !== null || genreMixesLoading) return
+    setGenreMixesLoading(true)
+    try {
+      const data = await api.getGenreMixes()
+      setGenreMixes(data.mixes)
+    } catch {
+      setGenreMixes([])
+    } finally {
+      setGenreMixesLoading(false)
+    }
+  }, [genreMixes, genreMixesLoading])
+
+  const loadFollowedArtists = useCallback(async () => {
+    if (followedArtists !== null || followedArtistsLoading) return
+    setFollowedArtistsLoading(true)
+    try {
+      const data = await api.getFollowedArtistsList(16)
+      setFollowedArtists(data.items)
+    } catch {
+      setFollowedArtists([])
+    } finally {
+      setFollowedArtistsLoading(false)
+    }
+  }, [followedArtists, followedArtistsLoading])
+
+  const genreMixesSentinelRef = useAutoLoadMore({
+    enabled: genreMixes === null,
+    loading: genreMixesLoading,
+    onLoadMore: loadGenreMixes,
+    rootMargin: '900px',
+  })
+  const followedArtistsSentinelRef = useAutoLoadMore({
+    enabled: followedArtists === null,
+    loading: followedArtistsLoading,
+    onLoadMore: loadFollowedArtists,
+    rootMargin: '900px',
+  })
+
   useEffect(() => {
     let cancelled = false
     const watchdogId = window.setTimeout(() => {
       if (cancelled) return
       setSections((s) => (s === null ? [] : s))
-      setGenreMixes((g) => (g === null ? [] : g))
-      setFollowedArtists((f) => (f === null ? [] : f))
       setRecentlyPlayed((r) => (r === null ? [] : r))
       void api
-        .getTracks({ size: 50 })
+        .getTracks({ size: 15 })
         .then((data) => {
           if (cancelled) return
           setFallbackTracks((fb) =>
@@ -438,17 +575,24 @@ export function HomeView({ onOpenArtist }: HomeViewProps) {
     }
 
     api
-      .getHomeRecommendations()
-      .then((data) => {
+      .getHomeSection('continue', 10)
+      .then((section) => {
         if (cancelled) return
-        setSections(normalizeHomeSections(data.sections))
+        setSections(section.tracks.length ? [section] : [])
       })
       .catch(() => {
         if (cancelled) return
+        setSections([])
         api
-          .getTracks({ size: 50 })
-          .then((data) => setFallbackTracks(data.items))
-          .catch(() => setFallbackTracks([]))
+          .getTracks({ size: 15 })
+          .then((data) => {
+            if (cancelled) return
+            setFallbackTracks(data.items)
+          })
+          .catch(() => {
+            if (cancelled) return
+            setFallbackTracks([])
+          })
       })
 
     api
@@ -460,28 +604,6 @@ export function HomeView({ onOpenArtist }: HomeViewProps) {
       .catch(() => {
         if (cancelled) return
         setHighlight(null)
-      })
-
-    api
-      .getGenreMixes()
-      .then((data) => {
-        if (cancelled) return
-        setGenreMixes(data.mixes)
-      })
-      .catch(() => {
-        if (cancelled) return
-        setGenreMixes([])
-      })
-
-    api
-      .getFollowedArtistsList(30)
-      .then((data) => {
-        if (cancelled) return
-        setFollowedArtists(data.items)
-      })
-      .catch(() => {
-        if (cancelled) return
-        setFollowedArtists([])
       })
 
     api
@@ -504,29 +626,23 @@ export function HomeView({ onOpenArtist }: HomeViewProps) {
   const handleRefresh = useCallback(async () => {
     setSections(null)
     setGenreMixes(null)
+    setGenreMixesLoading(false)
     setFollowedArtists(null)
+    setFollowedArtistsLoading(false)
     setRecentlyPlayed(null)
     await Promise.allSettled([
       api
-        .getHomeRecommendations()
-        .then((data) =>
-          setSections(normalizeHomeSections(data.sections)),
+        .getHomeSection('continue', 10)
+        .then((section) =>
+          setSections(section.tracks.length ? [section] : []),
         )
         .catch(() => {
           setSections([])
           return api
-            .getTracks({ size: 50 })
+            .getTracks({ size: 15 })
             .then((data) => setFallbackTracks(data.items))
             .catch(() => setFallbackTracks([]))
         }),
-      api
-        .getGenreMixes()
-        .then((data) => setGenreMixes(data.mixes))
-        .catch(() => setGenreMixes([])),
-      api
-        .getFollowedArtistsList(30)
-        .then((data) => setFollowedArtists(data.items))
-        .catch(() => setFollowedArtists([])),
       api
         .getListenHistory(20)
         .then((data) => setRecentlyPlayed(data.items))
@@ -932,7 +1048,7 @@ export function HomeView({ onOpenArtist }: HomeViewProps) {
         </div>
 
         {genreMixes === null ? (
-          <div>
+          <div ref={genreMixesSentinelRef}>
             <div className="rh-home-section-head">
               <span className="rh-home-section-head__title">
                 {t('redesign.home.sectionGenreMixes')}
@@ -1044,7 +1160,7 @@ export function HomeView({ onOpenArtist }: HomeViewProps) {
         })()}
 
         {followedArtists === null ? (
-          <div>
+          <div ref={followedArtistsSentinelRef}>
             <div className="rh-home-section-head">
               <span className="rh-home-section-head__title">
                 {t('redesign.home.sectionSubscriptions')}
@@ -1109,25 +1225,24 @@ export function HomeView({ onOpenArtist }: HomeViewProps) {
         ) : null}
 
         {sections &&
-          HOME_TRACK_SECTIONS.map(({ key, morePath }) => {
-            const s = sectionMap.get(key)
-            if (!s) return null
-            return (
-              <HomeTrackSnapSection
-                key={key}
-                title={s.title}
-                tracks={s.tracks}
-                onPlay={handlePlay}
-                onMore={
-                  morePath ? () => navigate(morePath) : undefined
-                }
-                moreLabel={t('redesign.home.more')}
-                snapAria={s.title}
-              />
-            )
-          })}
+          HOME_TRACK_SECTIONS.map(({ key, morePath }) => (
+            <HomeLazyTrackSection
+              key={key}
+              sectionKey={key}
+              initialSection={sectionMap.get(key) ?? null}
+              fallbackTitle={t('redesign.home.sectionTracks')}
+              onLoaded={upsertHomeSection}
+              onPlay={handlePlay}
+              onMore={
+                morePath ? () => navigate(morePath) : undefined
+              }
+              moreLabel={t('redesign.home.more')}
+            />
+          ))}
 
-        {!sections && fallbackTracks !== null && fallbackTracks.length > 0 && (
+        {(sections === null || sections.length === 0) &&
+          fallbackTracks !== null &&
+          fallbackTracks.length > 0 && (
           <HomeTrackSnapSection
             title={t('redesign.home.sectionTracks')}
             tracks={fallbackTracks}
@@ -1137,7 +1252,14 @@ export function HomeView({ onOpenArtist }: HomeViewProps) {
           />
         )}
 
-        {sections && sections.length === 0 && !fallbackTracks && (
+        {sections &&
+          sections.length === 0 &&
+          fallbackTracks !== null &&
+          fallbackTracks.length === 0 &&
+          recentlyPlayed !== null &&
+          recentlyPlayed.length === 0 &&
+          genreMixes !== null &&
+          followedArtists !== null && (
           <div className="rh-home-empty">
             <div className="rh-home-empty__icon" aria-hidden>
               <Icon name="music" size={28} />

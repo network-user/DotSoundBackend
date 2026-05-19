@@ -49,6 +49,36 @@ router = APIRouter(
 )
 
 
+async def _home_section_response(
+    db: AsyncSession,
+    user_id: int,
+    section: dict,
+) -> HomeSectionResponse:
+    tracks_out = await dedupe_and_build_track_list(db, section["tracks"])
+    if section["section_type"] == "continue" and tracks_out:
+        positions = await ListenEventRepository(db).latest_resume_position(
+            user_id, [t.id for t in tracks_out]
+        )
+        if positions:
+            tracks_out = [
+                (
+                    t.model_copy(
+                        update={
+                            "resume_position_seconds": positions.get(t.id)
+                        }
+                    )
+                    if positions.get(t.id) is not None
+                    else t
+                )
+                for t in tracks_out
+            ]
+    return HomeSectionResponse(
+        title=section["title"],
+        section_type=section["section_type"],
+        tracks=tracks_out,
+    )
+
+
 @router.get("/home", response_model=HomePageResponse)
 async def get_home(
     user: User = Depends(get_current_user),
@@ -58,33 +88,8 @@ async def get_home(
     data = await svc.get_home_sections(user.id)
 
     sections = []
-    listen_repo = ListenEventRepository(db)
     for s in data["sections"]:
-        tracks_out = await dedupe_and_build_track_list(db, s["tracks"])
-        if s["section_type"] == "continue" and tracks_out:
-            positions = await listen_repo.latest_resume_position(
-                user.id, [t.id for t in tracks_out]
-            )
-            if positions:
-                tracks_out = [
-                    (
-                        t.model_copy(
-                            update={
-                                "resume_position_seconds": positions.get(t.id)
-                            }
-                        )
-                        if positions.get(t.id) is not None
-                        else t
-                    )
-                    for t in tracks_out
-                ]
-        sections.append(
-            HomeSectionResponse(
-                title=s["title"],
-                section_type=s["section_type"],
-                tracks=tracks_out,
-            )
-        )
+        sections.append(await _home_section_response(db, user.id, s))
 
     highlights = []
     for h in data.get("highlights", []):
@@ -104,6 +109,31 @@ async def get_home(
         highlights=highlights,
         maturity=data["maturity"],
     )
+
+
+@router.get(
+    "/home/sections/{section_type}",
+    response_model=HomeSectionResponse,
+)
+async def get_home_section(
+    section_type: str,
+    limit: int = Query(default=15, ge=1, le=50),
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> HomeSectionResponse:
+    svc = RecommendationService(db)
+    try:
+        section = await svc.get_home_section(
+            user.id,
+            section_type=section_type,
+            limit=limit,
+        )
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Home section not found",
+        ) from exc
+    return await _home_section_response(db, user.id, section)
 
 
 @router.get(

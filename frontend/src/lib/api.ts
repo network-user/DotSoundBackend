@@ -78,6 +78,7 @@ import type {
   DailyMixResponse,
   EqSettingsResponse,
   FollowingStatusResponse,
+  HomeSection,
   HomePageResponse,
   LinkStatusResponse,
   LinkTelegramCodeResponse,
@@ -2329,6 +2330,17 @@ export const api = {
 
   getHomeRecommendations(): Promise<HomePageResponse> {
     return request('/api/v1/recommendations/home')
+  },
+
+  getHomeSection(
+    sectionType: string,
+    limit = 15,
+  ): Promise<HomeSection> {
+    return request(
+      `/api/v1/recommendations/home/sections/${encodeURIComponent(
+        sectionType,
+      )}?limit=${limit}`,
+    )
   },
 
   getSimilarTracks(

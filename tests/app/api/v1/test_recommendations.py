@@ -144,6 +144,52 @@ async def test_home_uses_followed_artist_signal(
     assert track.id in {item["id"] for item in fav[0]["tracks"]}
 
 
+async def test_home_section_endpoint_returns_single_section(
+    client: AsyncClient,
+    db_session: AsyncSession,
+) -> None:
+    user = await create_test_user(client, 70302)
+    headers = await auth_headers(client, user["id"])
+    artist = Artist(name="Section Artist", name_normalized="section artist")
+    track = TrackFactory.create(
+        title="Section Track",
+        artist="Section Artist",
+        file_key="section.mp3",
+        play_count=10,
+    )
+    db_session.add_all([artist, track])
+    await db_session.flush()
+    db_session.add(TrackArtist(track_id=track.id, artist_id=artist.id))
+    db_session.add(
+        ArtistFollow(user_id=user["id"], artist_id=artist.id)
+    )
+    await db_session.commit()
+
+    r = await client.get(
+        "/api/v1/recommendations/home/sections/fav_artists?limit=5",
+        headers=headers,
+    )
+
+    assert r.status_code == 200
+    body = r.json()
+    assert body["section_type"] == "fav_artists"
+    assert track.id in {item["id"] for item in body["tracks"]}
+
+
+async def test_home_section_endpoint_rejects_unknown_section(
+    client: AsyncClient,
+) -> None:
+    user = await create_test_user(client, 70303)
+    headers = await auth_headers(client, user["id"])
+
+    r = await client.get(
+        "/api/v1/recommendations/home/sections/nope",
+        headers=headers,
+    )
+
+    assert r.status_code == 404
+
+
 async def test_similar_not_found(
     client: AsyncClient,
 ) -> None:
