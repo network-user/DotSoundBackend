@@ -28,6 +28,7 @@ from app.repositories.complaint import (
     ComplaintRepository,
 )
 from app.repositories.login_history import LoginHistoryRepository
+from app.repositories.signal import ListenEventRepository
 from app.repositories.track import TrackRepository
 from app.schemas.album import AlbumResponse
 from app.schemas.complaint import ComplaintResponse
@@ -59,9 +60,6 @@ from app.services.profile_access_service import (
     ProfileAccessService,
     build_user_profile_response,
 )
-from app.services.signal_service import (
-    SignalService,
-)
 from app.services.stats_service import StatsService
 from app.services.track_response_build import (
     dedupe_and_build_track_list,
@@ -69,12 +67,38 @@ from app.services.track_response_build import (
 )
 from app.services.track_service import TrackService
 from app.services.user_service import UserService
+from app.utils.pagination_cursor import decode_cursor, encode_cursor
 
 router = APIRouter(prefix="/users", tags=["users"])
 logger: structlog.stdlib.BoundLogger = structlog.get_logger(__name__)
 
 _ALLOWED_AVATAR_MIMES = frozenset({"image/jpeg", "image/png", "image/webp"})
 _MAX_AVATAR_BYTES = 2 * 1024 * 1024
+
+
+def _listen_history_cursor_data(cursor: str) -> tuple[datetime, int] | None:
+    data = decode_cursor(cursor)
+    if data is None:
+        return None
+    raw_created_at = data.get("created_at")
+    raw_id = data.get("id")
+    if not isinstance(raw_created_at, str) or not isinstance(raw_id, int):
+        return None
+    try:
+        return datetime.fromisoformat(raw_created_at), raw_id
+    except ValueError:
+        return None
+
+
+def _listen_history_next_cursor(
+    rows: list[tuple[int, datetime, int, int]],
+) -> str | None:
+    if not rows:
+        return None
+    _, created_at, event_id, _ = rows[-1]
+    return encode_cursor(
+        {"created_at": created_at.isoformat(), "id": event_id}
+    )
 
 
 @router.post(
@@ -569,35 +593,50 @@ async def get_feed(
 @limiter.limit("60/minute")
 async def get_my_listen_history(
     request: Request,
-    limit: int = Query(50, ge=1, le=100),
+    limit: int | None = Query(None, ge=1, le=100),
+    page: int = Query(1, ge=1),
+    size: int = Query(50, ge=1, le=100),
+    cursor: str | None = Query(None, max_length=512),
     session: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ) -> TrackListResponse:
     structlog.contextvars.bind_contextvars(
         user_id=current_user.id
     )
-    signal_svc = SignalService(session)
-    events = await signal_svc.get_recent_listens(
-        current_user.id, limit=500
+    page_size = limit if limit is not None else size
+    cursor_created_at = None
+    cursor_id = None
+    if cursor is not None:
+        parsed = _listen_history_cursor_data(cursor)
+        if parsed is None:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Invalid cursor",
+            )
+        cursor_created_at, cursor_id = parsed
+    history_rows, total, has_more = await ListenEventRepository(
+        session
+    ).list_recent_unique_tracks(
+        current_user.id,
+        cursor_created_at=cursor_created_at,
+        cursor_id=cursor_id,
+        limit=page_size,
     )
     meta_by_track_id: dict[int, tuple[datetime, int]] = {}
     track_ids: list[int] = []
-    seen_ids: set[int] = set()
-    for ev in events:
-        tid = ev.track_id
-        if tid in seen_ids:
-            continue
-        seen_ids.add(tid)
+    for tid, created_at, _event_id, seconds in history_rows:
         meta_by_track_id[tid] = (
-            ev.created_at,
-            int(ev.duration_listened_seconds or 0),
+            created_at,
+            seconds,
         )
         track_ids.append(tid)
-        if len(track_ids) >= limit:
-            break
     if not track_ids:
         return TrackListResponse(
-            items=[], total=0, page=1, size=1
+            items=[],
+            total=total,
+            page=page,
+            size=page_size,
+            has_more=False,
         )
     rows = await TrackRepository(session).list_active_by_ids_preserve_order(
         track_ids
@@ -609,9 +648,13 @@ async def get_my_listen_history(
     )
     return TrackListResponse(
         items=items,
-        total=len(items),
-        page=1,
-        size=len(items),
+        total=total,
+        page=page,
+        size=page_size,
+        has_more=has_more,
+        next_cursor=_listen_history_next_cursor(history_rows)
+        if has_more
+        else None,
     )
 
 

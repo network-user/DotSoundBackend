@@ -34,6 +34,7 @@ import type {
   LyricsTranslation,
   LyricsResponse,
   Playlist,
+  PlaylistListResponse,
   BCSearchResult,
   PlaylistWithTracks,
   SCSearchResult,
@@ -515,10 +516,22 @@ export const api = {
   },
 
   getListenHistory(
-    limit: number = 50,
+    params: number | {
+      size?: number
+      cursor?: string | null
+    } = 50,
   ): Promise<TrackListResponse> {
+    const sp = new URLSearchParams()
+    if (typeof params === 'number') {
+      sp.set('limit', String(params))
+    } else {
+      sp.set('size', String(params.size ?? 50))
+      if (params.cursor) {
+        sp.set('cursor', params.cursor)
+      }
+    }
     return request(
-      `/api/v1/users/me/listen-history?limit=${limit}`,
+      `/api/v1/users/me/listen-history?${sp}`,
     )
   },
 
@@ -782,14 +795,17 @@ export const api = {
   },
 
   getPlaylists(
-    params?: { page?: number; size?: number },
-  ): Promise<Playlist[]> {
+    params?: { page?: number; size?: number; cursor?: string | null },
+  ): Promise<PlaylistListResponse> {
     const sp = new URLSearchParams()
     if (params?.page != null) {
       sp.set('page', String(params.page))
     }
     if (params?.size != null) {
       sp.set('size', String(params.size))
+    }
+    if (params?.cursor) {
+      sp.set('cursor', params.cursor)
     }
     const qs = sp.toString() ? `?${sp}` : ''
     return request(`/api/v1/playlists${qs}`)
@@ -814,8 +830,26 @@ export const api = {
     )
   },
 
-  getPlaylist(id: number): Promise<PlaylistWithTracks> {
-    return request(`/api/v1/playlists/${id}`)
+  getPlaylist(
+    id: number,
+    params?: {
+      tracksPage?: number
+      tracksSize?: number
+      tracksCursor?: string | null
+    },
+  ): Promise<PlaylistWithTracks> {
+    const sp = new URLSearchParams()
+    if (params?.tracksPage != null) {
+      sp.set('tracks_page', String(params.tracksPage))
+    }
+    if (params?.tracksSize != null) {
+      sp.set('tracks_size', String(params.tracksSize))
+    }
+    if (params?.tracksCursor) {
+      sp.set('tracks_cursor', params.tracksCursor)
+    }
+    const qs = sp.toString() ? `?${sp}` : ''
+    return request(`/api/v1/playlists/${id}${qs}`)
   },
 
   createPlaylist(
@@ -867,8 +901,12 @@ export const api = {
     q: string,
     page = 1,
     size = 20,
-  ): Promise<Playlist[]> {
+    cursor?: string | null,
+  ): Promise<PlaylistListResponse> {
     const sp = new URLSearchParams({ q, page: String(page), size: String(size) })
+    if (cursor) {
+      sp.set('cursor', cursor)
+    }
     return request(`/api/v1/playlists/search?${sp}`)
   },
 
@@ -2628,8 +2666,26 @@ export const api = {
     })
   },
 
-  getAlbum(albumId: number): Promise<AlbumWithTracksRecord> {
-    return request(`/api/v1/albums/${albumId}`)
+  getAlbum(
+    albumId: number,
+    params?: {
+      tracksPage?: number
+      tracksSize?: number
+      tracksCursor?: string | null
+    },
+  ): Promise<AlbumWithTracksRecord> {
+    const sp = new URLSearchParams()
+    if (params?.tracksPage != null) {
+      sp.set('tracks_page', String(params.tracksPage))
+    }
+    if (params?.tracksSize != null) {
+      sp.set('tracks_size', String(params.tracksSize))
+    }
+    if (params?.tracksCursor) {
+      sp.set('tracks_cursor', params.tracksCursor)
+    }
+    const qs = sp.toString() ? `?${sp}` : ''
+    return request(`/api/v1/albums/${albumId}${qs}`)
   },
 
   updateAlbum(

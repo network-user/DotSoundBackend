@@ -3,6 +3,7 @@ from fastapi import HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.album import Album
+from app.models.track import Track
 from app.models.user import User
 from app.repositories.album import AlbumRepository
 from app.repositories.track import TrackRepository
@@ -106,6 +107,51 @@ class AlbumService:
 
     async def get_with_tracks(self, album_id: int) -> Album | None:
         return await self._repo.get_with_tracks(album_id)
+
+    async def list_tracks_page(
+        self,
+        album_id: int,
+        page: int = 1,
+        size: int = 50,
+        *,
+        include_suppressed: bool = False,
+    ) -> tuple[list[Track], int]:
+        album = await self._repo.get_by_id(album_id)
+        if not album:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Album not found",
+            )
+        offset = (page - 1) * size
+        return await self._repo.list_tracks_page(
+            album_id=album_id,
+            offset=offset,
+            limit=size,
+            include_suppressed=include_suppressed,
+        )
+
+    async def list_tracks_cursor(
+        self,
+        album_id: int,
+        *,
+        cursor_position: int | None,
+        cursor_track_id: int | None,
+        size: int = 50,
+        include_suppressed: bool = False,
+    ) -> tuple[list[tuple[Track, int, int]], int, bool]:
+        album = await self._repo.get_by_id(album_id)
+        if not album:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Album not found",
+            )
+        return await self._repo.list_tracks_cursor(
+            album_id=album_id,
+            cursor_position=cursor_position,
+            cursor_track_id=cursor_track_id,
+            limit=size,
+            include_suppressed=include_suppressed,
+        )
 
     async def list_by_user(
         self, user_id: int, page: int = 1, size: int = 50

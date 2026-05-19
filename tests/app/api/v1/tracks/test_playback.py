@@ -479,6 +479,7 @@ async def test_http_proxy_range_get_uses_streaming_egress_pool() -> None:
 
         assert body == b"abc"
         assert client_cls.call_args.kwargs["proxy"] == proxy_url
+        assert "content-length" not in response.headers
     finally:
         _settings.streaming_proxy_out_urls = original
         pool.reset_for_tests()

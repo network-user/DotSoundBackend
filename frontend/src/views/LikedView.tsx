@@ -9,6 +9,7 @@ import { useNavigate } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import { TrackList } from '@/components/TrackList/TrackList'
 import { MotionPress } from '@/components/ui/MotionPress'
+import { useAutoLoadMore } from '@/hooks/useAutoLoadMore'
 import { api } from '@/lib/api'
 import { getUserId } from '@/lib/telegram'
 import { usePrefetchTracks } from '@/store/PrefetchContext'
@@ -122,6 +123,12 @@ export function LikedView({ embedded = false }: LikedViewProps) {
     fetchPage(pageRef.current + 1, sourceFilter, false)
   }, [loading, hasMore, sourceFilter, fetchPage])
 
+  const sentinelRef = useAutoLoadMore({
+    enabled: hasMore,
+    loading,
+    onLoadMore: loadMore,
+  })
+
   const headerMeta =
     Array.isArray(tracks) && tracks.length > 0 ? (
       <p className="rd-liked-meta">
@@ -201,17 +208,20 @@ export function LikedView({ embedded = false }: LikedViewProps) {
         }
       />
       {hasMore && (
-        <MotionPress
-          variant="ghost"
-          haptic="light"
-          className="rd-liked-more"
-          onClick={loadMore}
-          disabled={loading}
-        >
-          {loading
-            ? t('redesign.library.likedLoading')
-            : t('redesign.library.likedShowMore')}
-        </MotionPress>
+        <>
+          <div ref={sentinelRef} aria-hidden />
+          <MotionPress
+            variant="ghost"
+            haptic="light"
+            className="rd-liked-more"
+            onClick={loadMore}
+            disabled={loading}
+          >
+            {loading
+              ? t('redesign.library.likedLoading')
+              : t('redesign.library.likedShowMore')}
+          </MotionPress>
+        </>
       )}
     </>
   )

@@ -1,15 +1,27 @@
+from collections.abc import Awaitable, Callable
 from datetime import UTC, datetime, timedelta
+from typing import Protocol
 
 import pytest
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.models.artist import Artist, TrackArtist
 from app.models.listen_event import ListenEvent
 from app.models.playlist import Playlist, PlaylistTrack
+from app.models.track_similarity import TrackSimilarity
 from app.repositories.recommendation import (
     RecommendationRepository,
 )
 
 pytestmark = pytest.mark.anyio
+
+
+class _HasId(Protocol):
+    id: int
+
+
+_CreateUser = Callable[..., Awaitable[_HasId]]
+_CreateTrack = Callable[..., Awaitable[_HasId]]
 
 
 async def _add_listen(
@@ -43,8 +55,8 @@ async def _add_listen(
 
 async def test_get_recent_listen_events_returns_within_window(
     session: AsyncSession,
-    create_user,
-    create_track,
+    create_user: _CreateUser,
+    create_track: _CreateTrack,
 ) -> None:
     user = await create_user()
     track = await create_track()
@@ -77,8 +89,8 @@ async def test_get_recent_listen_events_returns_within_window(
 
 async def test_get_repeat_listen_counts_only_qualified(
     session: AsyncSession,
-    create_user,
-    create_track,
+    create_user: _CreateUser,
+    create_track: _CreateTrack,
 ) -> None:
     user = await create_user()
     track_a = await create_track()
@@ -114,8 +126,8 @@ async def test_get_repeat_listen_counts_only_qualified(
 
 async def test_get_repeat_listen_counts_respects_min_count(
     session: AsyncSession,
-    create_user,
-    create_track,
+    create_user: _CreateUser,
+    create_track: _CreateTrack,
 ) -> None:
     user = await create_user()
     track = await create_track()
@@ -138,8 +150,8 @@ async def test_get_repeat_listen_counts_respects_min_count(
 
 async def test_get_unique_savers_per_track_counts_distinct_owners(
     session: AsyncSession,
-    create_user,
-    create_track,
+    create_user: _CreateUser,
+    create_track: _CreateTrack,
 ) -> None:
     owner_a = await create_user()
     owner_b = await create_user()
@@ -174,8 +186,8 @@ async def test_get_unique_savers_empty_input(
 
 async def test_get_unique_listeners_per_track_qualified_only(
     session: AsyncSession,
-    create_user,
-    create_track,
+    create_user: _CreateUser,
+    create_track: _CreateTrack,
 ) -> None:
     listener_a = await create_user()
     listener_b = await create_user()
@@ -222,3 +234,114 @@ async def test_get_unique_listeners_empty_input(
     repo = RecommendationRepository(session)
     out = await repo.get_unique_listeners_per_track(track_ids=[], days=7)
     assert out == {}
+
+
+async def test_get_user_taste_aggregates(
+    session: AsyncSession,
+    create_user: _CreateUser,
+    create_track: _CreateTrack,
+) -> None:
+    user = await create_user()
+    rock = await create_track(genre="rock", file_key="rock.mp3")
+    pop = await create_track(genre="pop", file_key="pop.mp3")
+    artist = Artist(name="Band", name_normalized="band")
+    session.add(artist)
+    await session.flush()
+    session.add(TrackArtist(track_id=rock.id, artist_id=artist.id))
+    await session.flush()
+
+    for _ in range(3):
+        await _add_listen(
+            session,
+            user_id=user.id,
+            track_id=rock.id,
+            duration_listened_seconds=120,
+            total_duration_seconds=180,
+            completed=True,
+            skipped=False,
+        )
+    await _add_listen(
+        session,
+        user_id=user.id,
+        track_id=pop.id,
+        duration_listened_seconds=120,
+        total_duration_seconds=180,
+        completed=True,
+        skipped=False,
+    )
+
+    repo = RecommendationRepository(session)
+    genres = await repo.get_user_genre_listen_aggregates(user.id)
+    artists = await repo.get_user_artist_listen_aggregates(user.id)
+
+    assert genres[0] == ("rock", 3)
+    assert artists == [(artist.id, 3, 1)]
+
+
+async def test_get_track_similarity_candidates_ordered(
+    session: AsyncSession,
+    create_track: _CreateTrack,
+) -> None:
+    seed = await create_track(file_key="seed.mp3")
+    close = await create_track(file_key="close.mp3")
+    far = await create_track(file_key="far.mp3")
+    session.add_all(
+        [
+            TrackSimilarity(
+                track_id=seed.id,
+                similar_track_id=far.id,
+                score=0.2,
+                feature_version="v1",
+            ),
+            TrackSimilarity(
+                track_id=seed.id,
+                similar_track_id=close.id,
+                score=0.9,
+                feature_version="v1",
+            ),
+        ]
+    )
+    await session.flush()
+
+    repo = RecommendationRepository(session)
+    out = await repo.get_track_similarity_candidates(seed.id)
+
+    assert [t.id for t in out] == [close.id, far.id]
+
+
+async def test_get_track_similarity_candidates_for_artist_ids(
+    session: AsyncSession,
+    create_track: _CreateTrack,
+) -> None:
+    artist = Artist(name="Followed", name_normalized="followed")
+    session.add(artist)
+    await session.flush()
+    seed = await create_track(file_key="seed.mp3")
+    close = await create_track(file_key="close.mp3")
+    far = await create_track(file_key="far.mp3")
+    session.add(TrackArtist(track_id=seed.id, artist_id=artist.id))
+    session.add_all(
+        [
+            TrackSimilarity(
+                track_id=seed.id,
+                similar_track_id=far.id,
+                score=0.2,
+                feature_version="v1",
+            ),
+            TrackSimilarity(
+                track_id=seed.id,
+                similar_track_id=close.id,
+                score=0.9,
+                feature_version="v1",
+            ),
+        ]
+    )
+    await session.flush()
+
+    repo = RecommendationRepository(session)
+    out = await repo.get_track_similarity_candidates_for_artist_ids(
+        [artist.id],
+        exclude_ids={far.id},
+    )
+
+    assert [t.id for t in out] == [close.id]

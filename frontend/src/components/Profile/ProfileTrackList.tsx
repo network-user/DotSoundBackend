@@ -1,7 +1,10 @@
+import { useCallback } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useNavigate } from 'react-router-dom'
 import { Icon } from '@/components/Icon/Icon'
 import { TrackCard } from '@/components/TrackCard/TrackCard'
+import { MotionPress } from '@/components/ui/MotionPress'
+import { useAutoLoadMore } from '@/hooks/useAutoLoadMore'
 import {
   LongPressMenu,
   type LongPressMenuItem,
@@ -20,15 +23,29 @@ interface Props {
   onPlay: (track: Track) => void
   onToggleVisibility: (track: Track) => void
   onDelete: (track: Track) => void
+  hasMore?: boolean
+  loadingMore?: boolean
+  onLoadMore?: () => void
 }
 
 export function ProfileTrackList({
   tracks,
   onToggleVisibility,
   onDelete,
+  hasMore = false,
+  loadingMore = false,
+  onLoadMore,
 }: Props) {
   const { t } = useTranslation()
   const navigate = useNavigate()
+  const handleLoadMore = useCallback(() => {
+    onLoadMore?.()
+  }, [onLoadMore])
+  const sentinelRef = useAutoLoadMore({
+    enabled: hasMore && Boolean(onLoadMore),
+    loading: loadingMore,
+    onLoadMore: handleLoadMore,
+  })
   const handleDeleted = (trackId: number) => {
     const track = tracks.find((t) => t.id === trackId)
     if (track) onDelete(track)
@@ -191,6 +208,23 @@ export function ProfileTrackList({
               </LongPressMenu>
             )
           })}
+          {hasMore && onLoadMore && (
+            <>
+              <div ref={sentinelRef} aria-hidden />
+              <MotionPress
+                type="button"
+                variant="ghost"
+                haptic="light"
+                className="rd-liked-more"
+                onClick={onLoadMore}
+                disabled={loadingMore}
+              >
+                {loadingMore
+                  ? t('common.loading')
+                  : t('common.showMore')}
+              </MotionPress>
+            </>
+          )}
         </div>
       )}
     </section>

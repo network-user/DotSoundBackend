@@ -1,4 +1,4 @@
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from unittest.mock import patch
 
 import pytest
@@ -125,6 +125,73 @@ async def test_listen_history_includes_last_listen_meta(
     item = next(r for r in rows if r["id"] == track.id)
     assert item["last_listen_at"] is not None
     assert item["last_listen_seconds"] == 125
+
+
+async def test_listen_history_cursor_pages_unique_tracks(
+    client: AsyncClient,
+    db_session: AsyncSession,
+) -> None:
+    from app.models.listen_event import ListenEvent
+
+    tg = 7521
+    user = await create_test_user(client, tg)
+    headers = await auth_headers(client, tg)
+    uid = int(user["id"])
+    tracks = [TrackFactory.create() for _ in range(3)]
+    db_session.add_all(tracks)
+    await db_session.flush()
+    base = datetime(2026, 5, 2, 14, 30, tzinfo=UTC)
+    for idx, track in enumerate(tracks):
+        ts = base - timedelta(minutes=idx)
+        db_session.add(
+            ListenEvent(
+                user_id=uid,
+                track_id=track.id,
+                started_at=ts,
+                created_at=ts,
+                duration_listened_seconds=60 + idx,
+                completed=True,
+                skipped=False,
+            ),
+        )
+    db_session.add(
+        ListenEvent(
+            user_id=uid,
+            track_id=tracks[0].id,
+            started_at=base - timedelta(hours=1),
+            created_at=base - timedelta(hours=1),
+            duration_listened_seconds=5,
+            completed=False,
+            skipped=True,
+        ),
+    )
+    await db_session.commit()
+
+    r_first = await client.get(
+        "/api/v1/users/me/listen-history?size=2",
+        headers=headers,
+    )
+    assert r_first.status_code == 200
+    first = r_first.json()
+    assert [item["id"] for item in first["items"]] == [
+        tracks[0].id,
+        tracks[1].id,
+    ]
+    assert first["total"] == 3
+    assert first["has_more"] is True
+    assert first["next_cursor"] is not None
+
+    r_next = await client.get(
+        (
+            "/api/v1/users/me/listen-history?size=2"
+            f"&cursor={first['next_cursor']}"
+        ),
+        headers=headers,
+    )
+    assert r_next.status_code == 200
+    page = r_next.json()
+    assert [item["id"] for item in page["items"]] == [tracks[2].id]
+    assert page["has_more"] is False
 
 
 @patch("app.api.v1.users.settings")

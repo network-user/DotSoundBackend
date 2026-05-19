@@ -1,5 +1,7 @@
+from datetime import datetime
+
 import structlog
-from sqlalchemy import delete, func, select
+from sqlalchemy import and_, delete, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.playlist import Playlist, PlaylistTrack
@@ -47,11 +49,50 @@ class PlaylistRepository:
         result = await self._session.execute(
             select(Playlist, tc)
             .where(Playlist.owner_id == owner_id)
-            .order_by(Playlist.created_at.desc())
+            .order_by(Playlist.created_at.desc(), Playlist.id.desc())
             .offset(offset)
             .limit(limit)
         )
         return list(result.all()), int(total)
+
+    async def list_by_owner_cursor(
+        self,
+        owner_id: int,
+        *,
+        cursor_created_at: datetime | None,
+        cursor_id: int | None,
+        limit: int,
+    ) -> tuple[list[tuple[Playlist, int]], int, bool]:
+        total = (
+            await self._session.execute(
+                select(func.count(Playlist.id)).where(
+                    Playlist.owner_id == owner_id
+                )
+            )
+        ).scalar_one()
+
+        tc = (
+            select(func.count(PlaylistTrack.track_id))
+            .where(PlaylistTrack.playlist_id == Playlist.id)
+            .scalar_subquery()
+        )
+        cond = Playlist.owner_id == owner_id
+        if cursor_created_at is not None and cursor_id is not None:
+            cond = cond & or_(
+                Playlist.created_at < cursor_created_at,
+                and_(
+                    Playlist.created_at == cursor_created_at,
+                    Playlist.id < cursor_id,
+                ),
+            )
+        result = await self._session.execute(
+            select(Playlist, tc)
+            .where(cond)
+            .order_by(Playlist.created_at.desc(), Playlist.id.desc())
+            .limit(limit + 1)
+        )
+        rows = list(result.all())
+        return rows[:limit], int(total), len(rows) > limit
 
     async def create(
         self,
@@ -281,11 +322,45 @@ class PlaylistRepository:
         result = await self._session.execute(
             select(Playlist)
             .where(cond)
-            .order_by(Playlist.created_at.desc())
+            .order_by(Playlist.created_at.desc(), Playlist.id.desc())
             .offset(offset)
             .limit(limit)
         )
         return list(result.scalars().all()), total
+
+    async def search_public_cursor(
+        self,
+        query: str,
+        *,
+        cursor_created_at: datetime | None,
+        cursor_id: int | None,
+        limit: int,
+        exclude_owner_id: int | None = None,
+    ) -> tuple[list[Playlist], int, bool]:
+        pattern = f"%{query}%"
+        cond = Playlist.is_public.is_(True) & Playlist.name.ilike(pattern)
+        if exclude_owner_id is not None:
+            cond = cond & (Playlist.owner_id != exclude_owner_id)
+        total_r = await self._session.execute(
+            select(func.count(Playlist.id)).where(cond)
+        )
+        total = int(total_r.scalar_one())
+        if cursor_created_at is not None and cursor_id is not None:
+            cond = cond & or_(
+                Playlist.created_at < cursor_created_at,
+                and_(
+                    Playlist.created_at == cursor_created_at,
+                    Playlist.id < cursor_id,
+                ),
+            )
+        result = await self._session.execute(
+            select(Playlist)
+            .where(cond)
+            .order_by(Playlist.created_at.desc(), Playlist.id.desc())
+            .limit(limit + 1)
+        )
+        rows = list(result.scalars().all())
+        return rows[:limit], total, len(rows) > limit
 
     async def list_for_admin(
         self,
@@ -329,9 +404,73 @@ class PlaylistRepository:
                 self._exclude_hidden_sources(),
                 TrackRepository._playback_listing_allowed(),
             )
-            .order_by(PlaylistTrack.position)
+            .order_by(PlaylistTrack.position, PlaylistTrack.track_id)
         )
         return list(result.scalars().all())
+
+    async def list_tracks_page(
+        self,
+        playlist_id: int,
+        offset: int,
+        limit: int,
+    ) -> tuple[list[Track], int]:
+        total = await self.count_visible_tracks(playlist_id)
+        result = await self._session.execute(
+            select(Track)
+            .join(
+                PlaylistTrack,
+                PlaylistTrack.track_id == Track.id,
+            )
+            .where(
+                PlaylistTrack.playlist_id == playlist_id,
+                Track.is_active.is_(True),
+                self._exclude_hidden_sources(),
+                TrackRepository._playback_listing_allowed(),
+            )
+            .order_by(PlaylistTrack.position, PlaylistTrack.track_id)
+            .offset(offset)
+            .limit(limit)
+        )
+        return list(result.scalars().all()), total
+
+    async def list_tracks_cursor(
+        self,
+        playlist_id: int,
+        *,
+        cursor_position: int | None,
+        cursor_track_id: int | None,
+        limit: int,
+    ) -> tuple[list[tuple[Track, int, int]], int, bool]:
+        total = await self.count_visible_tracks(playlist_id)
+        cond = (
+            (PlaylistTrack.playlist_id == playlist_id)
+            & Track.is_active.is_(True)
+            & self._exclude_hidden_sources()
+            & TrackRepository._playback_listing_allowed()
+        )
+        if cursor_position is not None and cursor_track_id is not None:
+            cond = cond & or_(
+                PlaylistTrack.position > cursor_position,
+                and_(
+                    PlaylistTrack.position == cursor_position,
+                    PlaylistTrack.track_id > cursor_track_id,
+                ),
+            )
+        result = await self._session.execute(
+            select(Track, PlaylistTrack.position, PlaylistTrack.track_id)
+            .join(
+                PlaylistTrack,
+                PlaylistTrack.track_id == Track.id,
+            )
+            .where(cond)
+            .order_by(PlaylistTrack.position, PlaylistTrack.track_id)
+            .limit(limit + 1)
+        )
+        rows = [
+            (row[0], int(row[1]), int(row[2]))
+            for row in result.all()
+        ]
+        return rows[:limit], total, len(rows) > limit
 
     async def get_tracks_bulk(
         self, playlist_ids: list[int]

@@ -46,6 +46,8 @@ import { DislikedView } from '@/views/DislikedView'
 import '@/styles/redesign-profile.css'
 import '@/styles/redesign-track-edit.css'
 
+const PROFILE_COLLECTION_PAGE_SIZE = 30
+
 type ProfileTab =
   | 'profile'
   | 'import'
@@ -80,6 +82,9 @@ export function ProfileView({
   const [myTracks, setMyTracks] = useState<Track[]>(
     [],
   )
+  const [myTracksHasMore, setMyTracksHasMore] = useState(false)
+  const [myTracksLoadingMore, setMyTracksLoadingMore] = useState(false)
+  const myTracksPageRef = useRef(1)
   const [editMode, setEditMode] = useState(false)
   const [displayName, setDisplayName] = useState('')
   const [username, setUsername] = useState<
@@ -107,6 +112,36 @@ export function ProfileView({
   const tgFirstName = tgUser?.first_name
   const tgUsername = tgUser?.username
 
+  const loadMyTracksPage = useCallback(
+    async (page: number, reset: boolean) => {
+      if (reset) {
+        setMyTracks([])
+        setMyTracksHasMore(false)
+      } else {
+        setMyTracksLoadingMore(true)
+      }
+      try {
+        const data = await api.getMyCollection(
+          page,
+          PROFILE_COLLECTION_PAGE_SIZE,
+        )
+        setMyTracks((prev) =>
+          reset ? data.items : [...prev, ...data.items],
+        )
+        setMyTracksHasMore(
+          data.total > page * PROFILE_COLLECTION_PAGE_SIZE,
+        )
+        myTracksPageRef.current = page
+      } catch {
+        if (reset) setMyTracks([])
+        setMyTracksHasMore(false)
+      } finally {
+        if (!reset) setMyTracksLoadingMore(false)
+      }
+    },
+    [],
+  )
+
   const refreshProfileData = useCallback(() => {
     const internalId = getInternalUserId()
     if (!internalId) return
@@ -126,11 +161,18 @@ export function ProfileView({
         }),
       )
 
-    api
-      .getMyCollection()
-      .then((data) => setMyTracks(data.items))
-      .catch(() => {})
-  }, [])
+    myTracksPageRef.current = 1
+    void loadMyTracksPage(1, true)
+  }, [loadMyTracksPage])
+
+  const loadMoreMyTracks = useCallback(() => {
+    if (myTracksLoadingMore || !myTracksHasMore) return
+    void loadMyTracksPage(myTracksPageRef.current + 1, false)
+  }, [
+    loadMyTracksPage,
+    myTracksHasMore,
+    myTracksLoadingMore,
+  ])
 
   useEffect(
     () => () => {
@@ -538,6 +580,9 @@ export function ProfileView({
                 handleToggleVisibility
               }
               onDelete={handleDelete}
+              hasMore={myTracksHasMore}
+              loadingMore={myTracksLoadingMore}
+              onLoadMore={loadMoreMyTracks}
             />
           </>
         )}

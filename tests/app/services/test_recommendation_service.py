@@ -4,6 +4,7 @@ from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
+from dotsound_private_core.services.recommendation_engine import UserPrefs
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.services.recommendation_service import (
@@ -84,6 +85,84 @@ async def test_get_global_top_cache_miss(
 
     assert len(result) == 1
     mock_redis.setex.assert_called_once()
+
+
+async def test_build_user_prefs_merges_behavioral_taste(
+    session: AsyncSession,
+) -> None:
+    mock_prefs = MagicMock()
+    mock_prefs.preferred_genres = ["ambient"]
+    mock_prefs.preferred_artist_ids = [7]
+    mock_prefs.preferred_moods = []
+
+    svc = RecommendationService(session)
+    svc._pref_repo.get_by_user_id = AsyncMock(return_value=mock_prefs)
+    svc._rec_repo.get_liked_track_ids = AsyncMock(return_value=set())
+    svc._rec_repo.get_user_genre_listen_aggregates = AsyncMock(
+        return_value=[("rock", 5)]
+    )
+    svc._rec_repo.get_user_artist_listen_aggregates = AsyncMock(
+        return_value=[(42, 5, 2)]
+    )
+    svc._rec_repo.get_repeat_listen_counts = AsyncMock(return_value={})
+    svc._follow_repo.list_followed_artist_ids = AsyncMock(return_value=[99])
+    svc._catalog_repo.get_similar_artist_recommendation_signals = AsyncMock(
+        return_value=([], {})
+    )
+    svc._listen_repo.get_recent = AsyncMock(return_value=[])
+
+    prefs, _locale = await svc._build_user_prefs(1)
+
+    assert prefs.preferred_genres == ["ambient", "rock"]
+    assert prefs.preferred_artist_ids == [7, 99, 42]
+    assert prefs.behavior_genre_weights["rock"] == 1.0
+    assert prefs.behavior_artist_weights[42] == 1.0
+    svc._catalog_repo.get_similar_artist_recommendation_signals.assert_awaited_once_with(
+        [7, 99, 42]
+    )
+
+
+async def test_scoring_candidates_include_similar_tracks_for_followed_artists(
+    session: AsyncSession,
+) -> None:
+    svc = RecommendationService(session)
+    track = SimpleNamespace(id=501)
+    prefs = UserPrefs(
+        preferred_genres=[],
+        preferred_artist_ids=[99],
+        similar_artist_ids=[],
+        similar_artist_weights={},
+        behavior_genre_weights={},
+        behavior_artist_weights={},
+        taste_audio_vector=None,
+        preferred_moods=[],
+        liked_track_ids=set(),
+        disliked_track_ids=set(),
+        implicit_dislike_track_ids=set(),
+        onboarding_genre_preview_taps=[],
+        language_affinity={},
+    )
+    svc._rec_repo.get_candidate_tracks = AsyncMock(return_value=[])
+    svc._rec_repo.get_tracks_by_artist_ids = AsyncMock(return_value=[])
+    svc._rec_repo.get_track_similarity_candidates_for_artist_ids = AsyncMock(
+        return_value=[track]
+    )
+    svc._rec_repo.get_recent_candidate_tracks = AsyncMock(return_value=[])
+
+    out = await svc._scoring_candidate_tracks(
+        user_id=1,
+        limit=20,
+        genre_filter=None,
+        user_prefs=prefs,
+        user_locale=None,
+    )
+
+    assert out == [track]
+    svc._rec_repo.get_track_similarity_candidates_for_artist_ids.assert_awaited_once_with(
+        [99],
+        limit=50,
+        exclude_ids=None,
+    )
 
 
 async def test_get_daily_playlist_cached(

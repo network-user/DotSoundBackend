@@ -58,6 +58,8 @@ export interface TrackListResponse {
   total: number
   page: number
   size: number
+  has_more?: boolean
+  next_cursor?: string | null
 }
 
 export interface DailyPlaylistResponse {
@@ -221,8 +223,22 @@ export interface Playlist {
   track_count?: number
 }
 
+export interface PlaylistListResponse {
+  items: Playlist[]
+  total: number
+  page: number
+  size: number
+  has_more: boolean
+  next_cursor: string | null
+}
+
 export interface PlaylistWithTracks extends Playlist {
   tracks: Track[]
+  tracks_total?: number | null
+  tracks_page?: number | null
+  tracks_size?: number | null
+  tracks_has_more?: boolean | null
+  tracks_next_cursor?: string | null
 }
 
 export interface DiscoverGenreCard {
@@ -762,6 +778,11 @@ export interface AlbumRecord {
 
 export interface AlbumWithTracksRecord extends AlbumRecord {
   tracks: Track[]
+  tracks_total?: number | null
+  tracks_page?: number | null
+  tracks_size?: number | null
+  tracks_has_more?: boolean | null
+  tracks_next_cursor?: string | null
 }
 
 export interface ColistenRoomState {

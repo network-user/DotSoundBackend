@@ -18,6 +18,7 @@ import { TrackList } from '@/components/TrackList/TrackList'
 import { TrackPickerSheet } from '@/components/TrackPickerSheet/TrackPickerSheet'
 import { useLikes } from '@/store/LikesContext'
 import { useSound } from '@/store/SoundContext'
+import { useAutoLoadMore } from '@/hooks/useAutoLoadMore'
 import { api } from '@/lib/api'
 import {
   getIsAdmin,
@@ -149,6 +150,8 @@ function formatInviteExpiry(iso: string): string {
 // intact so flipping this flag is the only change needed to bring the
 // feature back online. Currently disabled 2026-05 per product request.
 const SHOW_INVITE_FEATURE: boolean = false
+const PLAYLIST_PAGE_SIZE = 20
+const PLAYLIST_TRACKS_PAGE_SIZE = 30
 
 export function PlaylistsView({
   embedded = false,
@@ -158,9 +161,14 @@ export function PlaylistsView({
   const [screen, setScreen] = useState<Screen>('list')
   const [playlists, setPlaylists] = useState<Playlist[] | null>(null)
   const [selected, setSelected] = useState<PlaylistWithTracks | null>(null)
+  const [selectedTracksLoadingMore, setSelectedTracksLoadingMore] =
+    useState(false)
   const [creating, setCreating] = useState(false)
   const [newName, setNewName] = useState('')
-  const [loading, setLoading] = useState(false)
+  const [createLoading, setCreateLoading] = useState(false)
+  const [playlistsLoading, setPlaylistsLoading] = useState(false)
+  const [playlistsHasMore, setPlaylistsHasMore] = useState(false)
+  const playlistsCursorRef = useRef<string | null>(null)
   const [shareOpen, setShareOpen] = useState(false)
   const [shareChats, setShareChats] = useState<ChatListItem[]>([])
   const [shareLoading, setShareLoading] = useState(false)
@@ -186,6 +194,8 @@ export function PlaylistsView({
   const [searchQ, setSearchQ] = useState('')
   const [searchResults, setSearchResults] = useState<Playlist[]>([])
   const [searchLoading, setSearchLoading] = useState(false)
+  const [searchHasMore, setSearchHasMore] = useState(false)
+  const searchCursorRef = useRef<string | null>(null)
   const [inviteAcceptOpen, setInviteAcceptOpen] = useState(false)
   const [inviteToken, setInviteToken] = useState('')
   const [inviteAcceptBusy, setInviteAcceptBusy] = useState(false)
@@ -207,19 +217,45 @@ export function PlaylistsView({
     uid &&
     (selected.owner_id === uid || isAdmin),
   )
+  const selectedTracksHasMore = Boolean(selected?.tracks_has_more)
 
   usePrefetchTracks(
     selected && selected.tracks.length > 0 ? selected.tracks : null,
     'playlist',
   )
 
-  const loadPlaylists = useCallback(() => {
+  const loadPlaylists = useCallback((
+    cursor: string | null = null,
+    reset = true,
+  ) => {
     if (!uid) {
       setPlaylists([])
+      setPlaylistsHasMore(false)
+      playlistsCursorRef.current = null
       return
     }
-    setPlaylists(null)
-    api.getPlaylists().then(setPlaylists).catch(() => setPlaylists([]))
+    if (reset) {
+      setPlaylists(null)
+      playlistsCursorRef.current = null
+    }
+    setPlaylistsLoading(true)
+    api
+      .getPlaylists({ size: PLAYLIST_PAGE_SIZE, cursor })
+      .then((res) => {
+        setPlaylists((prev) =>
+          reset || !prev
+            ? res.items
+            : [...prev, ...res.items],
+        )
+        setPlaylistsHasMore(res.has_more)
+        playlistsCursorRef.current = res.next_cursor
+      })
+      .catch(() => {
+        if (reset) setPlaylists([])
+        setPlaylistsHasMore(false)
+        playlistsCursorRef.current = null
+      })
+      .finally(() => setPlaylistsLoading(false))
   }, [uid])
 
   useEffect(() => {
@@ -291,14 +327,25 @@ export function PlaylistsView({
     const q = searchQ.trim()
     if (!q) {
       setSearchResults([])
+      setSearchHasMore(false)
+      searchCursorRef.current = null
       return
     }
     setSearchLoading(true)
     const timer = setTimeout(() => {
+      searchCursorRef.current = null
       api
-        .searchPlaylists(q)
-        .then(setSearchResults)
-        .catch(() => setSearchResults([]))
+        .searchPlaylists(q, 1, PLAYLIST_PAGE_SIZE)
+        .then((res) => {
+          setSearchResults(res.items)
+          setSearchHasMore(res.has_more)
+          searchCursorRef.current = res.next_cursor
+        })
+        .catch(() => {
+          setSearchResults([])
+          setSearchHasMore(false)
+          searchCursorRef.current = null
+        })
         .finally(() => setSearchLoading(false))
     }, 300)
     return () => {
@@ -307,10 +354,42 @@ export function PlaylistsView({
     }
   }, [searchQ])
 
+  const loadMorePlaylists = useCallback(() => {
+    if (playlistsLoading || !playlistsHasMore) return
+    loadPlaylists(playlistsCursorRef.current, false)
+  }, [loadPlaylists, playlistsHasMore, playlistsLoading])
+
+  const loadMoreSearchResults = useCallback(async () => {
+    const q = searchQ.trim()
+    if (!q || searchLoading || !searchHasMore) return
+    const cursor = searchCursorRef.current
+    if (!cursor) return
+    setSearchLoading(true)
+    try {
+      const res = await api.searchPlaylists(
+        q,
+        1,
+        PLAYLIST_PAGE_SIZE,
+        cursor,
+      )
+      setSearchResults((prev) => [...prev, ...res.items])
+      setSearchHasMore(res.has_more)
+      searchCursorRef.current = res.next_cursor
+    } catch {
+      setSearchHasMore(false)
+      searchCursorRef.current = null
+    } finally {
+      setSearchLoading(false)
+    }
+  }, [searchHasMore, searchLoading, searchQ])
+
   const openPlaylist = useCallback(
     async (p: Playlist) => {
       try {
-        const detail = await api.getPlaylist(p.id)
+        const detail = await api.getPlaylist(p.id, {
+          tracksPage: 1,
+          tracksSize: PLAYLIST_TRACKS_PAGE_SIZE,
+        })
         setSelected(detail)
         setScreen('detail')
       } catch {
@@ -326,7 +405,7 @@ export function PlaylistsView({
 
   const handleCreate = useCallback(async () => {
     if (!newName.trim() || !uid) return
-    setLoading(true)
+    setCreateLoading(true)
     try {
       await api.createPlaylist(
         newName.trim(),
@@ -338,15 +417,74 @@ export function PlaylistsView({
       setCreating(false)
       loadPlaylists()
     } finally {
-      setLoading(false)
+      setCreateLoading(false)
     }
   }, [newName, newDesc, uid, loadPlaylists])
 
   const refreshSelected = useCallback(async () => {
     if (!selected) return
-    const detail = await api.getPlaylist(selected.id)
+    const detail = await api.getPlaylist(selected.id, {
+      tracksPage: 1,
+      tracksSize: PLAYLIST_TRACKS_PAGE_SIZE,
+    })
     setSelected(detail)
   }, [selected])
+
+  const loadMoreSelectedTracks = useCallback(async () => {
+    if (
+      !selected ||
+      selectedTracksLoadingMore ||
+      !selected.tracks_has_more
+    ) {
+      return
+    }
+    const cursor = selected.tracks_next_cursor
+    if (!cursor) return
+    setSelectedTracksLoadingMore(true)
+    try {
+      const next = await api.getPlaylist(selected.id, {
+        tracksSize: PLAYLIST_TRACKS_PAGE_SIZE,
+        tracksCursor: cursor,
+      })
+      setSelected((prev) =>
+        prev && prev.id === next.id
+          ? {
+              ...prev,
+              tracks: [...prev.tracks, ...next.tracks],
+              tracks_total: next.tracks_total,
+              tracks_page: next.tracks_page,
+              tracks_size: next.tracks_size,
+              tracks_has_more: next.tracks_has_more,
+              tracks_next_cursor: next.tracks_next_cursor,
+            }
+          : prev,
+      )
+    } catch {
+      showIsland({
+        kind: 'error',
+        title: t('redesign.library.playlistOpenFail'),
+        durationMs: 3500,
+      })
+    } finally {
+      setSelectedTracksLoadingMore(false)
+    }
+  }, [selected, selectedTracksLoadingMore, t])
+
+  const playlistsSentinelRef = useAutoLoadMore({
+    enabled: playlists !== null && playlistsHasMore,
+    loading: playlistsLoading,
+    onLoadMore: loadMorePlaylists,
+  })
+  const searchSentinelRef = useAutoLoadMore({
+    enabled: searchHasMore,
+    loading: searchLoading,
+    onLoadMore: loadMoreSearchResults,
+  })
+  const selectedTracksSentinelRef = useAutoLoadMore({
+    enabled: selectedTracksHasMore,
+    loading: selectedTracksLoadingMore,
+    onLoadMore: loadMoreSelectedTracks,
+  })
 
   const handleSaveMeta = async () => {
     if (!selected || !canEditSelected) return
@@ -576,6 +714,7 @@ export function PlaylistsView({
 
   const persistTrackOrder = useCallback(async () => {
     if (!selected || !canEditSelected) return
+    if (selected.tracks_has_more) return
     const ids = selected.tracks.map((tr) => tr.id)
     try {
       await api.setPlaylistTrackOrder(selected.id, ids)
@@ -903,7 +1042,7 @@ export function PlaylistsView({
             <h2 className="view-detail-title">{selected.name}</h2>
             <span className="hint">
               {t('redesign.library.playlistTracksCount', {
-                count: selected.tracks.length,
+                count: selected.tracks_total ?? selected.tracks.length,
               })}
             </span>
           </div>
@@ -1124,16 +1263,20 @@ export function PlaylistsView({
           </div>
         )}
 
-        {canEditSelected && selected.tracks.length > 0 && (
-          <p className="rd-pl-edit-hint">
-            <Icon name="grip" size={14} />
-            <span>
-              {t('redesign.library.playlistReorderHint')}
-            </span>
-          </p>
-        )}
+        {canEditSelected &&
+          !selectedTracksHasMore &&
+          selected.tracks.length > 0 && (
+            <p className="rd-pl-edit-hint">
+              <Icon name="grip" size={14} />
+              <span>
+                {t('redesign.library.playlistReorderHint')}
+              </span>
+            </p>
+          )}
 
-        {canEditSelected && selected.tracks.length > 0 ? (
+        {canEditSelected &&
+        !selectedTracksHasMore &&
+        selected.tracks.length > 0 ? (
           <Reorder.Group
             axis="y"
             values={selected.tracks}
@@ -1173,6 +1316,25 @@ export function PlaylistsView({
             tracks={selected.tracks}
             emptyMessage={t('redesign.library.playlistEmptyTracks')}
           />
+        )}
+        {selectedTracksHasMore && (
+          <>
+            <div ref={selectedTracksSentinelRef} aria-hidden />
+            <MotionPress
+              type="button"
+              variant="ghost"
+              haptic="light"
+              className="rd-liked-more"
+              onClick={() => {
+                void loadMoreSelectedTracks()
+              }}
+              disabled={selectedTracksLoadingMore}
+            >
+              {selectedTracksLoadingMore
+                ? t('common.loading')
+                : t('common.showMore')}
+            </MotionPress>
+          </>
         )}
 
         {shareOpen && (
@@ -1361,9 +1523,9 @@ export function PlaylistsView({
               onClick={() => {
                 void handleCreate()
               }}
-              disabled={!newName.trim() || loading}
+              disabled={!newName.trim() || createLoading}
             >
-              {loading ? (
+              {createLoading ? (
                 <span className="btn-spinner" />
               ) : (
                 t('redesign.library.playlistCreateDo')
@@ -1471,6 +1633,23 @@ export function PlaylistsView({
           })}
         </div>
       )}
+      {playlists !== null && playlistsHasMore && (
+        <>
+          <div ref={playlistsSentinelRef} aria-hidden />
+          <MotionPress
+            type="button"
+            variant="ghost"
+            haptic="light"
+            className="rd-liked-more"
+            onClick={loadMorePlaylists}
+            disabled={playlistsLoading}
+          >
+            {playlistsLoading
+              ? t('common.loading')
+              : t('common.showMore')}
+          </MotionPress>
+        </>
+      )}
 
       <div className="rd-pl-search-section">
         <div className="form-group">
@@ -1542,6 +1721,25 @@ export function PlaylistsView({
                 </div>
               ))}
             </div>
+            {searchHasMore && (
+              <>
+                <div ref={searchSentinelRef} aria-hidden />
+                <MotionPress
+                  type="button"
+                  variant="ghost"
+                  haptic="light"
+                  className="rd-liked-more"
+                  onClick={() => {
+                    void loadMoreSearchResults()
+                  }}
+                  disabled={searchLoading}
+                >
+                  {searchLoading
+                    ? t('common.loading')
+                    : t('common.showMore')}
+                </MotionPress>
+              </>
+            )}
           </>
         )}
       </div>

@@ -197,6 +197,9 @@ async def build_track_features(
                     out_vec.append(float(x))
             if out_vec:
                 audio_v = out_vec
+        created_at = t.created_at
+        if created_at is not None and created_at.tzinfo is None:
+            created_at = created_at.replace(tzinfo=UTC)
         out.append(
             TrackFeatures(
                 track_id=t.id,
@@ -205,7 +208,7 @@ async def build_track_features(
                     t.id, []
                 ),
                 play_count=t.play_count,
-                created_at=t.created_at,
+                created_at=created_at,
                 source=t.source,
                 unique_listener_count=agg.get(
                     "uniq", 0

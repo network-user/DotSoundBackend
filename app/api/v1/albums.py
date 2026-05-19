@@ -1,7 +1,7 @@
 """Album CRUD endpoints."""
 
 import structlog
-from fastapi import APIRouter, Depends, HTTPException, Request, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.rate_limit import limiter
@@ -19,9 +19,32 @@ from app.services.track_playback_health_service import (
     is_track_playback_suppressed,
 )
 from app.services.track_response_build import dedupe_and_build_track_list
+from app.utils.pagination_cursor import decode_cursor, encode_cursor
 
 router = APIRouter(prefix="/albums", tags=["albums"])
 logger: structlog.stdlib.BoundLogger = structlog.get_logger(__name__)
+
+
+def _track_cursor_data(cursor: str) -> tuple[int, int] | None:
+    data = decode_cursor(cursor)
+    if data is None:
+        return None
+    raw_position = data.get("position")
+    raw_track_id = data.get("track_id")
+    if not isinstance(raw_position, int) or not isinstance(raw_track_id, int):
+        return None
+    return raw_position, raw_track_id
+
+
+def _track_next_cursor(
+    rows: list[tuple[object, int, int]],
+) -> str | None:
+    if not rows:
+        return None
+    _, position, track_id = rows[-1]
+    return encode_cursor(
+        {"position": position, "track_id": track_id}
+    )
 
 
 @router.post(
@@ -56,6 +79,9 @@ async def create_album(
 async def get_album(
     request: Request,
     album_id: int,
+    tracks_page: int | None = Query(None, ge=1),
+    tracks_size: int = Query(50, ge=1, le=100),
+    tracks_cursor: str | None = Query(None, max_length=512),
     session: AsyncSession = Depends(get_db),
     current_user: User | None = Depends(get_optional_user),
 ) -> AlbumWithTracksResponse:
@@ -76,17 +102,77 @@ async def get_album(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Album not found",
         )
-    raw_tracks = list(album.tracks)
-    if not is_owner and not is_admin:
-        raw_tracks = [
-            t
-            for t in raw_tracks
-            if not is_track_playback_suppressed(t)
-        ]
+    tracks_next_cursor = None
+    if tracks_cursor is not None:
+        parsed = _track_cursor_data(tracks_cursor)
+        if parsed is None:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Invalid cursor",
+            )
+        cursor_position, cursor_track_id = parsed
+        track_rows, tracks_total, tracks_has_more = (
+            await service.list_tracks_cursor(
+                album_id=album_id,
+                cursor_position=cursor_position,
+                cursor_track_id=cursor_track_id,
+                size=tracks_size,
+                include_suppressed=bool(is_owner or is_admin),
+            )
+        )
+        raw_tracks = [row[0] for row in track_rows]
+        page = tracks_page or 1
+        size = tracks_size
+        tracks_next_cursor = (
+            _track_next_cursor(track_rows) if tracks_has_more else None
+        )
+    elif tracks_page is None:
+        raw_tracks = list(album.tracks)
+        if not is_owner and not is_admin:
+            raw_tracks = [
+                t
+                for t in raw_tracks
+                if not is_track_playback_suppressed(t)
+            ]
+        tracks_total = len(raw_tracks)
+        page = 1
+        size = len(raw_tracks)
+        tracks_has_more = False
+    elif tracks_page == 1:
+        track_rows, tracks_total, tracks_has_more = (
+            await service.list_tracks_cursor(
+                album_id=album_id,
+                cursor_position=None,
+                cursor_track_id=None,
+                size=tracks_size,
+                include_suppressed=bool(is_owner or is_admin),
+            )
+        )
+        raw_tracks = [row[0] for row in track_rows]
+        page = tracks_page
+        size = tracks_size
+        tracks_next_cursor = (
+            _track_next_cursor(track_rows) if tracks_has_more else None
+        )
+    else:
+        raw_tracks, tracks_total = await service.list_tracks_page(
+            album_id=album_id,
+            page=tracks_page,
+            size=tracks_size,
+            include_suppressed=bool(is_owner or is_admin),
+        )
+        page = tracks_page
+        size = tracks_size
+        tracks_has_more = (page * size) < tracks_total
     tracks = await dedupe_and_build_track_list(session, raw_tracks)
     return AlbumWithTracksResponse(
         **AlbumResponse.model_validate(album).model_dump(),
         tracks=tracks,
+        tracks_total=tracks_total,
+        tracks_page=page,
+        tracks_size=size,
+        tracks_has_more=tracks_has_more,
+        tracks_next_cursor=tracks_next_cursor,
     )
 
 

@@ -1,5 +1,5 @@
 import structlog
-from sqlalchemy import func, select
+from sqlalchemy import and_, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -45,6 +45,81 @@ class AlbumRepository:
             .where(Album.id == album_id)
         )
         return result.scalar_one_or_none()
+
+    async def list_tracks_page(
+        self,
+        album_id: int,
+        offset: int,
+        limit: int,
+        *,
+        include_suppressed: bool,
+    ) -> tuple[list[Track], int]:
+        condition = Track.album_id == album_id
+        if not include_suppressed:
+            condition = condition & (
+                Track.playback_suppressed_until.is_(None)
+                | (Track.playback_suppressed_until <= func.now())
+            )
+
+        total_result = await self._session.execute(
+            select(func.count(Track.id)).where(condition)
+        )
+        total = int(total_result.scalar_one())
+        result = await self._session.execute(
+            select(Track)
+            .where(condition)
+            .order_by(
+                Track.album_position.asc().nulls_last(),
+                Track.id.asc(),
+            )
+            .offset(offset)
+            .limit(limit)
+        )
+        return list(result.scalars().all()), total
+
+    async def list_tracks_cursor(
+        self,
+        album_id: int,
+        *,
+        cursor_position: int | None,
+        cursor_track_id: int | None,
+        limit: int,
+        include_suppressed: bool,
+    ) -> tuple[list[tuple[Track, int, int]], int, bool]:
+        condition = Track.album_id == album_id
+        if not include_suppressed:
+            condition = condition & (
+                Track.playback_suppressed_until.is_(None)
+                | (Track.playback_suppressed_until <= func.now())
+            )
+
+        total_result = await self._session.execute(
+            select(func.count(Track.id)).where(condition)
+        )
+        total = int(total_result.scalar_one())
+        position = func.coalesce(Track.album_position, 2147483647)
+        if cursor_position is not None and cursor_track_id is not None:
+            condition = condition & or_(
+                position > cursor_position,
+                and_(
+                    position == cursor_position,
+                    Track.id > cursor_track_id,
+                ),
+            )
+        result = await self._session.execute(
+            select(Track, position.label("position"), Track.id)
+            .where(condition)
+            .order_by(
+                Track.album_position.asc().nulls_last(),
+                Track.id.asc(),
+            )
+            .limit(limit + 1)
+        )
+        rows = [
+            (row[0], int(row[1]), int(row[2]))
+            for row in result.all()
+        ]
+        return rows[:limit], total, len(rows) > limit
 
     async def list_by_user(
         self, user_id: int, offset: int = 0, limit: int = 50

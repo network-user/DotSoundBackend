@@ -46,6 +46,15 @@ class PlaylistResponse(BaseModel):
         )
 
 
+class PlaylistListResponse(BaseModel):
+    items: list[PlaylistResponse]
+    total: int
+    page: int = Field(ge=1)
+    size: int = Field(ge=1)
+    has_more: bool = False
+    next_cursor: str | None = None
+
+
 class PlaylistWithTracksResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
@@ -62,6 +71,11 @@ class PlaylistWithTracksResponse(BaseModel):
     description: str | None = None
     created_at: datetime
     tracks: list[TrackResponse] = []
+    tracks_total: int | None = None
+    tracks_page: int | None = None
+    tracks_size: int | None = None
+    tracks_has_more: bool | None = None
+    tracks_next_cursor: str | None = None
 
     @computed_field  # type: ignore[prop-decorator]
     @property

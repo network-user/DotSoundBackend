@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useNavigate, useParams } from 'react-router-dom'
 
@@ -14,6 +14,7 @@ import '@/styles/redesign-artist.css'
 
 import { api, getApiErrorMessage } from '@/lib/api'
 import { coverProxyUrl } from '@/lib/coverProxy'
+import { useAutoLoadMore } from '@/hooks/useAutoLoadMore'
 import { VARIANTS_FADE_UP, m } from '@/lib/motion'
 import { setBackButton } from '@/lib/telegram'
 
@@ -24,6 +25,8 @@ import {
 import { usePrefetchTracks } from '@/store/PrefetchContext'
 
 import type { PlaylistWithTracks, Track } from '@/types/api'
+
+const PLAYLIST_TRACKS_PAGE_SIZE = 30
 
 function trackCoverUrl(
   key: string | null | undefined,
@@ -60,6 +63,8 @@ export function PlaylistView() {
   const [playlist, setPlaylist] =
     useState<PlaylistWithTracks | null>(null)
   const [error, setError] = useState<string | null>(null)
+  const [tracksLoadingMore, setTracksLoadingMore] = useState(false)
+  const tracksCursorRef = useRef<string | null>(null)
 
   const goBack = useCallback(() => {
     if (window.history.length > 1) {
@@ -79,12 +84,17 @@ export function PlaylistView() {
   useEffect(() => {
     if (!Number.isFinite(playlistId)) return
     let cancelled = false
+    tracksCursorRef.current = null
     setPlaylist(null)
     setError(null)
     api
-      .getPlaylist(playlistId)
+      .getPlaylist(playlistId, {
+        tracksPage: 1,
+        tracksSize: PLAYLIST_TRACKS_PAGE_SIZE,
+      })
       .then((d) => {
         if (cancelled) return
+        tracksCursorRef.current = d.tracks_next_cursor ?? null
         setPlaylist(d)
       })
       .catch((e) => {
@@ -99,6 +109,7 @@ export function PlaylistView() {
   }, [playlistId, t])
 
   const tracks = playlist?.tracks ?? null
+  const tracksHasMore = Boolean(playlist?.tracks_has_more)
   usePrefetchTracks(tracks, 'playlist')
 
   const collageCovers = useMemo(
@@ -131,6 +142,54 @@ export function PlaylistView() {
       showIsland({ kind: 'error', title: getApiErrorMessage(e, t('redesign.artist.playError')), durationMs: 4000 })
     }
   }, [tracks, shuffleOn, toggleShuffle, playTrack, t])
+
+  const loadMoreTracks = useCallback(async () => {
+    if (
+      !Number.isFinite(playlistId) ||
+      tracksLoadingMore ||
+      !tracksHasMore
+    ) {
+      return
+    }
+    setTracksLoadingMore(true)
+    try {
+      const cursor =
+        playlist?.tracks_next_cursor ?? tracksCursorRef.current
+      if (!cursor) return
+      const next = await api.getPlaylist(playlistId, {
+        tracksSize: PLAYLIST_TRACKS_PAGE_SIZE,
+        tracksCursor: cursor,
+      })
+      tracksCursorRef.current = next.tracks_next_cursor ?? null
+      setPlaylist((prev) =>
+        prev
+          ? {
+              ...prev,
+              tracks: [...prev.tracks, ...next.tracks],
+              tracks_total: next.tracks_total,
+              tracks_page: next.tracks_page,
+              tracks_size: next.tracks_size,
+              tracks_has_more: next.tracks_has_more,
+              tracks_next_cursor: next.tracks_next_cursor,
+            }
+          : next,
+      )
+    } catch (e) {
+      showIsland({
+        kind: 'error',
+        title: getApiErrorMessage(e, t('redesign.artist.loadError')),
+        durationMs: 3500,
+      })
+    } finally {
+      setTracksLoadingMore(false)
+    }
+  }, [playlist?.tracks_next_cursor, playlistId, tracksHasMore, tracksLoadingMore, t])
+
+  const tracksSentinelRef = useAutoLoadMore({
+    enabled: tracksHasMore,
+    loading: tracksLoadingMore,
+    onLoadMore: loadMoreTracks,
+  })
 
   if (!Number.isFinite(playlistId)) {
     return (
@@ -218,7 +277,7 @@ export function PlaylistView() {
           {playlist && (
             <p className="rf-playlist__sub">
               {t('redesign.artist.tracksCount', {
-                count: tracks?.length ?? 0,
+                count: playlist?.tracks_total ?? tracks?.length ?? 0,
               })}
             </p>
           )}
@@ -259,6 +318,24 @@ export function PlaylistView() {
           tracks={tracks}
           emptyMessage={t('redesign.artist.noTracks')}
         />
+        {tracksHasMore && (
+          <>
+            <div ref={tracksSentinelRef} aria-hidden />
+            <MotionPress
+              variant="ghost"
+              haptic="light"
+              className="rd-liked-more"
+              onClick={() => {
+                void loadMoreTracks()
+              }}
+              disabled={tracksLoadingMore}
+            >
+              {tracksLoadingMore
+                ? t('common.loading')
+                : t('common.showMore')}
+            </MotionPress>
+          </>
+        )}
       </m.div>
     </section>
   )

@@ -15,6 +15,7 @@ import { getInternalUserId } from '@/lib/telegram'
 import { dismissIsland, showIsland, updateIsland } from '@/lib/island'
 import i18n from '@/lib/i18n'
 import {
+  ensureCachedIdsLoaded,
   ensureProgressiveCachedIdsLoaded,
   getCachedAudioUrl,
   getCachedIdsSync,
@@ -42,6 +43,7 @@ import {
 } from '@/lib/coverProxy'
 import type { StreamResponse, Track } from '@/types/api'
 import {
+  choosePlaybackCacheWarmAction as _choosePlaybackCacheWarmAction,
   consumePrefetchedStream as _consumePrefetchedStream,
   tweenVolume as _tweenVolume,
 } from '@/store/playerAudioHelpers'
@@ -1642,6 +1644,7 @@ export function PlayerProvider({
   }, [loadEqSettings])
 
   useEffect(() => {
+    void ensureCachedIdsLoaded()
     void ensureProgressiveCachedIdsLoaded()
   }, [])
 
@@ -2309,8 +2312,8 @@ export function PlayerProvider({
   // Skipped when:
   //   - track is already pinned offline in our IndexedDB store
   //     (downloadTrack already wrote the body);
-  //   - track has an HLS manifest, so progressive Cache API entries
-  //     would not be hit on subsequent playback anyway;
+  //   - track has an HLS manifest and is not eligible for durable
+  //     local storage;
   //   - the network reports save-data / 2g (handled inside
   //     ``prefetchProgressiveBodyForCache``);
   //   - the canplay event never fires within the 30 s window.
@@ -2322,16 +2325,13 @@ export function PlayerProvider({
     ) => {
       if (typeof window === 'undefined') return
       if (typeof caches === 'undefined') return
-      if (shouldUseInternalHlsPlayback(track)) return
-      if (track.access_mode === 'official_embed') return
-      if (track.access_mode === 'external_link') return
-      if (isCachedSync(trackId)) return
+      const cacheWarmAction = _choosePlaybackCacheWarmAction(track, {
+        isIdbCached: isCachedSync(trackId),
+        isProgressiveSwCached: isProgressiveSwCachedSync(trackId),
+        usesInternalHls: shouldUseInternalHlsPlayback(track),
+      })
+      if (cacheWarmAction === 'skip') return
       if (_armedFullBodyCacheTrackIds.has(trackId)) return
-      try {
-        if (getPrefetchManager().wasWarm(trackId)) return
-      } catch {
-        /* prefetch manager singleton not ready, fall through */
-      }
 
       const armDelayMs = ARM_FULL_BODY_DELAY_MS
       const minPlaybackProgressSec = ARM_FULL_BODY_MIN_PROGRESS_S
@@ -2393,10 +2393,9 @@ export function PlayerProvider({
         // eligibility check is the source of truth and will reject
         // the request if policy disallows persisting this track,
         // so this branch is safe to take optimistically.
-        const eligibleForLocalDownload =
-          track.access_mode === 'internal_stream' &&
-          track.catalog_type !== 'external_reference'
-        if (eligibleForLocalDownload) {
+        // This also covers HLS-backed internal tracks: replay binds
+        // the cached progressive blob before the HLS path starts.
+        if (cacheWarmAction === 'idb_download') {
           queueAutoCache(track, {
             source: 'recommendation',
             pinned: false,
@@ -3818,6 +3817,12 @@ export function PlayerProvider({
 
     try {
       audio.crossOrigin = 'anonymous'
+
+      await Promise.allSettled([
+        ensureCachedIdsLoaded(),
+        ensureProgressiveCachedIdsLoaded(),
+      ])
+      if (bail()) return
 
       // Sync gate: skip the IDB / Cache API lookup entirely when
       // we know synchronously that the track was never pinned for

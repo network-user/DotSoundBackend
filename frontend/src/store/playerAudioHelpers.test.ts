@@ -7,10 +7,93 @@ import {
 } from 'vitest'
 
 import {
+  choosePlaybackCacheWarmAction,
   consumePrefetchedStream,
   tweenVolume,
   type PrefetchedStreamRecord,
 } from './playerAudioHelpers'
+
+describe('choosePlaybackCacheWarmAction', () => {
+  it('persists eligible internal HLS tracks after real playback', () => {
+    expect(
+      choosePlaybackCacheWarmAction(
+        {
+          access_mode: 'internal_stream',
+          catalog_type: 'ugc',
+        },
+        {
+          isIdbCached: false,
+          isProgressiveSwCached: false,
+          usesInternalHls: true,
+        },
+      ),
+    ).toBe('idb_download')
+  })
+
+  it('skips tracks that are already in the durable cache', () => {
+    expect(
+      choosePlaybackCacheWarmAction(
+        {
+          access_mode: 'internal_stream',
+          catalog_type: 'licensed',
+        },
+        {
+          isIdbCached: true,
+          isProgressiveSwCached: false,
+          usesInternalHls: true,
+        },
+      ),
+    ).toBe('skip')
+  })
+
+  it('uses the progressive SW cache for third-party replay warmup', () => {
+    expect(
+      choosePlaybackCacheWarmAction(
+        {
+          access_mode: 'third_party_stream',
+          catalog_type: 'external_reference',
+        },
+        {
+          isIdbCached: false,
+          isProgressiveSwCached: false,
+          usesInternalHls: false,
+        },
+      ),
+    ).toBe('progressive_sw')
+  })
+
+  it('does not duplicate an existing progressive SW entry', () => {
+    expect(
+      choosePlaybackCacheWarmAction(
+        {
+          access_mode: 'third_party_stream',
+          catalog_type: 'external_reference',
+        },
+        {
+          isIdbCached: false,
+          isProgressiveSwCached: true,
+          usesInternalHls: false,
+        },
+      ),
+    ).toBe('skip')
+  })
+
+  it('skips non-playable external handoff modes', () => {
+    expect(
+      choosePlaybackCacheWarmAction(
+        {
+          access_mode: 'official_embed',
+          catalog_type: 'licensed',
+        },
+        {
+          isIdbCached: false,
+          isProgressiveSwCached: false,
+          usesInternalHls: false,
+        },
+      ),
+    ).toBe('skip')
+  })
+})
 
 describe('consumePrefetchedStream', () => {
   function makeRef(

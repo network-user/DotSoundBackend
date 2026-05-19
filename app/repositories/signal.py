@@ -1,7 +1,7 @@
 from datetime import datetime, timedelta
 
 import structlog
-from sqlalchemy import case, func, select
+from sqlalchemy import and_, case, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.like import Like
@@ -118,6 +118,71 @@ class ListenEventRepository(
             .limit(limit)
         )
         return list(result.scalars().all())
+
+    async def list_recent_unique_tracks(
+        self,
+        user_id: int,
+        *,
+        cursor_created_at: datetime | None,
+        cursor_id: int | None,
+        limit: int,
+    ) -> tuple[list[tuple[int, datetime, int, int]], int, bool]:
+        ranked = (
+            select(
+                ListenEvent.track_id.label("track_id"),
+                ListenEvent.created_at.label("created_at"),
+                ListenEvent.id.label("event_id"),
+                ListenEvent.duration_listened_seconds.label("seconds"),
+                func.row_number()
+                .over(
+                    partition_by=ListenEvent.track_id,
+                    order_by=(
+                        ListenEvent.created_at.desc(),
+                        ListenEvent.id.desc(),
+                    ),
+                )
+                .label("rn"),
+            )
+            .where(ListenEvent.user_id == user_id)
+            .subquery()
+        )
+        base = ranked.c.rn == 1
+        total_q = select(func.count()).select_from(
+            select(ranked.c.track_id).where(base).subquery()
+        )
+        total = int((await self._session.execute(total_q)).scalar_one())
+        if cursor_created_at is not None and cursor_id is not None:
+            base = base & or_(
+                ranked.c.created_at < cursor_created_at,
+                and_(
+                    ranked.c.created_at == cursor_created_at,
+                    ranked.c.event_id < cursor_id,
+                ),
+            )
+        result = await self._session.execute(
+            select(
+                ranked.c.track_id,
+                ranked.c.created_at,
+                ranked.c.event_id,
+                ranked.c.seconds,
+            )
+            .where(base)
+            .order_by(
+                ranked.c.created_at.desc(),
+                ranked.c.event_id.desc(),
+            )
+            .limit(limit + 1)
+        )
+        rows = [
+            (
+                int(row[0]),
+                row[1],
+                int(row[2]),
+                int(row[3] or 0),
+            )
+            for row in result.all()
+        ]
+        return rows[:limit], total, len(rows) > limit
 
     async def count_for_user(
         self, user_id: int

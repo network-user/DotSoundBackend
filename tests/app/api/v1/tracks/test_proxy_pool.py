@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import contextlib
 from collections.abc import AsyncIterator
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
@@ -167,6 +166,7 @@ async def test_body_iter_reports_ok_on_clean_completion() -> None:
             body += chunk
 
     assert body == b"abc"
+    assert "content-length" not in resp.headers
     mock_finish.assert_called_once()
     finish_kwargs = mock_finish.call_args.kwargs
     assert finish_kwargs["ok"] is True
@@ -196,9 +196,8 @@ async def test_body_iter_reports_fail_on_upstream_http_error() -> None:
             detail_error="error",
             proxy_service="soundcloud",
         )
-        with contextlib.suppress(Exception):
-            async for _ in resp.body_iterator:
-                pass
+        async for _ in resp.body_iterator:
+            pass
 
     mock_finish.assert_called_once()
     finish_kwargs = mock_finish.call_args.kwargs

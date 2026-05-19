@@ -94,6 +94,123 @@ async def test_add_and_remove_track(
     assert r_get2.json()["tracks"] == []
 
 
+async def test_get_playlist_tracks_page(
+    client: AsyncClient,
+    db_session: AsyncSession,
+) -> None:
+    owner = await create_test_user(client, 20012)
+    headers = await auth_headers(client, owner["id"])
+    tracks = [
+        await create_test_track(client, f"pl_page_{idx}", owner["id"])
+        for idx in range(3)
+    ]
+    for track in tracks:
+        await db_session.execute(
+            update(Track)
+            .where(Track.id == track["id"])
+            .values(file_key=f"test/pl_page_{track['id']}.mp3")
+        )
+    await db_session.commit()
+
+    pl = await client.post(
+        "/api/v1/playlists",
+        json={"name": "Paged"},
+        headers=headers,
+    )
+    playlist_id = pl.json()["id"]
+    for position, track in enumerate(tracks):
+        r_add = await client.post(
+            f"/api/v1/playlists/{playlist_id}/tracks",
+            json={
+                "track_id": track["id"],
+                "position": position,
+            },
+            headers=headers,
+        )
+        assert r_add.status_code == 204
+
+    r_page1 = await client.get(
+        f"/api/v1/playlists/{playlist_id}?tracks_page=1&tracks_size=2",
+        headers=headers,
+    )
+    assert r_page1.status_code == 200
+    body1 = r_page1.json()
+    assert [item["id"] for item in body1["tracks"]] == [
+        tracks[0]["id"],
+        tracks[1]["id"],
+    ]
+    assert body1["tracks_total"] == 3
+    assert body1["tracks_page"] == 1
+    assert body1["tracks_size"] == 2
+    assert body1["tracks_has_more"] is True
+    assert body1["tracks_next_cursor"] is not None
+
+    r_cursor = await client.get(
+        (
+            f"/api/v1/playlists/{playlist_id}"
+            f"?tracks_size=2&tracks_cursor={body1['tracks_next_cursor']}"
+        ),
+        headers=headers,
+    )
+    assert r_cursor.status_code == 200
+    cursor_body = r_cursor.json()
+    assert [item["id"] for item in cursor_body["tracks"]] == [
+        tracks[2]["id"],
+    ]
+    assert cursor_body["tracks_total"] == 3
+    assert cursor_body["tracks_has_more"] is False
+
+    r_page2 = await client.get(
+        f"/api/v1/playlists/{playlist_id}?tracks_page=2&tracks_size=2",
+        headers=headers,
+    )
+    assert r_page2.status_code == 200
+    body2 = r_page2.json()
+    assert [item["id"] for item in body2["tracks"]] == [tracks[2]["id"]]
+    assert body2["tracks_total"] == 3
+    assert body2["tracks_has_more"] is False
+
+
+async def test_list_playlists_cursor_response(
+    client: AsyncClient,
+) -> None:
+    owner = await create_test_user(client, 20013)
+    headers = await auth_headers(client, owner["id"])
+    first = await client.post(
+        "/api/v1/playlists",
+        json={"name": "First"},
+        headers=headers,
+    )
+    second = await client.post(
+        "/api/v1/playlists",
+        json={"name": "Second"},
+        headers=headers,
+    )
+    assert first.status_code == 201
+    assert second.status_code == 201
+
+    r_first_page = await client.get(
+        "/api/v1/playlists?size=1",
+        headers=headers,
+    )
+    assert r_first_page.status_code == 200
+    first_page = r_first_page.json()
+    assert [item["name"] for item in first_page["items"]] == ["Second"]
+    assert first_page["total"] == 2
+    assert first_page["has_more"] is True
+    assert first_page["next_cursor"] is not None
+
+    r_next_page = await client.get(
+        f"/api/v1/playlists?size=1&cursor={first_page['next_cursor']}",
+        headers=headers,
+    )
+    assert r_next_page.status_code == 200
+    next_page = r_next_page.json()
+    assert [item["name"] for item in next_page["items"]] == ["First"]
+    assert next_page["total"] == 2
+    assert next_page["has_more"] is False
+
+
 async def test_delete_playlist(
     client: AsyncClient,
 ) -> None:

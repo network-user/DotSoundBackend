@@ -198,7 +198,8 @@ export function ChatBubble({
     }
     let cancelled = false
     setSharedAlbumLoading(true)
-    api.getAlbum(sharedAlbumId)
+    api
+      .getAlbum(sharedAlbumId, { tracksPage: 1, tracksSize: 3 })
       .then((album) => {
         if (cancelled) return
         SHARED_ALBUM_CACHE.set(sharedAlbumId, album)
@@ -232,7 +233,8 @@ export function ChatBubble({
     }
     let cancelled = false
     setSharedPlaylistLoading(true)
-    api.getPlaylist(sharedPlaylistId)
+    api
+      .getPlaylist(sharedPlaylistId, { tracksPage: 1, tracksSize: 3 })
       .then((playlist) => {
         if (cancelled) return
         SHARED_PLAYLIST_CACHE.set(sharedPlaylistId, playlist)
@@ -482,7 +484,9 @@ export function ChatBubble({
                   </span>
                   <span className="bubble-track-artist">
                     {t('redesign.chats.tracksCount', {
-                      count: sharedAlbum.tracks.length,
+                      count:
+                        sharedAlbum.tracks_total ??
+                        sharedAlbum.tracks.length,
                     })}
                   </span>
                 </div>
@@ -531,7 +535,9 @@ export function ChatBubble({
                   </span>
                   <span className="bubble-track-artist">
                     {t('redesign.chats.tracksCount', {
-                      count: sharedPlaylist.tracks.length,
+                      count:
+                        sharedPlaylist.tracks_total ??
+                        sharedPlaylist.tracks.length,
                     })}
                   </span>
                 </div>

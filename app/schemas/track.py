@@ -95,6 +95,8 @@ class TrackListResponse(BaseModel):
     total: int
     page: int = Field(ge=1)
     size: int = Field(ge=1)
+    has_more: bool = False
+    next_cursor: str | None = None
 
 
 class TrackUploadResponse(BaseModel):

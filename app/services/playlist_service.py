@@ -1,5 +1,6 @@
 import asyncio
 import secrets
+from datetime import datetime
 from typing import Final
 
 import structlog
@@ -74,6 +75,22 @@ class PlaylistService:
         offset = (page - 1) * size
         return await self._repo.list_by_owner(
             owner_id=user.id, offset=offset, limit=size
+        )
+
+    async def list_by_owner_cursor(
+        self,
+        owner_id: int,
+        *,
+        cursor_created_at: datetime | None,
+        cursor_id: int | None,
+        size: int = 20,
+    ) -> tuple[list[tuple[Playlist, int]], int, bool]:
+        user = await self._resolve_user(owner_id)
+        return await self._repo.list_by_owner_cursor(
+            owner_id=user.id,
+            cursor_created_at=cursor_created_at,
+            cursor_id=cursor_id,
+            limit=size,
         )
 
     async def update(
@@ -193,6 +210,36 @@ class PlaylistService:
         await self._assert_exists(playlist_id)
         return await self._repo.get_tracks(playlist_id)
 
+    async def list_tracks_page(
+        self,
+        playlist_id: int,
+        page: int = 1,
+        size: int = 50,
+    ) -> tuple[list[Track], int]:
+        await self._assert_exists(playlist_id)
+        offset = (page - 1) * size
+        return await self._repo.list_tracks_page(
+            playlist_id=playlist_id,
+            offset=offset,
+            limit=size,
+        )
+
+    async def list_tracks_cursor(
+        self,
+        playlist_id: int,
+        *,
+        cursor_position: int | None,
+        cursor_track_id: int | None,
+        size: int = 50,
+    ) -> tuple[list[tuple[Track, int, int]], int, bool]:
+        await self._assert_exists(playlist_id)
+        return await self._repo.list_tracks_cursor(
+            playlist_id=playlist_id,
+            cursor_position=cursor_position,
+            cursor_track_id=cursor_track_id,
+            limit=size,
+        )
+
     async def list_featured(self, limit: int = 20) -> list[Playlist]:
         return await self._repo.list_featured(limit=limit)
 
@@ -219,6 +266,23 @@ class PlaylistService:
         return await self._repo.search_public(
             query=query,
             offset=offset,
+            limit=size,
+            exclude_owner_id=exclude_owner_id,
+        )
+
+    async def search_public_cursor(
+        self,
+        query: str,
+        *,
+        cursor_created_at: datetime | None,
+        cursor_id: int | None,
+        size: int = 20,
+        exclude_owner_id: int | None = None,
+    ) -> tuple[list[Playlist], int, bool]:
+        return await self._repo.search_public_cursor(
+            query=query,
+            cursor_created_at=cursor_created_at,
+            cursor_id=cursor_id,
             limit=size,
             exclude_owner_id=exclude_owner_id,
         )

@@ -31,6 +31,11 @@ class AlbumResponse(BaseModel):
 
 class AlbumWithTracksResponse(AlbumResponse):
     tracks: list[TrackResponse] = []
+    tracks_total: int | None = None
+    tracks_page: int | None = None
+    tracks_size: int | None = None
+    tracks_has_more: bool | None = None
+    tracks_next_cursor: str | None = None
 
 
 class AlbumTrackOrderRequest(BaseModel):

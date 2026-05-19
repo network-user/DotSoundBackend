@@ -1,5 +1,80 @@
 # DotSound - TODO Tracker
 
+- [x] **Playback live-proxy truncated stream guard (2026-05-19)**
+  - Third-party audio proxy responses no longer forward upstream
+    `Content-Length` for live streaming, so a CDN/proxy disconnect
+    cannot surface as Uvicorn `Response content shorter than
+    Content-Length` after headers have already been sent.
+  - Mid-stream `httpx` read errors are logged as
+    `proxy_upstream_stream_interrupted`, the egress is penalized, and
+    the chunked response closes without raising a second ASGI error.
+  - Tests: `poetry run pytest tests/app/api/v1/tracks/test_proxy_pool.py
+    tests/app/api/v1/tracks/test_playback.py`; targeted Ruff and mypy
+    checks passed.
+
+- [x] **Cursor pagination and auto-loading follow-up (2026-05-19)**
+  - Backend: playlist list/search responses now return
+    `items`, `total`, `has_more`, `next_cursor`; playlist tracks,
+    album tracks and `/api/v1/users/me/listen-history` accept cursor
+    params while keeping old page/limit params compatible.
+  - Frontend: playlist/album/history/library surfaces preserve loaded
+    chunks, request the next cursor chunk and auto-load near the bottom
+    with the existing button as fallback.
+  - Tests: `poetry run pytest tests/app/api/v1/test_playlists.py
+    tests/app/api/v1/test_albums.py tests/app/api/v1/test_users.py`;
+    frontend `npm run build`.
+
+- [x] **Chunked list loading for library, playlists and search (2026-05-19)**
+  - Backend: `GET /api/v1/playlists/{id}` and
+    `GET /api/v1/albums/{id}` now accept optional
+    `tracks_page` / `tracks_size` and return `tracks_total`,
+    `tracks_page`, `tracks_size`, `tracks_has_more`. Old calls without
+    params remain full-response compatible.
+  - Frontend: playlist/album pages, external album page, playlist library,
+    add-to-playlist sheet, profile collection and chat previews load first
+    chunks and expose "show more" instead of waiting for large lists.
+  - Search: public playlist matches use the search endpoint directly;
+    artist matches render the first 4 artists with a "show more" reveal.
+  - Tests: `poetry run pytest tests/app/api/v1/test_playlists.py
+    tests/app/api/v1/test_albums.py`; frontend `npm run build`.
+
+- [x] **Recsys personalization adapter pass (2026-05-19)**
+  - Backend recommendation adapter now derives user taste signals from
+    qualified listens and uses them to widen candidate retrieval through
+    favorite artists, related artists, fresh genre candidates, similarity
+    index rows, and embeddings.
+  - Followed artists now explicitly feed preferred-artist retrieval:
+    home recommendations include their tracks, candidate pools include
+    track-similarity rows seeded by those artists, and radio/similar API
+    paths are covered by integration tests.
+  - Public/private boundary kept: ranking decisions stay in
+    `DotSoundPrivateCore`; Backend only performs DB retrieval and transport
+    orchestration.
+  - Backend `RecommendationService`, recommendation repository and track
+    feature transport now pass targeted mypy; SQLite naive timestamps are
+    normalized before PrivateCore scoring.
+  - Legal docs checked for recommendation-surface changes: `LEGAL.md` and
+    `docs/legal/`.
+  - Tests: `poetry run pytest tests/app/repositories/test_recommendation.py
+    tests/app/services/test_recommendation_service.py
+    tests/app/api/v1/test_recommendations.py`; targeted Ruff and mypy
+    checks passed.
+
+- [x] **Playback cache replay optimization (2026-05-19)**
+  - Frontend `PlayerContext` now loads both IndexedDB and
+    progressive Cache API mirrors before choosing a playback source,
+    so a cached track opened right after app restart is not treated as
+    cold.
+  - Internal `HLS` tracks that pass backend/PrivateCore offline
+    eligibility now enter the durable `offline-tracks-v1` auto-cache
+    after real playback instead of being skipped because they used
+    the HLS path.
+  - Prefetch "warm" state no longer blocks full replay caching; a
+    warm prefix/manifest is not considered equivalent to a downloaded
+    playable body.
+  - Tests: frontend `playerAudioHelpers.test.ts` and
+    `offlineCache.test.ts`; `npm run build` passed.
+
 - [x] **Bugfix: backfill старых Telegram-импортов без MP3/HLS (2026-05-18)**
   - Добавлен `app/services/telegram_import_backfill_service.py`: ищет
     активные Telegram-треки с `internal_stream`, у которых нет HLS или

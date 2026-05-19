@@ -45,6 +45,7 @@ type SearchTab =
 
 const SEARCH_DEBOUNCE_MS = 300
 const GENRES_PAGE_SIZE = 24
+const SEARCH_ARTIST_COLLAPSED_LIMIT = 4
 const SEARCH_TABS: readonly SearchTab[] = [
   'all',
   'tracks',
@@ -284,6 +285,7 @@ export function SearchView({ onOpenArtist }: SearchViewProps) {
   const [ytResults, setYtResults] = useState<YTSearchResult[]>([])
   const [bcResults, setBcResults] = useState<BCSearchResult[]>([])
   const [catalogArtists, setCatalogArtists] = useState<ArtistInfo[]>([])
+  const [artistsExpanded, setArtistsExpanded] = useState(false)
   const [catalogPlaylists, setCatalogPlaylists] = useState<Playlist[]>([])
   const [catalogGenres, setCatalogGenres] = useState<string[]>([])
   const [allGenres, setAllGenres] = useState<string[]>([])
@@ -515,6 +517,10 @@ export function SearchView({ onOpenArtist }: SearchViewProps) {
   }, [activeGenreTerm])
 
   useEffect(() => {
+    setArtistsExpanded(false)
+  }, [debouncedQuery, activeGenreTerm])
+
+  useEffect(() => {
     if (activeGenreTerm) {
       return
     }
@@ -569,13 +575,10 @@ export function SearchView({ onOpenArtist }: SearchViewProps) {
       })
 
     api
-      .getPlaylists()
-      .then((pls) => {
+      .searchPlaylists(q, 1, 8)
+      .then((res) => {
         if (cancelled) return
-        const lq = q.toLowerCase()
-        setCatalogPlaylists(
-          pls.filter((p) => p.name.toLowerCase().includes(lq)),
-        )
+        setCatalogPlaylists(res.items)
       })
       .catch(() => {
         if (!cancelled) setCatalogPlaylists([])
@@ -812,6 +815,17 @@ export function SearchView({ onOpenArtist }: SearchViewProps) {
 
   const hasMoreGenreOptions =
     filteredGenreOptions.length > genresVisible
+
+  const visibleCatalogArtists = useMemo(
+    () =>
+      artistsExpanded
+        ? catalogArtists
+        : catalogArtists.slice(0, SEARCH_ARTIST_COLLAPSED_LIMIT),
+    [artistsExpanded, catalogArtists],
+  )
+
+  const hasMoreCatalogArtists =
+    catalogArtists.length > visibleCatalogArtists.length
 
   const tabHasResults = useMemo(() => {
     if (!Array.isArray(tracks)) return true
@@ -1161,7 +1175,7 @@ export function SearchView({ onOpenArtist }: SearchViewProps) {
               </p>
               {catalogArtists.length > 0 ? (
                 <div className="search-artist-list">
-                  {catalogArtists.map((a) => (
+                  {visibleCatalogArtists.map((a) => (
                     <div
                       key={`catalog-artist-${a.id}`}
                       className="search-artist-row"
@@ -1195,6 +1209,15 @@ export function SearchView({ onOpenArtist }: SearchViewProps) {
                       />
                     </div>
                   ))}
+                  {hasMoreCatalogArtists && (
+                    <button
+                      type="button"
+                      className="search-tab"
+                      onClick={() => setArtistsExpanded(true)}
+                    >
+                      {t('common.showMore')}
+                    </button>
+                  )}
                 </div>
               ) : (
                 <p className="search-catalog-empty">

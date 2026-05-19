@@ -1,14 +1,17 @@
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useNavigate } from 'react-router-dom'
 
 import { Icon } from '@/components/Icon/Icon'
 import { Sheet } from '@/components/ui/Sheet'
 import { MotionPress } from '@/components/ui/MotionPress'
+import { useAutoLoadMore } from '@/hooks/useAutoLoadMore'
 import { api } from '@/lib/api'
 import { showIsland } from '@/lib/island'
 import { useSound } from '@/store/SoundContext'
 import type { Playlist } from '@/types/api'
+
+const PLAYLIST_PAGE_SIZE = 20
 
 type Props = {
   open: boolean
@@ -27,26 +30,65 @@ export function AddToPlaylistSheet({
   const [playlists, setPlaylists] = useState<Playlist[] | null>(
     null,
   )
+  const [hasMore, setHasMore] = useState(false)
+  const [loadingMore, setLoadingMore] = useState(false)
+  const [nextCursor, setNextCursor] = useState<string | null>(null)
   const [busyId, setBusyId] = useState<number | null>(null)
 
   useEffect(() => {
     if (!open) {
       setPlaylists(null)
+      setHasMore(false)
+      setNextCursor(null)
       return
     }
     let cancelled = false
     api
-      .getPlaylists({ page: 1, size: 100 })
-      .then((list) => {
-        if (!cancelled) setPlaylists(list)
+      .getPlaylists({ page: 1, size: PLAYLIST_PAGE_SIZE })
+      .then((res) => {
+        if (!cancelled) {
+          setPlaylists(res.items)
+          setHasMore(res.has_more)
+          setNextCursor(res.next_cursor)
+        }
       })
       .catch(() => {
-        if (!cancelled) setPlaylists([])
+        if (!cancelled) {
+          setPlaylists([])
+          setHasMore(false)
+          setNextCursor(null)
+        }
       })
     return () => {
       cancelled = true
     }
   }, [open])
+
+  const loadMore = useCallback(async () => {
+    if (loadingMore || !hasMore) return
+    if (!nextCursor) return
+    setLoadingMore(true)
+    try {
+      const res = await api.getPlaylists({
+        size: PLAYLIST_PAGE_SIZE,
+        cursor: nextCursor,
+      })
+      setPlaylists((prev) => [...(prev ?? []), ...res.items])
+      setHasMore(res.has_more)
+      setNextCursor(res.next_cursor)
+    } catch {
+      setHasMore(false)
+      setNextCursor(null)
+    } finally {
+      setLoadingMore(false)
+    }
+  }, [hasMore, loadingMore, nextCursor])
+
+  const sentinelRef = useAutoLoadMore({
+    enabled: hasMore,
+    loading: loadingMore,
+    onLoadMore: loadMore,
+  })
 
   const pick = async (pl: Playlist) => {
     if (busyId !== null) return
@@ -152,6 +194,25 @@ export function AddToPlaylistSheet({
                 </button>
               )
             })}
+            {hasMore && (
+              <>
+                <div ref={sentinelRef} aria-hidden />
+                <MotionPress
+                  type="button"
+                  variant="ghost"
+                  haptic="light"
+                  className="rd-liked-more"
+                  onClick={() => {
+                    void loadMore()
+                  }}
+                  disabled={loadingMore}
+                >
+                  {loadingMore
+                    ? t('common.loading')
+                    : t('common.showMore')}
+                </MotionPress>
+              </>
+            )}
           </div>
         )}
       </div>

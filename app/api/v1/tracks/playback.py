@@ -10,7 +10,7 @@ from typing import Any
 
 import httpx
 import structlog
-from botocore.exceptions import ClientError
+from botocore.exceptions import ClientError  # type: ignore[import-untyped]
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from fastapi.responses import RedirectResponse, Response, StreamingResponse
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -130,7 +130,9 @@ def _third_party_error_detail(
     track: object,
     track_id: int,
 ) -> dict[str, Any]:
-    detail = dict(exc.detail) if isinstance(exc.detail, dict) else {}
+    detail: dict[str, Any] = (
+        dict(exc.detail) if isinstance(exc.detail, dict) else {}
+    )
     detail.setdefault("message", _http_exc_message(exc))
     detail.setdefault("code", "third_party_stream_error")
     detail.setdefault("reason", "stream_resolution_failed")
@@ -500,8 +502,6 @@ async def _http_proxy_range_get(
     }
     if ct := resp.headers.get("content-type"):
         out_h["Content-Type"] = ct
-    if cl := resp.headers.get("content-length"):
-        out_h["Content-Length"] = cl
     if cr := resp.headers.get("content-range"):
         out_h["Content-Range"] = cr
 
@@ -510,9 +510,18 @@ async def _http_proxy_range_get(
         try:
             async for chunk in resp.aiter_bytes(65536):
                 yield chunk
-        except httpx.HTTPError:
+        except httpx.HTTPError as exc:
             upstream_error = True
-            raise
+            logger.warning(
+                "proxy_upstream_stream_interrupted",
+                error=str(exc),
+                streaming_egress=(
+                    streaming_decision.egress_name
+                    if streaming_decision
+                    else None
+                ),
+                outbound_proxied=bool(out_proxy),
+            )
         finally:
             if streaming_decision is not None:
                 from app.services.streaming_egress_pool import (

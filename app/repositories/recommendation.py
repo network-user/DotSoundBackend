@@ -7,12 +7,14 @@ from dotsound_private_core.services.recommendation_language_policy import (
 )
 from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.sql.elements import ColumnElement
 
 from app.models.artist import TrackArtist
 from app.models.like import Like
 from app.models.listen_event import ListenEvent
 from app.models.playlist import Playlist, PlaylistTrack
 from app.models.track import Track
+from app.models.track_similarity import TrackSimilarity
 from app.repositories.track import TrackRepository
 
 
@@ -21,7 +23,7 @@ class RecommendationRepository:
         self._session = session
 
     @staticmethod
-    def _exclude_hidden_sources():  # noqa: ANN205
+    def _exclude_hidden_sources() -> ColumnElement[bool]:
         hidden = ("youtube",)
         source_platform = func.lower(func.coalesce(Track.source_platform, ""))
         imported_from = func.lower(func.coalesce(Track.imported_from, ""))
@@ -236,12 +238,187 @@ class RecommendationRepository:
                 Track.is_public.is_(True),
                 self._exclude_hidden_sources(),
                 TrackRepository._playback_listing_allowed(),
+                TrackRepository._playable_filter(),
                 TrackArtist.artist_id.in_(artist_ids),
             )
+            .distinct()
             .order_by(Track.created_at.desc())
             .limit(limit)
         )
         return list(result.scalars().all())
+
+    async def get_recent_candidate_tracks(
+        self,
+        *,
+        days: int = 30,
+        limit: int = 100,
+        genre_filter: list[str] | None = None,
+        exclude_ids: set[int] | None = None,
+    ) -> list[Track]:
+        cutoff = datetime.now(UTC) - timedelta(days=days)
+        q = select(Track).where(
+            Track.is_active.is_(True),
+            Track.is_public.is_(True),
+            self._exclude_hidden_sources(),
+            TrackRepository._playback_listing_allowed(),
+            TrackRepository._playable_filter(),
+            Track.created_at >= cutoff,
+        )
+        if genre_filter:
+            q = q.where(Track.genre.in_(genre_filter))
+        if exclude_ids:
+            q = q.where(Track.id.notin_(exclude_ids))
+        q = q.order_by(Track.created_at.desc()).limit(limit)
+        result = await self._session.execute(q)
+        return list(result.scalars().all())
+
+    async def get_track_similarity_candidates(
+        self,
+        seed_track_id: int,
+        *,
+        limit: int = 100,
+        exclude_ids: set[int] | None = None,
+    ) -> list[Track]:
+        if seed_track_id <= 0 or limit <= 0:
+            return []
+        excluded = {seed_track_id}
+        if exclude_ids:
+            excluded |= set(exclude_ids)
+        result = await self._session.execute(
+            select(Track)
+            .join(
+                TrackSimilarity,
+                TrackSimilarity.similar_track_id == Track.id,
+            )
+            .where(
+                TrackSimilarity.track_id == seed_track_id,
+                Track.id.notin_(excluded),
+                Track.is_active.is_(True),
+                Track.is_public.is_(True),
+                self._exclude_hidden_sources(),
+                TrackRepository._playback_listing_allowed(),
+                TrackRepository._playable_filter(),
+            )
+            .order_by(TrackSimilarity.score.desc())
+            .limit(limit)
+        )
+        return list(result.scalars().all())
+
+    async def get_track_similarity_candidates_for_artist_ids(
+        self,
+        artist_ids: list[int],
+        *,
+        limit: int = 100,
+        exclude_ids: set[int] | None = None,
+    ) -> list[Track]:
+        if not artist_ids or limit <= 0:
+            return []
+        excluded = set(exclude_ids) if exclude_ids else set()
+        ranked = (
+            select(
+                TrackSimilarity.similar_track_id.label("track_id"),
+                func.max(TrackSimilarity.score).label("score"),
+            )
+            .join(
+                TrackArtist,
+                TrackArtist.track_id == TrackSimilarity.track_id,
+            )
+            .where(TrackArtist.artist_id.in_(artist_ids))
+            .group_by(TrackSimilarity.similar_track_id)
+            .subquery()
+        )
+        query = (
+            select(Track)
+            .join(ranked, ranked.c.track_id == Track.id)
+            .where(
+                Track.is_active.is_(True),
+                Track.is_public.is_(True),
+                self._exclude_hidden_sources(),
+                TrackRepository._playback_listing_allowed(),
+                TrackRepository._playable_filter(),
+            )
+            .order_by(ranked.c.score.desc(), Track.created_at.desc())
+            .limit(limit)
+        )
+        if excluded:
+            query = query.where(Track.id.notin_(excluded))
+        result = await self._session.execute(query)
+        return list(result.scalars().all())
+
+    async def get_user_genre_listen_aggregates(
+        self,
+        user_id: int,
+        *,
+        days: int = 60,
+        limit: int = 40,
+    ) -> list[tuple[str, int]]:
+        cutoff = datetime.now(UTC) - timedelta(days=days)
+        qualified = ListenEvent.skipped.is_(False) & (
+            ListenEvent.completed.is_(True)
+            | (ListenEvent.duration_listened_seconds >= 30)
+        )
+        result = await self._session.execute(
+            select(
+                Track.genre,
+                func.count(ListenEvent.id).label("completed_listens"),
+            )
+            .join(Track, Track.id == ListenEvent.track_id)
+            .where(
+                ListenEvent.user_id == user_id,
+                ListenEvent.created_at >= cutoff,
+                qualified,
+                Track.genre.is_not(None),
+                Track.genre != "",
+                Track.is_active.is_(True),
+                Track.is_public.is_(True),
+                self._exclude_hidden_sources(),
+                TrackRepository._playback_listing_allowed(),
+                TrackRepository._playable_filter(),
+            )
+            .group_by(Track.genre)
+            .order_by(func.count(ListenEvent.id).desc())
+            .limit(limit)
+        )
+        return [(str(genre), int(count)) for genre, count in result.all()]
+
+    async def get_user_artist_listen_aggregates(
+        self,
+        user_id: int,
+        *,
+        days: int = 60,
+        limit: int = 80,
+    ) -> list[tuple[int, int, int]]:
+        cutoff = datetime.now(UTC) - timedelta(days=days)
+        qualified = ListenEvent.skipped.is_(False) & (
+            ListenEvent.completed.is_(True)
+            | (ListenEvent.duration_listened_seconds >= 30)
+        )
+        result = await self._session.execute(
+            select(
+                TrackArtist.artist_id,
+                func.count(ListenEvent.id).label("completed_listens"),
+                func.count(func.distinct(Track.id)).label("distinct_tracks"),
+            )
+            .join(Track, Track.id == ListenEvent.track_id)
+            .join(TrackArtist, TrackArtist.track_id == Track.id)
+            .where(
+                ListenEvent.user_id == user_id,
+                ListenEvent.created_at >= cutoff,
+                qualified,
+                Track.is_active.is_(True),
+                Track.is_public.is_(True),
+                self._exclude_hidden_sources(),
+                TrackRepository._playback_listing_allowed(),
+                TrackRepository._playable_filter(),
+            )
+            .group_by(TrackArtist.artist_id)
+            .order_by(func.count(ListenEvent.id).desc())
+            .limit(limit)
+        )
+        return [
+            (int(artist_id), int(count), int(distinct_tracks))
+            for artist_id, count, distinct_tracks in result.all()
+        ]
 
     async def get_liked_track_ids(self, user_id: int) -> set[int]:
         result = await self._session.execute(

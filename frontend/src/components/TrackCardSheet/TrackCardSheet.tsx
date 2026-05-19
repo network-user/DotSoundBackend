@@ -459,18 +459,21 @@ export function TrackCardSheet({
           }
     ))
     let cancelled = false
-    api.getAlbum(fallbackAlbumId).then((album) => {
-      if (!cancelled) {
-        setRelatedAlbumInfo({
-          id: album.id,
-          title: album.title,
-        })
-      }
-    }).catch(() => {
-      if (!cancelled) {
-        setRelatedAlbumInfo(null)
-      }
-    })
+    api
+      .getAlbum(fallbackAlbumId, { tracksPage: 1, tracksSize: 1 })
+      .then((album) => {
+        if (!cancelled) {
+          setRelatedAlbumInfo({
+            id: album.id,
+            title: album.title,
+          })
+        }
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setRelatedAlbumInfo(null)
+        }
+      })
     return () => {
       cancelled = true
     }

@@ -1,3 +1,5 @@
+from datetime import datetime
+
 import structlog
 from fastapi import (
     APIRouter,
@@ -17,6 +19,7 @@ from app.models.user import User
 from app.schemas.playlist import (
     PlaylistAddTrack,
     PlaylistCreate,
+    PlaylistListResponse,
     PlaylistResponse,
     PlaylistTrackOrderRequest,
     PlaylistUpdate,
@@ -32,6 +35,7 @@ from app.services.playlist_collab_service import (
 )
 from app.services.playlist_service import _UNSET, PlaylistService
 from app.services.track_response_build import dedupe_and_build_track_list
+from app.utils.pagination_cursor import decode_cursor, encode_cursor
 
 router = APIRouter(prefix="/playlists", tags=["playlists"])
 logger: structlog.stdlib.BoundLogger = structlog.get_logger(__name__)
@@ -40,6 +44,51 @@ _MAX_COVER_BYTES = 5 * 1024 * 1024
 _ALLOWED_PLAYLIST_COVER_CT = frozenset(
     {"image/jpeg", "image/png", "image/webp"},
 )
+
+
+def _playlist_cursor_data(cursor: str) -> tuple[datetime, int] | None:
+    data = decode_cursor(cursor)
+    if data is None:
+        return None
+    raw_created_at = data.get("created_at")
+    raw_id = data.get("id")
+    if not isinstance(raw_created_at, str) or not isinstance(raw_id, int):
+        return None
+    try:
+        return datetime.fromisoformat(raw_created_at), raw_id
+    except ValueError:
+        return None
+
+
+def _playlist_next_cursor(items: list[PlaylistResponse]) -> str | None:
+    if not items:
+        return None
+    last = items[-1]
+    return encode_cursor(
+        {"created_at": last.created_at.isoformat(), "id": last.id}
+    )
+
+
+def _track_cursor_data(cursor: str) -> tuple[int, int] | None:
+    data = decode_cursor(cursor)
+    if data is None:
+        return None
+    raw_position = data.get("position")
+    raw_track_id = data.get("track_id")
+    if not isinstance(raw_position, int) or not isinstance(raw_track_id, int):
+        return None
+    return raw_position, raw_track_id
+
+
+def _track_next_cursor(
+    rows: list[tuple[object, int, int]],
+) -> str | None:
+    if not rows:
+        return None
+    _, position, track_id = rows[-1]
+    return encode_cursor(
+        {"position": position, "track_id": track_id}
+    )
 
 
 @router.get(
@@ -90,7 +139,7 @@ async def create_playlist(
 
 @router.get(
     "",
-    response_model=list[PlaylistResponse],
+    response_model=PlaylistListResponse,
     summary="List playlists owned by the authenticated user",
 )
 @limiter.limit("120/minute")
@@ -98,25 +147,49 @@ async def list_playlists(
     request: Request,
     page: int = Query(1, ge=1),
     size: int = Query(20, ge=1, le=100),
+    cursor: str | None = Query(None, max_length=512),
     session: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
-) -> list[PlaylistResponse]:
+) -> PlaylistListResponse:
     structlog.contextvars.bind_contextvars(owner_id=current_user.id)
     service = PlaylistService(session)
-    rows, _ = await service.list_by_owner(
-        owner_id=current_user.id, page=page, size=size
-    )
-    result = []
+    if cursor is None:
+        rows, total = await service.list_by_owner(
+            owner_id=current_user.id, page=page, size=size
+        )
+        has_more = page * size < total
+    else:
+        parsed = _playlist_cursor_data(cursor)
+        if parsed is None:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Invalid cursor",
+            )
+        cursor_created_at, cursor_id = parsed
+        rows, total, has_more = await service.list_by_owner_cursor(
+            owner_id=current_user.id,
+            cursor_created_at=cursor_created_at,
+            cursor_id=cursor_id,
+            size=size,
+        )
+    items = []
     for playlist, count in rows:
         r = PlaylistResponse.model_validate(playlist)
         r.track_count = count
-        result.append(r)
-    return result
+        items.append(r)
+    return PlaylistListResponse(
+        items=items,
+        total=total,
+        page=page,
+        size=size,
+        has_more=has_more,
+        next_cursor=_playlist_next_cursor(items) if has_more else None,
+    )
 
 
 @router.get(
     "/search",
-    response_model=list[PlaylistResponse],
+    response_model=PlaylistListResponse,
     summary="Search public playlists by name",
 )
 @limiter.limit("60/minute")
@@ -125,19 +198,50 @@ async def search_playlists(
     q: str = Query("", max_length=256),
     page: int = Query(1, ge=1),
     size: int = Query(20, ge=1, le=100),
+    cursor: str | None = Query(None, max_length=512),
     session: AsyncSession = Depends(get_db),
     current_user: User | None = Depends(get_optional_user),
-) -> list[PlaylistResponse]:
+) -> PlaylistListResponse:
     if not q.strip():
-        return []
+        return PlaylistListResponse(
+            items=[],
+            total=0,
+            page=page,
+            size=size,
+        )
     service = PlaylistService(session)
-    playlists, _ = await service.search_public(
-        query=q.strip(),
+    if cursor is None:
+        playlists, total = await service.search_public(
+            query=q.strip(),
+            page=page,
+            size=size,
+            exclude_owner_id=current_user.id if current_user else None,
+        )
+        has_more = page * size < total
+    else:
+        parsed = _playlist_cursor_data(cursor)
+        if parsed is None:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Invalid cursor",
+            )
+        cursor_created_at, cursor_id = parsed
+        playlists, total, has_more = await service.search_public_cursor(
+            query=q.strip(),
+            cursor_created_at=cursor_created_at,
+            cursor_id=cursor_id,
+            size=size,
+            exclude_owner_id=current_user.id if current_user else None,
+        )
+    items = [PlaylistResponse.model_validate(p) for p in playlists]
+    return PlaylistListResponse(
+        items=items,
+        total=total,
         page=page,
         size=size,
-        exclude_owner_id=current_user.id if current_user else None,
+        has_more=has_more,
+        next_cursor=_playlist_next_cursor(items) if has_more else None,
     )
-    return [PlaylistResponse.model_validate(p) for p in playlists]
 
 
 @router.get(
@@ -149,6 +253,9 @@ async def search_playlists(
 async def get_playlist(
     request: Request,
     playlist_id: int,
+    tracks_page: int | None = Query(None, ge=1),
+    tracks_size: int = Query(50, ge=1, le=100),
+    tracks_cursor: str | None = Query(None, max_length=512),
     session: AsyncSession = Depends(get_db),
     current_user: User | None = Depends(get_optional_user),
 ) -> PlaylistWithTracksResponse:
@@ -167,9 +274,66 @@ async def get_playlist(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Playlist not found",
         )
-    tracks = await service.get_tracks(playlist_id)
+    tracks_next_cursor = None
+    if tracks_cursor is not None:
+        parsed = _track_cursor_data(tracks_cursor)
+        if parsed is None:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Invalid cursor",
+            )
+        cursor_position, cursor_track_id = parsed
+        track_rows, tracks_total, tracks_has_more = (
+            await service.list_tracks_cursor(
+                playlist_id,
+                cursor_position=cursor_position,
+                cursor_track_id=cursor_track_id,
+                size=tracks_size,
+            )
+        )
+        tracks = [row[0] for row in track_rows]
+        page = tracks_page or 1
+        size = tracks_size
+        tracks_next_cursor = (
+            _track_next_cursor(track_rows) if tracks_has_more else None
+        )
+    elif tracks_page is None:
+        tracks = await service.get_tracks(playlist_id)
+        tracks_total = len(tracks)
+        page = 1
+        size = len(tracks)
+        tracks_has_more = False
+    elif tracks_page == 1:
+        track_rows, tracks_total, tracks_has_more = (
+            await service.list_tracks_cursor(
+                playlist_id,
+                cursor_position=None,
+                cursor_track_id=None,
+                size=tracks_size,
+            )
+        )
+        tracks = [row[0] for row in track_rows]
+        page = tracks_page
+        size = tracks_size
+        tracks_next_cursor = (
+            _track_next_cursor(track_rows) if tracks_has_more else None
+        )
+    else:
+        tracks, tracks_total = await service.list_tracks_page(
+            playlist_id,
+            page=tracks_page,
+            size=tracks_size,
+        )
+        page = tracks_page
+        size = tracks_size
+        tracks_has_more = (page * size) < tracks_total
     result = PlaylistWithTracksResponse.model_validate(playlist)
     result.tracks = await dedupe_and_build_track_list(session, tracks)
+    result.tracks_total = tracks_total
+    result.tracks_page = page
+    result.tracks_size = size
+    result.tracks_has_more = tracks_has_more
+    result.tracks_next_cursor = tracks_next_cursor
     return result
 
 

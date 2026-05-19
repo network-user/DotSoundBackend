@@ -1,11 +1,45 @@
 import type { StreamResponse } from '@/types/api'
 
+export type PlaybackCacheWarmAction =
+  | 'idb_download'
+  | 'progressive_sw'
+  | 'skip'
+
 export type PrefetchedStreamRecord = {
   trackId: number
   url: string
   streamType: 'direct' | 'hls'
   expiresAt: number | null
   resolvedAt: number
+}
+
+export function choosePlaybackCacheWarmAction(
+  track: {
+    access_mode?: string | null
+    catalog_type?: string | null
+  },
+  state: {
+    isIdbCached: boolean
+    isProgressiveSwCached: boolean
+    usesInternalHls: boolean
+  },
+): PlaybackCacheWarmAction {
+  if (state.isIdbCached) return 'skip'
+  if (
+    track.access_mode === 'official_embed' ||
+    track.access_mode === 'external_link'
+  ) {
+    return 'skip'
+  }
+  if (
+    track.access_mode === 'internal_stream' &&
+    track.catalog_type !== 'external_reference'
+  ) {
+    return 'idb_download'
+  }
+  if (state.usesInternalHls) return 'skip'
+  if (state.isProgressiveSwCached) return 'skip'
+  return 'progressive_sw'
 }
 
 export function consumePrefetchedStream(

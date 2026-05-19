@@ -1,10 +1,14 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useTranslation } from 'react-i18next'
 import { Icon } from '@/components/Icon/Icon'
 import { MotionPress } from '@/components/ui/MotionPress'
 import { TrackCard } from '@/components/TrackCard/TrackCard'
+import { useAutoLoadMore } from '@/hooks/useAutoLoadMore'
 import { api } from '@/lib/api'
 import { usePlayerMeta } from '@/store/PlayerContext'
 import type { Track } from '@/types/api'
+
+const HISTORY_PAGE_SIZE = 40
 
 function mergeSessionAndApi(
   current: Track | null,
@@ -32,23 +36,70 @@ function mergeSessionAndApi(
 }
 
 export function HistoryList() {
+  const { t } = useTranslation()
   const { track, history: sessionHistory } =
     usePlayerMeta()
   const [apiTracks, setApiTracks] = useState<
     Track[] | null
   >(null)
   const [loadError, setLoadError] = useState(false)
+  const [hasMore, setHasMore] = useState(false)
+  const [nextCursor, setNextCursor] = useState<string | null>(null)
+  const [loadingMore, setLoadingMore] = useState(false)
+
+  const loadPage = useCallback(
+    async (
+      cursor: string | null,
+      reset: boolean,
+    ) => {
+      setLoadError(false)
+      if (reset) {
+        setApiTracks(null)
+        setHasMore(false)
+        setNextCursor(null)
+      } else {
+        setLoadingMore(true)
+      }
+      try {
+        const res = await api.getListenHistory({
+          size: HISTORY_PAGE_SIZE,
+          cursor,
+        })
+        setApiTracks((prev) =>
+          reset || !prev
+            ? res.items
+            : [...prev, ...res.items],
+        )
+        setHasMore(Boolean(res.has_more))
+        setNextCursor(res.next_cursor ?? null)
+      } catch {
+        if (reset) {
+          setLoadError(true)
+          setApiTracks([])
+        } else {
+          setHasMore(false)
+        }
+      } finally {
+        if (!reset) setLoadingMore(false)
+      }
+    },
+    [],
+  )
 
   const load = useCallback(() => {
-    setLoadError(false)
-    api
-      .getListenHistory(80)
-      .then((res) => setApiTracks(res.items))
-      .catch(() => {
-        setLoadError(true)
-        setApiTracks([])
-      })
-  }, [])
+    void loadPage(null, true)
+  }, [loadPage])
+
+  const loadMore = useCallback(() => {
+    if (loadingMore || !hasMore || !nextCursor) return
+    void loadPage(nextCursor, false)
+  }, [hasMore, loadPage, loadingMore, nextCursor])
+
+  const sentinelRef = useAutoLoadMore({
+    enabled: hasMore,
+    loading: loadingMore,
+    onLoadMore: loadMore,
+  })
 
   useEffect(() => {
     load()
@@ -146,6 +197,23 @@ export function HistoryList() {
           </div>
         ))}
       </div>
+      {hasMore && (
+        <>
+          <div ref={sentinelRef} aria-hidden />
+          <MotionPress
+            type="button"
+            variant="ghost"
+            haptic="light"
+            className="rd-liked-more"
+            onClick={loadMore}
+            disabled={loadingMore}
+          >
+            {loadingMore
+              ? t('common.loading')
+              : t('common.showMore')}
+          </MotionPress>
+        </>
+      )}
     </div>
   )
 }

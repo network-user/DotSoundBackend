@@ -1,10 +1,14 @@
 from datetime import UTC, datetime, timedelta
+from unittest.mock import AsyncMock, patch
 
 import pytest
 from httpx import AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.models.artist import Artist, TrackArtist
+from app.models.artist_follow import ArtistFollow
 from app.models.like import Like
+from app.models.track_similarity import TrackSimilarity
 from tests.conftest import (
     auth_headers,
     create_test_user,
@@ -51,7 +55,7 @@ async def test_home_highlights_populated(
 
     # Create a track
     from tests.factories import TrackFactory
-    track = TrackFactory.create()
+    track = TrackFactory.create(file_key="continue.mp3")
     db_session.add(track)
     await db_session.commit()
 
@@ -104,6 +108,42 @@ async def test_home_returns_sections(
     ]
 
 
+async def test_home_uses_followed_artist_signal(
+    client: AsyncClient,
+    db_session: AsyncSession,
+) -> None:
+    user = await create_test_user(client, 70301)
+    headers = await auth_headers(client, user["id"])
+    artist = Artist(name="Followed Artist", name_normalized="followed artist")
+    track = TrackFactory.create(
+        title="Followed Track",
+        artist="Followed Artist",
+        file_key="followed.mp3",
+        play_count=10,
+    )
+    db_session.add_all([artist, track])
+    await db_session.flush()
+    db_session.add(TrackArtist(track_id=track.id, artist_id=artist.id))
+    db_session.add(
+        ArtistFollow(user_id=user["id"], artist_id=artist.id)
+    )
+    await db_session.commit()
+
+    r = await client.get(
+        "/api/v1/recommendations/home",
+        headers=headers,
+    )
+
+    assert r.status_code == 200
+    fav = [
+        section
+        for section in r.json()["sections"]
+        if section["section_type"] == "fav_artists"
+    ]
+    assert fav
+    assert track.id in {item["id"] for item in fav[0]["tracks"]}
+
+
 async def test_similar_not_found(
     client: AsyncClient,
 ) -> None:
@@ -112,6 +152,42 @@ async def test_similar_not_found(
     )
     assert r.status_code == 200
     assert r.json()["tracks"] == []
+
+
+async def test_similar_uses_similarity_index(
+    client: AsyncClient,
+    db_session: AsyncSession,
+) -> None:
+    seed = TrackFactory.create(
+        title="Seed",
+        genre="rock",
+        file_key="seed.mp3",
+    )
+    similar = TrackFactory.create(
+        title="Indexed Similar",
+        genre="jazz",
+        file_key="similar.mp3",
+    )
+    db_session.add_all([seed, similar])
+    await db_session.flush()
+    db_session.add(
+        TrackSimilarity(
+            track_id=seed.id,
+            similar_track_id=similar.id,
+            score=0.95,
+            feature_version="v1",
+        )
+    )
+    await db_session.commit()
+
+    r = await client.get(
+        f"/api/v1/recommendations/similar/{seed.id}?limit=1"
+    )
+
+    assert r.status_code == 200
+    body = r.json()
+    assert body["tracks"]
+    assert body["tracks"][0]["id"] == similar.id
 
 
 async def test_daily_mix(
@@ -170,6 +246,58 @@ async def test_radio_missing_seed(
         headers=headers,
     )
     assert r.status_code == 422
+
+
+async def test_radio_uses_seed_similarity_index(
+    client: AsyncClient,
+    db_session: AsyncSession,
+) -> None:
+    user = await create_test_user(client, 70302)
+    headers = await auth_headers(client, user["id"])
+    seed = TrackFactory.create(
+        title="Radio Seed",
+        genre="rock",
+        file_key="radio-seed.mp3",
+    )
+    similar = TrackFactory.create(
+        title="Radio Similar",
+        genre="jazz",
+        file_key="radio-similar.mp3",
+    )
+    db_session.add_all([seed, similar])
+    await db_session.flush()
+    db_session.add(
+        TrackSimilarity(
+            track_id=seed.id,
+            similar_track_id=similar.id,
+            score=0.98,
+            feature_version="v1",
+        )
+    )
+    await db_session.commit()
+    redis = AsyncMock()
+    redis.get = AsyncMock(return_value=None)
+    redis.set = AsyncMock(return_value=True)
+    redis.setex = AsyncMock()
+    redis.lrange = AsyncMock(return_value=[])
+    redis.lpush = AsyncMock(return_value=1)
+    redis.ltrim = AsyncMock(return_value="OK")
+    redis.expire = AsyncMock(return_value=True)
+
+    with patch(
+        "app.services.recommendation_service.get_redis_client",
+        return_value=redis,
+    ):
+        r = await client.get(
+            f"/api/v1/recommendations/radio?seed_track_id={seed.id}"
+            "&queue_size=1",
+            headers=headers,
+        )
+
+    assert r.status_code == 200
+    body = r.json()
+    assert body["tracks"]
+    assert body["tracks"][0]["id"] == similar.id
 
 
 async def test_weekly_top_unauthenticated(
