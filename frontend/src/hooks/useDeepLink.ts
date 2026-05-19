@@ -6,7 +6,7 @@ import { useOptionalPrefetch } from '@/store/PrefetchContext'
 
 export function useTrackDeepLink() {
   const { trackId } = useParams<{ trackId: string }>()
-  const { playTrack } = usePlayerActions()
+  const { playTrack, openCard } = usePlayerActions()
   const prefetch = useOptionalPrefetch()
   const navigate = useNavigate()
 
@@ -23,6 +23,7 @@ export function useTrackDeepLink() {
           /* ignore */
         }
         playTrack(track)
+        openCard()
         navigate('/', { replace: true })
       })
       .catch(() => {

@@ -143,3 +143,10 @@ which parts are owned by `DotSoundPrivateCore`.
 - No API contract changes for public endpoints.
 - No migrations that require frontend protocol changes.
 
+## Promotion Policy
+
+- See `docs/promotion-policy-contract.md` for the contract that
+  `dotsound_private_core.services.promotion_policy` must satisfy.
+- Backend adapter: `app/services/promotion_policy_adapter.py` —
+  pass-through defaults until PrivateCore ships the module.
+

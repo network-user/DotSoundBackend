@@ -1,5 +1,37 @@
 # DotSound - TODO Tracker
 
+- [x] **Editorial promotions: hero, section, search-pin + admin panel (2026-05-19)**
+  - DB: alembic `0113_add_promotions.py` adds `promotions` (entity_type ∈
+    {artist, track, playlist, album}, surfaces JSON, start/end window,
+    priority, override fields, audit FKs) и `promotion_events`
+    (impression/click).
+  - Backend: `app/models/promotion.py`, `app/schemas/promotion.py`,
+    `app/repositories/promotion.py`, `app/services/promotion_service.py`;
+    admin CRUD + audit + stats: `app/api/v1/admin/promotions.py`;
+    публичные эндпоинты hero/section/search-pin/event:
+    `app/api/v1/promotions.py`. Сущности, ставшие недоступными
+    (трек скрыт/удалён, плейлист private и т.д.), фильтруются для
+    публичной выдачи и маркируются бейджем в админке.
+  - Ranking adapter: `app/services/promotion_policy_adapter.py` —
+    pass-through, реальная логика смешивания живёт в PrivateCore. См.
+    `docs/promotion-policy-contract.md`. **In-feed surface не активен**,
+    пока PrivateCore не добавит `mix_in_feed`.
+  - Admin UI: `frontend/src/admin/routes/PromotionsListRoute.tsx`,
+    `PromotionDetailRoute.tsx`, регистрация в `AdminApp.tsx`, манифест
+    `admin_manifest_service.py`, методы в `adminApi.ts`. Группа меню
+    catalog обновлена в `AdminMenu.tsx`.
+  - Mini App: `components/Promotion/PromotionHero.tsx`,
+    `PromotionSection.tsx` (импрешены через хук + клики), вставка в
+    `HomeView.tsx` между genre mixes и continue, pin-блок в
+    `SearchView.tsx` сверху результатов.
+  - Тесты: `tests/app/repositories/test_promotion.py`,
+    `tests/app/services/test_promotion_service.py` (CRUD, окна,
+    availability-фильтр, override fallback, stats, ивенты).
+  - Запуск проверок: `poetry run alembic upgrade head`;
+    `poetry run pytest tests/app/repositories/test_promotion.py
+    tests/app/services/test_promotion_service.py`; frontend
+    `npm run build` (или `npx tsc --noEmit`).
+
 - [x] **Home page progressive section loading (2026-05-19)**
   - Backend: added `GET /api/v1/recommendations/home/sections/{section_type}`
     so the Mini App can request one home section at a time instead of

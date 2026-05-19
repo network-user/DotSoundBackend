@@ -1437,13 +1437,14 @@ async def get_share_links(
     _check_access(track, current_user)
     from app.config import settings
 
-    mini_app_url = settings.mini_app_url or ""
+    configured = (settings.mini_app_url or "").rstrip("/")
+    if configured:
+        web_base = configured
+    else:
+        origin = str(request.base_url).rstrip("/")
+        web_base = f"{origin}/mini_app"
+    web_url = f"{web_base}/track/{track_id}"
     bot_username = settings.telegram_bot_username or ""
-    web_url = (
-        f"{mini_app_url}/track/{track_id}"
-        if mini_app_url
-        else f"/api/v1/tracks/{track_id}"
-    )
     tg_url = (
         f"https://t.me/{bot_username}/app?startapp=track_{track_id}"
         if bot_username

@@ -65,6 +65,15 @@
       "sectionContinue": "Continue",
       "sectionRecent": "Recently played",
       "sectionTracks": "Tracks",
+      "sectionTitle": {
+        "continue": "Continue listening",
+        "personalized": "For you",
+        "new_releases": "New releases",
+        "user_choice": "User picks",
+        "fav_artists": "Favorite artists",
+        "popular": "Popular",
+        "genre_popular": "Popular"
+      },
       "ptrPull": "Pull down",
       "ptrRefresh": "Refreshing…",
       "ptrRelease": "Release",

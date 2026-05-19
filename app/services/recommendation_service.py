@@ -100,13 +100,13 @@ _EXTERNAL_IMPORT_TIMEOUT = 15
 _GENRE_MIXES_CACHE_TTL = 3 * 60 * 60
 _GENRE_MIXES_CACHE_PATTERN = "rec:genre_mixes:*"
 _HOME_SECTION_TITLES = {
-    "continue": "РџСЂРѕРґРѕР»Р¶РёС‚СЊ СЃР»СѓС€Р°С‚СЊ",
-    "personalized": "Р”Р»СЏ РІР°СЃ",
-    "new_releases": "РќРѕРІС‹Рµ СЂРµР»РёР·С‹",
-    "genre_popular": "РџРѕРїСѓР»СЏСЂРЅРѕРµ",
-    "user_choice": "Р’С‹Р±РѕСЂ РїРѕР»СЊР·РѕРІР°С‚РµР»РµР№",
-    "fav_artists": "Р›СЋР±РёРјС‹Рµ РёСЃРїРѕР»РЅРёС‚РµР»Рё",
-    "popular": "РџРѕРїСѓР»СЏСЂРЅРѕРµ",
+    "continue": "Продолжить слушать",
+    "personalized": "Для вас",
+    "new_releases": "Новые релизы",
+    "genre_popular": "Популярное",
+    "user_choice": "Выбор пользователей",
+    "fav_artists": "Любимые исполнители",
+    "popular": "Популярное",
 }
 
 
@@ -917,7 +917,7 @@ class RecommendationService:
         if section_type == "genre_popular":
             title = _HOME_SECTION_TITLES[section_type]
             if genre_filter:
-                title = f"РџРѕРїСѓР»СЏСЂРЅРѕРµ: {genre_filter[0]}"
+                title = f"Популярное: {genre_filter[0]}"
             return {
                 "title": title,
                 "section_type": section_type,

@@ -1411,6 +1411,98 @@ export const adminApi = {
       `/playlists/${playlistId}/tracks/${trackId}`,
       { method: 'DELETE' },
     ),
+  listAdminPromotions: (params: {
+    page?: number
+    size?: number
+    entity_type?: string
+    is_active?: boolean
+    surface?: string
+  }) =>
+    adminFetch<{
+      items: Array<{
+        id: number
+        entity_type: 'artist' | 'track' | 'playlist' | 'album'
+        entity_id: number
+        entity_label: string | null
+        surfaces: Array<'hero' | 'section' | 'in_feed' | 'search_pin'>
+        priority: number
+        starts_at: string | null
+        ends_at: string | null
+        is_active: boolean
+        availability: 'available' | 'hidden' | 'missing'
+        impressions_total: number
+        clicks_total: number
+        created_at: string
+        updated_at: string
+      }>
+      total: number
+      page: number
+      size: number
+    }>('/promotions', { query: params }),
+  getAdminPromotion: (promotionId: number) =>
+    adminFetch<{
+      id: number
+      entity_type: 'artist' | 'track' | 'playlist' | 'album'
+      entity_id: number
+      entity_label: string | null
+      surfaces: Array<'hero' | 'section' | 'in_feed' | 'search_pin'>
+      priority: number
+      starts_at: string | null
+      ends_at: string | null
+      is_active: boolean
+      availability: 'available' | 'hidden' | 'missing'
+      impressions_total: number
+      clicks_total: number
+      title_override: string | null
+      subtitle_override: string | null
+      cta_label_override: string | null
+      cover_url_override: string | null
+      created_at: string
+      updated_at: string
+    }>(`/promotions/${promotionId}`),
+  createAdminPromotion: (body: {
+    entity_type: 'artist' | 'track' | 'playlist' | 'album'
+    entity_id: number
+    surfaces: Array<'hero' | 'section' | 'in_feed' | 'search_pin'>
+    priority?: number
+    starts_at?: string | null
+    ends_at?: string | null
+    is_active?: boolean
+    title_override?: string | null
+    subtitle_override?: string | null
+    cta_label_override?: string | null
+    cover_url_override?: string | null
+  }) =>
+    adminFetch<{ id: number }>('/promotions', {
+      method: 'POST',
+      body,
+    }),
+  patchAdminPromotion: (
+    promotionId: number,
+    body: Record<string, unknown>,
+  ) =>
+    adminFetch<Record<string, unknown>>(`/promotions/${promotionId}`, {
+      method: 'PATCH',
+      body,
+    }),
+  deleteAdminPromotion: (promotionId: number) =>
+    adminFetch<void>(`/promotions/${promotionId}`, {
+      method: 'DELETE',
+    }),
+  getAdminPromotionStats: (
+    promotionId: number,
+    periodDays: number = 30,
+  ) =>
+    adminFetch<{
+      promotion_id: number
+      period_days: number
+      impressions: number
+      clicks: number
+      plays: number
+      ctr: number
+    }>(`/promotions/${promotionId}/stats`, {
+      query: { period_days: periodDays },
+    }),
   reorderAdminPlaylistTracks: (
     playlistId: number,
     trackIds: number[],

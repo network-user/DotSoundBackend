@@ -149,6 +149,16 @@ const PlaylistsListRoute = lazy(() =>
     default: m.PlaylistsListRoute,
   })),
 )
+const PromotionsListRoute = lazy(() =>
+  import('./routes/PromotionsListRoute').then((m) => ({
+    default: m.PromotionsListRoute,
+  })),
+)
+const PromotionDetailRoute = lazy(() =>
+  import('./routes/PromotionDetailRoute').then((m) => ({
+    default: m.PromotionDetailRoute,
+  })),
+)
 const AdminProfileRoute = lazy(() =>
   import('./routes/AdminProfileRoute').then((m) => ({
     default: m.AdminProfileRoute,
@@ -368,6 +378,14 @@ export function AdminApp() {
                   <Route
                     path="playlists/:playlistId"
                     element={<PlaylistDetailRoute />}
+                  />
+                  <Route
+                    path="promotions"
+                    element={<PromotionsListRoute />}
+                  />
+                  <Route
+                    path="promotions/:promotionId"
+                    element={<PromotionDetailRoute />}
                   />
                   <Route
                     path="complaints"
