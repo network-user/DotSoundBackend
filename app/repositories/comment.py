@@ -302,3 +302,31 @@ class CommentRepository:
             )
         )
         return likes or 0, dislikes or 0
+
+    async def get_vote_counts_batch(
+        self, comment_ids: list[int]
+    ) -> dict[int, tuple[int, int]]:
+        if not comment_ids:
+            return {}
+        rows = (
+            await self._s.execute(
+                select(
+                    CommentVote.comment_id,
+                    CommentVote.is_like,
+                    func.count(),
+                )
+                .where(CommentVote.comment_id.in_(comment_ids))
+                .group_by(
+                    CommentVote.comment_id, CommentVote.is_like
+                )
+            )
+        ).all()
+        likes_map: dict[int, int] = {}
+        dislikes_map: dict[int, int] = {}
+        for cid, is_like, cnt in rows:
+            target = likes_map if is_like else dislikes_map
+            target[int(cid)] = int(cnt)
+        return {
+            cid: (likes_map.get(cid, 0), dislikes_map.get(cid, 0))
+            for cid in comment_ids
+        }

@@ -24,13 +24,20 @@ class CoListenRoom(Base):
         UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
     )
     host_id: Mapped[int] = mapped_column(
-        BigInteger, ForeignKey("users.id", ondelete="CASCADE")
+        BigInteger,
+        ForeignKey("users.id", ondelete="CASCADE"),
+        index=True,
     )
     dj_id: Mapped[int | None] = mapped_column(
-        BigInteger, ForeignKey("users.id", ondelete="SET NULL"), nullable=True
+        BigInteger,
+        ForeignKey("users.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
     )
     track_id: Mapped[int] = mapped_column(
-        Integer, ForeignKey("tracks.id", ondelete="CASCADE")
+        Integer,
+        ForeignKey("tracks.id", ondelete="CASCADE"),
+        index=True,
     )
     position_ms: Mapped[int] = mapped_column(Integer, server_default="0")
     is_playing: Mapped[bool] = mapped_column(

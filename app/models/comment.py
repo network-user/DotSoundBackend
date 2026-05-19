@@ -38,6 +38,7 @@ class TrackComment(Base, TimestampMixin):
         ForeignKey("users.id", ondelete="SET NULL"),
         type_=BigInteger,
         nullable=True,
+        index=True,
     )
     parent_id: Mapped[int | None] = mapped_column(
         ForeignKey(
@@ -46,6 +47,7 @@ class TrackComment(Base, TimestampMixin):
         ),
         type_=BigInteger,
         nullable=True,
+        index=True,
     )
     text: Mapped[str] = mapped_column(
         Text, nullable=False

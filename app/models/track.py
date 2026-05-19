@@ -64,6 +64,14 @@ class Track(Base, TimestampMixin):
             ),
             sqlite_where=text("source_sha256 IS NOT NULL AND blob_id IS NULL"),
         ),
+        Index(
+            "ix_tracks_playback_suppressed_until_partial",
+            "playback_suppressed_until",
+            postgresql_where=text(
+                "playback_suppressed_until IS NOT NULL"
+            ),
+            sqlite_where=text("playback_suppressed_until IS NOT NULL"),
+        ),
     )
 
     id: Mapped[int] = mapped_column(primary_key=True)
@@ -214,7 +222,6 @@ class Track(Base, TimestampMixin):
     playback_suppressed_until: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True),
         nullable=True,
-        index=True,
     )
     playback_last_checked_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True),

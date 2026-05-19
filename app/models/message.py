@@ -59,18 +59,22 @@ class Message(Base, TimestampMixin):
         ForeignKey("messages.id", ondelete="SET NULL"),
         type_=BigInteger,
         nullable=True,
+        index=True,
     )
     shared_track_id: Mapped[int | None] = mapped_column(
         ForeignKey("tracks.id", ondelete="SET NULL"),
         nullable=True,
+        index=True,
     )
     shared_album_id: Mapped[int | None] = mapped_column(
         ForeignKey("albums.id", ondelete="SET NULL"),
         nullable=True,
+        index=True,
     )
     shared_playlist_id: Mapped[int | None] = mapped_column(
         ForeignKey("playlists.id", ondelete="SET NULL"),
         nullable=True,
+        index=True,
     )
     is_deleted: Mapped[bool] = mapped_column(
         Boolean, server_default="false", nullable=False

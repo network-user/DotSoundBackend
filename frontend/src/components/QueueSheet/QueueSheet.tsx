@@ -95,9 +95,9 @@ export function QueuePanelContent({
           {history
             .slice(-5)
             .reverse()
-            .map((tr) => (
+            .map((tr, i) => (
               <QueueRow
-                key={`h-${tr.id}`}
+                key={`h-${tr.id}-${i}`}
                 track={tr}
                 onClick={() => onClickItem(tr)}
                 muted

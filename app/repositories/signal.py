@@ -60,12 +60,20 @@ class ListenEventRepository(
         """
         if not track_ids:
             return {}
-        from sqlalchemy import and_, func
 
-        stmt = (
+        ranked = (
             select(
-                ListenEvent.track_id,
-                func.max(ListenEvent.created_at),
+                ListenEvent.track_id.label("track_id"),
+                ListenEvent.last_position_seconds.label("pos"),
+                func.row_number()
+                .over(
+                    partition_by=ListenEvent.track_id,
+                    order_by=(
+                        ListenEvent.created_at.desc(),
+                        ListenEvent.id.desc(),
+                    ),
+                )
+                .label("rn"),
             )
             .where(
                 and_(
@@ -76,31 +84,17 @@ class ListenEventRepository(
                     ListenEvent.last_position_seconds > 0,
                 )
             )
-            .group_by(ListenEvent.track_id)
+            .subquery()
         )
-        latest_keys = (
-            await self._session.execute(stmt)
-        ).all()
-        if not latest_keys:
-            return {}
-        out: dict[int, int] = {}
-        for track_id, latest_ts in latest_keys:
-            row = (
-                await self._session.execute(
-                    select(
-                        ListenEvent.last_position_seconds
-                    )
-                    .where(
-                        ListenEvent.user_id == user_id,
-                        ListenEvent.track_id == track_id,
-                        ListenEvent.created_at == latest_ts,
-                    )
-                    .limit(1)
-                )
-            ).first()
-            if row and row[0] is not None:
-                out[int(track_id)] = int(row[0])
-        return out
+        stmt = select(ranked.c.track_id, ranked.c.pos).where(
+            ranked.c.rn == 1
+        )
+        rows = (await self._session.execute(stmt)).all()
+        return {
+            int(track_id): int(pos)
+            for track_id, pos in rows
+            if pos is not None
+        }
 
     async def get_recent(
         self,

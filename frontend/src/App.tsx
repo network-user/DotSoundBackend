@@ -741,10 +741,15 @@ export function App() {
   }, [isInitialized])
 
   useEffect(() => {
-    const mono =
-      localStorage.getItem(
-        'setting-monochrome',
-      ) === 'true'
+    let mono = false
+    try {
+      mono =
+        localStorage.getItem(
+          'setting-monochrome',
+        ) === 'true'
+    } catch {
+      mono = false
+    }
     document.body.classList.toggle(
       'monochrome',
       mono,

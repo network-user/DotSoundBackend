@@ -14,13 +14,17 @@ logger: structlog.stdlib.BoundLogger = structlog.get_logger(
 )
 
 
+_MAGIC_HEAD_BYTES = 8192
+
+
 def _mime_with_magic(data: bytes) -> str | None:
     try:
         import magic as _magic
     except ImportError:
         return None
     try:
-        return _magic.from_buffer(data, mime=True)
+        head = data[:_MAGIC_HEAD_BYTES]
+        return _magic.from_buffer(head, mime=True)
     except Exception:
         logger.warning("magic_from_buffer_failed")
         return None

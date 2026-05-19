@@ -75,7 +75,7 @@ class TrackRepository(BaseRepository[Track]):
             )
         )
         row = result.first()
-        if row is None:
+        if row is None or row[1] is None:
             return None
         return bool(row[0]), int(row[1])
 
