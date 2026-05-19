@@ -35,27 +35,13 @@ interface PromotionRow {
   updated_at: string
 }
 
-const ENTITY_LABELS: Record<EntityType, string> = {
-  artist: 'Артист',
-  track: 'Трек',
-  playlist: 'Плейлист',
-  album: 'Альбом',
-}
-
-const SURFACE_LABELS: Record<Surface, string> = {
-  hero: 'Hero',
-  section: 'Секция',
-  in_feed: 'В ленте',
-  search_pin: 'Поиск',
-}
-
-const AVAILABILITY_PILL: Record<
+const AVAILABILITY_KIND: Record<
   Availability,
-  { kind: 'ok' | 'warn' | 'error'; label: string }
+  'ok' | 'warn' | 'error'
 > = {
-  available: { kind: 'ok', label: 'Доступно' },
-  hidden: { kind: 'warn', label: 'Скрыто' },
-  missing: { kind: 'error', label: 'Удалено' },
+  available: 'ok',
+  hidden: 'warn',
+  missing: 'error',
 }
 
 function formatDate(value: string | null): string {
@@ -110,19 +96,37 @@ export function PromotionsListRoute() {
   const totalPages = Math.max(1, Math.ceil(total / 25))
   const rows = (data?.items ?? []) as PromotionRow[]
 
+  const entityLabel = (et: EntityType): string =>
+    t(`admin.promotions.entity${et.charAt(0).toUpperCase()}${et.slice(1)}`)
+
+  const surfaceLabel = (s: Surface): string => {
+    const map: Record<Surface, string> = {
+      hero: t('admin.promotions.surfaceHero'),
+      section: t('admin.promotions.surfaceSection'),
+      in_feed: t('admin.promotions.surfaceInFeed'),
+      search_pin: t('admin.promotions.surfaceSearchPin'),
+    }
+    return map[s]
+  }
+
+  const availabilityLabel = (a: Availability): string =>
+    t(
+      `admin.promotions.availability${a.charAt(0).toUpperCase()}${a.slice(1)}`,
+    )
+
   const columns: ColumnDef<PromotionRow>[] = [
     {
       accessorKey: 'id',
-      header: 'ID',
+      header: t('admin.promotions.colId'),
       cell: ({ row }) => row.original.id,
     },
     {
       id: 'entity',
-      header: 'Сущность',
+      header: t('admin.promotions.colEntity'),
       cell: ({ row }) => (
         <span style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
           <span>
-            {ENTITY_LABELS[row.original.entity_type]} #
+            {entityLabel(row.original.entity_type)} #
             {row.original.entity_id}
           </span>
           {row.original.entity_label && (
@@ -140,12 +144,12 @@ export function PromotionsListRoute() {
     },
     {
       id: 'surfaces',
-      header: 'Поверхности',
+      header: t('admin.promotions.colSurfaces'),
       cell: ({ row }) => (
         <span style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
           {row.original.surfaces.map((s) => (
             <StatusPill key={s} kind="unknown">
-              {SURFACE_LABELS[s]}
+              {surfaceLabel(s)}
             </StatusPill>
           ))}
         </span>
@@ -153,12 +157,12 @@ export function PromotionsListRoute() {
     },
     {
       accessorKey: 'priority',
-      header: 'Приоритет',
+      header: t('admin.promotions.colPriority'),
       cell: ({ row }) => row.original.priority,
     },
     {
       id: 'window',
-      header: 'Окно',
+      header: t('admin.promotions.colWindow'),
       cell: ({ row }) => (
         <span style={{ fontSize: 12 }}>
           {formatDate(row.original.starts_at)}
@@ -169,27 +173,32 @@ export function PromotionsListRoute() {
     },
     {
       id: 'status',
-      header: 'Статус',
-      cell: ({ row }) => {
-        const pill = AVAILABILITY_PILL[row.original.availability]
-        return (
-          <span style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-            <StatusPill kind={pill.kind}>{pill.label}</StatusPill>
-            <StatusPill kind={row.original.is_active ? 'ok' : 'warn'}>
-              {row.original.is_active ? 'Включено' : 'Выключено'}
-            </StatusPill>
-          </span>
-        )
-      },
+      header: t('admin.promotions.colStatus'),
+      cell: ({ row }) => (
+        <span style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+          <StatusPill kind={AVAILABILITY_KIND[row.original.availability]}>
+            {availabilityLabel(row.original.availability)}
+          </StatusPill>
+          <StatusPill kind={row.original.is_active ? 'ok' : 'warn'}>
+            {row.original.is_active
+              ? t('admin.promotions.statusOn')
+              : t('admin.promotions.statusOff')}
+          </StatusPill>
+        </span>
+      ),
     },
     {
       id: 'metrics',
-      header: 'Метрики',
+      header: t('admin.promotions.colMetrics'),
       cell: ({ row }) => (
         <span style={{ fontSize: 12 }}>
-          Показы: {row.original.impressions_total}
+          {t('admin.promotions.metricImpressionsShort', {
+            count: row.original.impressions_total,
+          })}
           <br />
-          Клики: {row.original.clicks_total}
+          {t('admin.promotions.metricClicksShort', {
+            count: row.original.clicks_total,
+          })}
         </span>
       ),
     },
@@ -207,7 +216,9 @@ export function PromotionsListRoute() {
               })
             }
           >
-            {row.original.is_active ? 'Выключить' : 'Включить'}
+            {row.original.is_active
+              ? t('admin.promotions.actionDisable')
+              : t('admin.promotions.actionEnable')}
           </MotionPress>
           <MotionPress
             variant="ghost"
@@ -217,7 +228,7 @@ export function PromotionsListRoute() {
               )
             }
           >
-            Открыть
+            {t('admin.promotions.actionOpen')}
           </MotionPress>
         </span>
       ),
@@ -226,11 +237,9 @@ export function PromotionsListRoute() {
 
   return (
     <section className="admin-card">
-      <h1>Продвижение</h1>
+      <h1>{t('admin.promotions.title')}</h1>
       <p className="admin-card__sub">
-        Управление продвигаемыми артистами, треками, плейлистами и
-        альбомами. Окно действия, приоритет и поверхности задаются на
-        форме записи.
+        {t('admin.promotions.listHint')}
       </p>
       <div
         className="admin-toolbar"
@@ -244,11 +253,21 @@ export function PromotionsListRoute() {
             setPage(1)
           }}
         >
-          <option value="">Все сущности</option>
-          <option value="artist">Артисты</option>
-          <option value="track">Треки</option>
-          <option value="playlist">Плейлисты</option>
-          <option value="album">Альбомы</option>
+          <option value="">
+            {t('admin.promotions.filterEntityAny')}
+          </option>
+          <option value="artist">
+            {t('admin.promotions.entityArtist')}
+          </option>
+          <option value="track">
+            {t('admin.promotions.entityTrack')}
+          </option>
+          <option value="playlist">
+            {t('admin.promotions.entityPlaylist')}
+          </option>
+          <option value="album">
+            {t('admin.promotions.entityAlbum')}
+          </option>
         </select>
         <select
           className="admin-input"
@@ -260,9 +279,15 @@ export function PromotionsListRoute() {
             setPage(1)
           }}
         >
-          <option value="all">Все статусы</option>
-          <option value="active">Включённые</option>
-          <option value="inactive">Выключенные</option>
+          <option value="all">
+            {t('admin.promotions.filterStatusAny')}
+          </option>
+          <option value="active">
+            {t('admin.promotions.filterStatusActive')}
+          </option>
+          <option value="inactive">
+            {t('admin.promotions.filterStatusInactive')}
+          </option>
         </select>
         <MotionPress
           variant="primary"
@@ -270,13 +295,13 @@ export function PromotionsListRoute() {
             navigate(getAdminPanelRoute('/promotions/new'))
           }
         >
-          Создать промо
+          {t('admin.promotions.create')}
         </MotionPress>
       </div>
       <DataTable
         columns={columns}
         rows={rows}
-        emptyHint="Нет записей"
+        emptyHint={t('admin.promotions.empty')}
       />
       <div className="admin-pagination">
         <MotionPress
@@ -287,7 +312,11 @@ export function PromotionsListRoute() {
           {t('admin.common.prev', 'Назад')}
         </MotionPress>
         <span>
-          {page} / {totalPages} · всего {total}
+          {t('admin.promotions.paginationTotal', {
+            page,
+            totalPages,
+            total,
+          })}
         </span>
         <MotionPress
           variant="ghost"

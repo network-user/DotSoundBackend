@@ -11,7 +11,7 @@ from fastapi import (
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.rate_limit import limiter
-from app.dependencies import get_db, require_admin_session
+from app.dependencies import get_db, require_capability
 from app.models.user import User
 from app.repositories.admin_action_log import AdminActionLogRepository
 from app.schemas.promotion import (
@@ -48,7 +48,7 @@ async def list_promotions(
     is_active: bool | None = Query(None),
     surface: str | None = Query(None, max_length=16),
     session: AsyncSession = Depends(get_db),
-    _admin: User = Depends(require_admin_session),
+    _admin: User = Depends(require_capability("promotions.manage")),
 ) -> PromotionAdminListResponse:
     svc = PromotionService(session)
     items, total = await svc.list_for_admin(
@@ -76,7 +76,7 @@ async def get_promotion(
     request: Request,
     promotion_id: int,
     session: AsyncSession = Depends(get_db),
-    _admin: User = Depends(require_admin_session),
+    _admin: User = Depends(require_capability("promotions.manage")),
 ) -> PromotionAdminDetail:
     svc = PromotionService(session)
     detail = await svc.get_for_admin(promotion_id)
@@ -99,7 +99,7 @@ async def create_promotion(
     request: Request,
     body: PromotionCreateRequest,
     session: AsyncSession = Depends(get_db),
-    admin: User = Depends(require_admin_session),
+    admin: User = Depends(require_capability("promotions.manage")),
 ) -> PromotionAdminDetail:
     svc = PromotionService(session)
     try:
@@ -153,7 +153,7 @@ async def patch_promotion(
     promotion_id: int,
     body: PromotionPatchRequest,
     session: AsyncSession = Depends(get_db),
-    admin: User = Depends(require_admin_session),
+    admin: User = Depends(require_capability("promotions.manage")),
 ) -> PromotionAdminDetail:
     svc = PromotionService(session)
     promotion = await svc.get_raw(promotion_id)
@@ -212,7 +212,7 @@ async def delete_promotion(
     request: Request,
     promotion_id: int,
     session: AsyncSession = Depends(get_db),
-    admin: User = Depends(require_admin_session),
+    admin: User = Depends(require_capability("promotions.manage")),
 ) -> None:
     svc = PromotionService(session)
     promotion = await svc.get_raw(promotion_id)
@@ -243,7 +243,7 @@ async def get_promotion_stats(
     promotion_id: int,
     period_days: int = Query(30, ge=1, le=365),
     session: AsyncSession = Depends(get_db),
-    _admin: User = Depends(require_admin_session),
+    _admin: User = Depends(require_capability("promotions.manage")),
 ) -> PromotionStatsResponse:
     svc = PromotionService(session)
     stats = await svc.get_stats(promotion_id, period_days=period_days)

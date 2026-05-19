@@ -1,5 +1,26 @@
 # DotSound - TODO Tracker
 
+- [x] **Promotions polish: i18n, CSS, dedicated capability, period selector, impression dedup (2026-05-19)**
+  - i18n: `admin.promotions.*` block в `locales/{ru,en}.json`, ключи
+    `promotion.kicker`/`promotion.sectionTitle` и `redesign.home.sectionPromoted`/`search.pinnedPromotions`
+    в `i18n_extra*` — захардкоженные RU-строки убраны из всех promotion-компонентов.
+  - CSS: новый `frontend/src/styles/promotion.css` с классами
+    `.promotion-hero*`, `.promotion-section*`, `.promotion-card*`;
+    `PromotionHero/PromotionSection` переписаны без inline-стилей.
+  - Capability: добавлен `promotions.manage` в `KNOWN_CAPABILITIES`
+    (`admin_manifest_service.py`), admin-endpoints и пункт меню
+    переключены с `tracks.manage` на новый capability.
+    **Действие операторам:** существующим админам выдать capability
+    через `users.grant_capability` (новый capability получают
+    автоматически только при первом init админа через
+    `grant_all_known_if_empty`).
+  - Period selector: в `PromotionDetailRoute.tsx` добавлены
+    переключатели 7/30/90 дней для статистики, query-key включает
+    период.
+  - Impression dedup: `PromotionHero`/`PromotionSection` используют
+    `sessionStorage` (`dotsound.promo.imp.{surface}.{id}`), чтобы не
+    пинговать impression повторно в рамках одной сессии.
+
 - [x] **Editorial promotions: hero, section, search-pin + admin panel (2026-05-19)**
   - DB: alembic `0113_add_promotions.py` adds `promotions` (entity_type ∈
     {artist, track, playlist, album}, surfaces JSON, start/end window,

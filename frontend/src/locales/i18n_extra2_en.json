@@ -62,6 +62,7 @@
       "quickLess": "Show fewer",
       "sectionGenreMixes": "Genre mixes",
       "sectionSubscriptions": "Following",
+      "sectionPromoted": "Featured",
       "sectionContinue": "Continue",
       "sectionRecent": "Recently played",
       "sectionTracks": "Tracks",
@@ -1116,5 +1117,9 @@
   },
   "artist": {
     "follow_failed": "Couldn't update follow"
+  },
+  "promotion": {
+    "kicker": "Featured",
+    "sectionTitle": "Featured"
   }
 }

@@ -1,6 +1,8 @@
 import { useEffect, useRef } from 'react'
+import { useTranslation } from 'react-i18next'
 import { api } from '@/lib/api'
 import type { PromotionPublic, PromotionSurface } from '@/types/api'
+import '@/styles/promotion.css'
 
 interface Props {
   items: PromotionPublic[]
@@ -9,15 +11,55 @@ interface Props {
   onSelect: (item: PromotionPublic) => void
 }
 
+function impressionKey(
+  promotionId: number,
+  surface: PromotionSurface,
+): string {
+  return `dotsound.promo.imp.${surface}.${promotionId}`
+}
+
+function alreadySent(
+  promotionId: number,
+  surface: PromotionSurface,
+): boolean {
+  try {
+    return (
+      window.sessionStorage.getItem(impressionKey(promotionId, surface)) !==
+      null
+    )
+  } catch {
+    return false
+  }
+}
+
+function markSent(
+  promotionId: number,
+  surface: PromotionSurface,
+): void {
+  try {
+    window.sessionStorage.setItem(
+      impressionKey(promotionId, surface),
+      String(Date.now()),
+    )
+  } catch {
+    // sessionStorage unavailable — extra impressions tolerated.
+  }
+}
+
 function usePromotionImpressionTracking(
   promotionIds: number[],
   surface: PromotionSurface,
 ) {
-  const sentRef = useRef<Set<number>>(new Set())
+  const localSentRef = useRef<Set<number>>(new Set())
   useEffect(() => {
     for (const id of promotionIds) {
-      if (sentRef.current.has(id)) continue
-      sentRef.current.add(id)
+      if (localSentRef.current.has(id)) continue
+      if (alreadySent(id, surface)) {
+        localSentRef.current.add(id)
+        continue
+      }
+      localSentRef.current.add(id)
+      markSent(id, surface)
       void api
         .recordPromotionEvent(id, {
           event_type: 'impression',
@@ -30,10 +72,11 @@ function usePromotionImpressionTracking(
 
 export function PromotionSection({
   items,
-  title = 'Рекомендуем',
+  title,
   surface = 'section',
   onSelect,
 }: Props) {
+  const { t } = useTranslation()
   const ids = items.map((i) => i.id)
   usePromotionImpressionTracking(ids, surface)
 
@@ -49,95 +92,30 @@ export function PromotionSection({
     onSelect(item)
   }
 
+  const headingText = title ?? t('promotion.sectionTitle', 'Рекомендуем')
+
   return (
     <div className="promotion-section">
-      <div
-        style={{
-          display: 'flex',
-          alignItems: 'baseline',
-          justifyContent: 'space-between',
-          padding: '8px 4px',
-        }}
-      >
-        <span
-          style={{
-            fontSize: 15,
-            fontWeight: 600,
-          }}
-        >
-          {title}
-        </span>
+      <div className="promotion-section__header">
+        <span className="promotion-section__title">{headingText}</span>
       </div>
-      <div
-        style={{
-          display: 'flex',
-          gap: 12,
-          overflowX: 'auto',
-          paddingBottom: 8,
-        }}
-      >
+      <div className="promotion-section__row">
         {items.map((item) => (
           <button
             key={item.id}
             type="button"
+            className="promotion-card"
             onClick={() => handleClick(item)}
-            style={{
-              flex: '0 0 auto',
-              width: 168,
-              border: 0,
-              padding: 0,
-              background: 'transparent',
-              textAlign: 'left',
-              cursor: 'pointer',
-            }}
             aria-label={item.title}
           >
-            <div
-              style={{
-                width: '100%',
-                aspectRatio: '1 / 1',
-                borderRadius: 10,
-                overflow: 'hidden',
-                background: 'rgba(0,0,0,0.05)',
-              }}
-            >
+            <div className="promotion-card__cover">
               {item.cover_url && (
-                <img
-                  src={item.cover_url}
-                  alt=""
-                  loading="lazy"
-                  style={{
-                    width: '100%',
-                    height: '100%',
-                    objectFit: 'cover',
-                  }}
-                />
+                <img src={item.cover_url} alt="" loading="lazy" />
               )}
             </div>
-            <div
-              style={{
-                marginTop: 6,
-                fontSize: 13,
-                fontWeight: 500,
-                overflow: 'hidden',
-                textOverflow: 'ellipsis',
-                whiteSpace: 'nowrap',
-              }}
-            >
-              {item.title}
-            </div>
+            <div className="promotion-card__title">{item.title}</div>
             {item.subtitle && (
-              <div
-                style={{
-                  fontSize: 11,
-                  opacity: 0.7,
-                  overflow: 'hidden',
-                  textOverflow: 'ellipsis',
-                  whiteSpace: 'nowrap',
-                }}
-              >
-                {item.subtitle}
-              </div>
+              <div className="promotion-card__subtitle">{item.subtitle}</div>
             )}
           </button>
         ))}

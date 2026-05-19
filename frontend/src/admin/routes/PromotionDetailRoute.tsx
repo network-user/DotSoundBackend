@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
+import { useTranslation } from 'react-i18next'
 import { useNavigate, useParams } from 'react-router-dom'
 import {
   useMutation,
@@ -13,20 +14,23 @@ import { StatusPill } from '../components/widgets/StatusPill'
 
 type EntityType = 'artist' | 'track' | 'playlist' | 'album'
 type Surface = 'hero' | 'section' | 'in_feed' | 'search_pin'
+type StatsPeriod = 7 | 30 | 90
 
-const SURFACE_OPTIONS: Array<{ value: Surface; label: string }> = [
-  { value: 'hero', label: 'Hero (баннер)' },
-  { value: 'section', label: 'Секция (карусель)' },
-  { value: 'in_feed', label: 'В ленте' },
-  { value: 'search_pin', label: 'Поиск (закреп)' },
+const SURFACE_VALUES: Surface[] = [
+  'hero',
+  'section',
+  'in_feed',
+  'search_pin',
 ]
 
-const ENTITY_OPTIONS: Array<{ value: EntityType; label: string }> = [
-  { value: 'artist', label: 'Артист' },
-  { value: 'track', label: 'Трек' },
-  { value: 'playlist', label: 'Плейлист' },
-  { value: 'album', label: 'Альбом' },
+const ENTITY_VALUES: EntityType[] = [
+  'artist',
+  'track',
+  'playlist',
+  'album',
 ]
+
+const STATS_PERIODS: StatsPeriod[] = [7, 30, 90]
 
 function toLocalInputValue(iso: string | null): string {
   if (!iso) return ''
@@ -51,6 +55,7 @@ function fromLocalInputValue(local: string): string | null {
 }
 
 export function PromotionDetailRoute() {
+  const { t } = useTranslation()
   const navigate = useNavigate()
   const { promotionId: rawId } = useParams()
   const isNew = rawId === 'new'
@@ -71,6 +76,7 @@ export function PromotionDetailRoute() {
   const [subtitleOverride, setSubtitleOverride] = useState<string>('')
   const [ctaOverride, setCtaOverride] = useState<string>('')
   const [coverOverride, setCoverOverride] = useState<string>('')
+  const [statsPeriod, setStatsPeriod] = useState<StatsPeriod>(30)
 
   const detailQuery = useQuery({
     queryKey: ['admin', 'promotion', promotionId],
@@ -83,10 +89,10 @@ export function PromotionDetailRoute() {
   })
 
   const statsQuery = useQuery({
-    queryKey: ['admin', 'promotion-stats', promotionId],
+    queryKey: ['admin', 'promotion-stats', promotionId, statsPeriod],
     queryFn: () =>
       promotionId !== null
-        ? adminApi.getAdminPromotionStats(promotionId, 30)
+        ? adminApi.getAdminPromotionStats(promotionId, statsPeriod)
         : null,
     enabled:
       !isNew && Number.isFinite(promotionId) && (promotionId ?? 0) > 0,
@@ -130,9 +136,10 @@ export function PromotionDetailRoute() {
       )
     },
     onError: (err: Error) => {
-      void showAlert(err.message || 'Не удалось создать запись', {
-        title: 'Ошибка создания',
-      })
+      void showAlert(
+        err.message || t('admin.promotions.errorCreateBody'),
+        { title: t('admin.promotions.errorCreateTitle') },
+      )
     },
   })
 
@@ -156,9 +163,10 @@ export function PromotionDetailRoute() {
       void qc.invalidateQueries({ queryKey: ['admin', 'promotions'] })
     },
     onError: (err: Error) => {
-      void showAlert(err.message || 'Не удалось сохранить запись', {
-        title: 'Ошибка сохранения',
-      })
+      void showAlert(
+        err.message || t('admin.promotions.errorSaveBody'),
+        { title: t('admin.promotions.errorSaveTitle') },
+      )
     },
   })
 
@@ -182,19 +190,36 @@ export function PromotionDetailRoute() {
 
   const isReady = useMemo(() => {
     const eid = Number.parseInt(entityId, 10)
-    return (
-      Number.isFinite(eid) &&
-      eid > 0 &&
-      surfaces.size > 0
-    )
+    return Number.isFinite(eid) && eid > 0 && surfaces.size > 0
   }, [entityId, surfaces])
+
+  const periodLabel = (p: StatsPeriod): string => {
+    if (p === 7) return t('admin.promotions.statsPeriod7')
+    if (p === 90) return t('admin.promotions.statsPeriod90')
+    return t('admin.promotions.statsPeriod30')
+  }
+
+  const entityName = (e: EntityType): string =>
+    t(`admin.promotions.entity${e.charAt(0).toUpperCase()}${e.slice(1)}`)
+
+  const surfaceName = (s: Surface): string => {
+    const key =
+      s === 'in_feed'
+        ? 'surfaceInFeedFull'
+        : s === 'search_pin'
+          ? 'surfaceSearchPinFull'
+          : s === 'hero'
+            ? 'surfaceHeroFull'
+            : 'surfaceSectionFull'
+    return t(`admin.promotions.${key}`)
+  }
 
   return (
     <section className="admin-card" style={{ maxWidth: 720 }}>
       <h1>
         {isNew
-          ? 'Новая запись продвижения'
-          : `Запись #${promotionId}`}
+          ? t('admin.promotions.newTitle')
+          : t('admin.promotions.editTitle', { id: promotionId })}
       </h1>
 
       {!isNew && detailQuery.data && (
@@ -215,33 +240,35 @@ export function PromotionDetailRoute() {
                   : 'error'
             }
           >
-            {detailQuery.data.availability === 'available'
-              ? 'Сущность доступна'
-              : detailQuery.data.availability === 'hidden'
-                ? 'Сущность скрыта — в выдаче не появится'
-                : 'Сущность удалена — в выдаче не появится'}
+            {t(
+              `admin.promotions.availability${detailQuery.data.availability.charAt(0).toUpperCase()}${detailQuery.data.availability.slice(1)}Note`,
+            )}
           </StatusPill>
         </div>
       )}
 
       <div className="admin-form-group">
-        <label className="admin-label">Тип сущности *</label>
+        <label className="admin-label">
+          {t('admin.promotions.fieldEntityType')}
+        </label>
         <select
           className="admin-input"
           value={entityType}
           onChange={(e) => setEntityType(e.target.value as EntityType)}
           disabled={!isNew}
         >
-          {ENTITY_OPTIONS.map((o) => (
-            <option key={o.value} value={o.value}>
-              {o.label}
+          {ENTITY_VALUES.map((v) => (
+            <option key={v} value={v}>
+              {entityName(v)}
             </option>
           ))}
         </select>
       </div>
 
       <div className="admin-form-group">
-        <label className="admin-label">ID сущности *</label>
+        <label className="admin-label">
+          {t('admin.promotions.fieldEntityId')}
+        </label>
         <input
           className="admin-input"
           type="number"
@@ -263,11 +290,13 @@ export function PromotionDetailRoute() {
       </div>
 
       <div className="admin-form-group">
-        <label className="admin-label">Поверхности *</label>
+        <label className="admin-label">
+          {t('admin.promotions.fieldSurfaces')}
+        </label>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-          {SURFACE_OPTIONS.map((o) => (
+          {SURFACE_VALUES.map((s) => (
             <label
-              key={o.value}
+              key={s}
               style={{
                 display: 'flex',
                 alignItems: 'center',
@@ -278,17 +307,19 @@ export function PromotionDetailRoute() {
             >
               <input
                 type="checkbox"
-                checked={surfaces.has(o.value)}
-                onChange={() => toggleSurface(o.value)}
+                checked={surfaces.has(s)}
+                onChange={() => toggleSurface(s)}
               />
-              {o.label}
+              {surfaceName(s)}
             </label>
           ))}
         </div>
       </div>
 
       <div className="admin-form-group">
-        <label className="admin-label">Приоритет</label>
+        <label className="admin-label">
+          {t('admin.promotions.fieldPriority')}
+        </label>
         <input
           className="admin-input"
           type="number"
@@ -302,7 +333,7 @@ export function PromotionDetailRoute() {
             marginTop: 4,
           }}
         >
-          Больше число — выше в выдаче. Допустимо: −1000…1000.
+          {t('admin.promotions.fieldPriorityHint')}
         </p>
       </div>
 
@@ -314,7 +345,9 @@ export function PromotionDetailRoute() {
         }}
       >
         <div className="admin-form-group">
-          <label className="admin-label">Старт</label>
+          <label className="admin-label">
+            {t('admin.promotions.fieldStarts')}
+          </label>
           <input
             className="admin-input"
             type="datetime-local"
@@ -323,7 +356,9 @@ export function PromotionDetailRoute() {
           />
         </div>
         <div className="admin-form-group">
-          <label className="admin-label">Окончание</label>
+          <label className="admin-label">
+            {t('admin.promotions.fieldEnds')}
+          </label>
           <input
             className="admin-input"
             type="datetime-local"
@@ -348,11 +383,13 @@ export function PromotionDetailRoute() {
             checked={isActive}
             onChange={(e) => setIsActive(e.target.checked)}
           />
-          Включено
+          {t('admin.promotions.fieldActive')}
         </label>
       </div>
 
-      <h2 style={{ marginTop: 24 }}>Переопределения карточки</h2>
+      <h2 style={{ marginTop: 24 }}>
+        {t('admin.promotions.overridesTitle')}
+      </h2>
       <p
         style={{
           color: 'var(--admin-text-muted)',
@@ -360,11 +397,13 @@ export function PromotionDetailRoute() {
           marginBottom: 12,
         }}
       >
-        Пусто — берём значения из самой сущности.
+        {t('admin.promotions.overridesHint')}
       </p>
 
       <div className="admin-form-group">
-        <label className="admin-label">Заголовок</label>
+        <label className="admin-label">
+          {t('admin.promotions.fieldTitleOverride')}
+        </label>
         <input
           className="admin-input"
           value={titleOverride}
@@ -373,7 +412,9 @@ export function PromotionDetailRoute() {
         />
       </div>
       <div className="admin-form-group">
-        <label className="admin-label">Подзаголовок</label>
+        <label className="admin-label">
+          {t('admin.promotions.fieldSubtitleOverride')}
+        </label>
         <input
           className="admin-input"
           value={subtitleOverride}
@@ -382,7 +423,9 @@ export function PromotionDetailRoute() {
         />
       </div>
       <div className="admin-form-group">
-        <label className="admin-label">Текст CTA-кнопки</label>
+        <label className="admin-label">
+          {t('admin.promotions.fieldCtaOverride')}
+        </label>
         <input
           className="admin-input"
           value={ctaOverride}
@@ -391,7 +434,9 @@ export function PromotionDetailRoute() {
         />
       </div>
       <div className="admin-form-group">
-        <label className="admin-label">URL обложки</label>
+        <label className="admin-label">
+          {t('admin.promotions.fieldCoverOverride')}
+        </label>
         <input
           className="admin-input"
           value={coverOverride}
@@ -400,41 +445,79 @@ export function PromotionDetailRoute() {
         />
       </div>
 
-      {!isNew && statsQuery.data && (
+      {!isNew && (
         <>
-          <h2 style={{ marginTop: 24 }}>Метрики (30 дней)</h2>
-          <div
+          <h2
             style={{
-              display: 'grid',
-              gridTemplateColumns: 'repeat(4, 1fr)',
+              marginTop: 24,
+              display: 'flex',
+              alignItems: 'baseline',
               gap: 12,
             }}
           >
-            <div className="admin-stat">
-              <div style={{ fontSize: 12 }}>Показы</div>
-              <div style={{ fontSize: 22 }}>
-                {statsQuery.data.impressions}
+            <span>
+              {t('admin.promotions.statsTitle', { days: statsPeriod })}
+            </span>
+            <span
+              style={{
+                display: 'inline-flex',
+                gap: 4,
+                marginLeft: 'auto',
+              }}
+            >
+              {STATS_PERIODS.map((p) => (
+                <MotionPress
+                  key={p}
+                  variant={p === statsPeriod ? 'primary' : 'ghost'}
+                  onClick={() => setStatsPeriod(p)}
+                >
+                  {periodLabel(p)}
+                </MotionPress>
+              ))}
+            </span>
+          </h2>
+          {statsQuery.data && (
+            <div
+              style={{
+                display: 'grid',
+                gridTemplateColumns: 'repeat(4, 1fr)',
+                gap: 12,
+              }}
+            >
+              <div className="admin-stat">
+                <div style={{ fontSize: 12 }}>
+                  {t('admin.promotions.statsImpressions')}
+                </div>
+                <div style={{ fontSize: 22 }}>
+                  {statsQuery.data.impressions}
+                </div>
+              </div>
+              <div className="admin-stat">
+                <div style={{ fontSize: 12 }}>
+                  {t('admin.promotions.statsClicks')}
+                </div>
+                <div style={{ fontSize: 22 }}>
+                  {statsQuery.data.clicks}
+                </div>
+              </div>
+              <div className="admin-stat">
+                <div style={{ fontSize: 12 }}>
+                  {t('admin.promotions.statsPlays')}
+                </div>
+                <div style={{ fontSize: 22 }}>
+                  {statsQuery.data.plays}
+                </div>
+              </div>
+              <div className="admin-stat">
+                <div style={{ fontSize: 12 }}>
+                  {t('admin.promotions.statsCtr')}
+                </div>
+                <div style={{ fontSize: 22 }}>
+                  {(statsQuery.data.ctr * 100).toFixed(2)}%
+                </div>
               </div>
             </div>
-            <div className="admin-stat">
-              <div style={{ fontSize: 12 }}>Клики</div>
-              <div style={{ fontSize: 22 }}>
-                {statsQuery.data.clicks}
-              </div>
-            </div>
-            <div className="admin-stat">
-              <div style={{ fontSize: 12 }}>Плеи</div>
-              <div style={{ fontSize: 22 }}>
-                {statsQuery.data.plays}
-              </div>
-            </div>
-            <div className="admin-stat">
-              <div style={{ fontSize: 12 }}>CTR</div>
-              <div style={{ fontSize: 22 }}>
-                {(statsQuery.data.ctr * 100).toFixed(2)}%
-              </div>
-            </div>
-          </div>
+          )}
         </>
       )}
 
@@ -452,7 +535,9 @@ export function PromotionDetailRoute() {
             disabled={!isReady || createMutation.isPending}
             onClick={() => createMutation.mutate()}
           >
-            {createMutation.isPending ? 'Создание...' : 'Создать'}
+            {createMutation.isPending
+              ? t('admin.promotions.btnCreating')
+              : t('admin.promotions.btnCreate')}
           </MotionPress>
         ) : (
           <MotionPress
@@ -460,28 +545,33 @@ export function PromotionDetailRoute() {
             disabled={!isReady || patchMutation.isPending}
             onClick={() => patchMutation.mutate()}
           >
-            {patchMutation.isPending ? 'Сохранение...' : 'Сохранить'}
+            {patchMutation.isPending
+              ? t('admin.promotions.btnSaving')
+              : t('admin.promotions.btnSave')}
           </MotionPress>
         )}
         <MotionPress
           variant="ghost"
           onClick={() => navigate(getAdminPanelRoute('/promotions'))}
         >
-          Назад
+          {t('admin.promotions.btnBack')}
         </MotionPress>
         {!isNew && (
           <MotionPress
             variant="danger"
             disabled={deleteMutation.isPending}
             onClick={async () => {
-              const ok = await showConfirm('Действие необратимо.', {
-                title: 'Удалить запись?',
-                danger: true,
-              })
+              const ok = await showConfirm(
+                t('admin.promotions.confirmDeleteBody'),
+                {
+                  title: t('admin.promotions.confirmDeleteTitle'),
+                  danger: true,
+                },
+              )
               if (ok) deleteMutation.mutate()
             }}
           >
-            Удалить
+            {t('admin.promotions.btnDelete')}
           </MotionPress>
         )}
       </div>
