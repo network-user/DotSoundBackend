@@ -242,7 +242,7 @@ def _filter_menu(caps: set[str], locale: str) -> list[dict]:
             "id": "promotions",
             "label": labels["menu.promotions"],
             "route": f"{base}/promotions",
-            "capability": "promotions.manage",
+            "capability": "tracks.manage",
             "icon": "sparkle",
         },
         {

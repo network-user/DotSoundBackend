@@ -1,5 +1,16 @@
 # DotSound - TODO Tracker
 
+- [x] **Promotions: revert capability gating to tracks.manage (2026-05-19)**
+  - Menu pin и API gating (`app/api/v1/admin/promotions.py`,
+    `app/services/admin_manifest_service.py`) откатил на
+    `tracks.manage`, потому что существующим init-админам новый
+    `promotions.manage` автоматически не выдаётся, и вкладка не
+    появлялась после автодеплоя.
+  - `promotions.manage` оставлен в `KNOWN_CAPABILITIES` как
+    зарезервированный — будущая миграция должна выдать его всем
+    init-админам (через UPDATE/INSERT в `admin_capabilities`),
+    после чего можно вернуть строгий gating.
+
 - [x] **Promotions polish: i18n, CSS, dedicated capability, period selector, impression dedup (2026-05-19)**
   - i18n: `admin.promotions.*` block в `locales/{ru,en}.json`, ключи
     `promotion.kicker`/`promotion.sectionTitle` и `redesign.home.sectionPromoted`/`search.pinnedPromotions`
