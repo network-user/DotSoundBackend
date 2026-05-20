@@ -8,6 +8,12 @@
     user-visible reason via the existing island notification plus inline edit
     panel status. Backend transcode failures distinguish transcode errors from
     internal worker errors through `video_processing_status`.
+  - Track card video uploads now show an always-visible animated
+    upload/processing/error banner over the media area, with accessible
+    status/alert semantics and reduced-motion fallback.
+  - The client now rejects empty files and unsupported formats before upload,
+    showing the exact reason inline and through the existing notification
+    surface.
   - Video deletion clears processing and thumbnail state together with
     `video_key`.
   - Follow-up: video transcode tasks now carry a short processing token, and
@@ -18,10 +24,11 @@
     upload/storage semantics.
   - Verification: `npm run build`; `poetry run pytest
     tests/app/api/v1/tracks/test_user.py::test_upload_video_success
-    tests/app/api/v1/tracks/test_user.py::test_delete_video_success`;
+    tests/app/api/v1/tracks/test_user.py::test_delete_video_success
+    tests/app/services/test_video_transcoding.py`;
     `poetry run ruff check app/api/v1/tracks/user.py
-    app/services/video_transcoding.py tests/app/api/v1/tracks/test_user.py`;
-    `poetry run pytest tests/app/services/test_video_transcoding.py`.
+    app/services/video_transcoding.py tests/app/api/v1/tracks/test_user.py
+    tests/app/services/test_video_transcoding.py`.
 
 - [x] **ASR worker external audio materialization (2026-05-20)**
   - Internal ASR audio endpoint now handles external progressive audio in

@@ -74,6 +74,7 @@ import {
 const TCS_DRAG_CLOSE_THRESHOLD = 100
 
 const SPEED_OPTIONS = [0.75, 1, 1.25, 1.5]
+const VIDEO_UPLOAD_MIMES = new Set(['video/mp4', 'video/webm'])
 
 function hasPipSupport(): boolean {
   try {
@@ -95,6 +96,14 @@ function isVideoProcessingStatus(
   status?: string | null,
 ): boolean {
   return status?.startsWith('processing') ?? false
+}
+
+function isSupportedVideoFile(file: File): boolean {
+  if (file.type && VIDEO_UPLOAD_MIMES.has(file.type)) {
+    return true
+  }
+  const name = file.name.toLowerCase()
+  return name.endsWith('.mp4') || name.endsWith('.webm')
 }
 
 interface Props {
@@ -260,6 +269,8 @@ export function TrackCardSheet({
     useState<string | null>(null)
   const [videoStatusKind, setVideoStatusKind] =
     useState<'info' | 'error'>('info')
+  const [videoStatusPhase, setVideoStatusPhase] =
+    useState<'idle' | 'uploading' | 'processing' | 'error'>('idle')
   const videoEnabled =
     localStorage.getItem('setting-video-enabled') !== 'false'
 
@@ -318,6 +329,7 @@ export function TrackCardSheet({
               setVideoBusy(false)
               setVideoReady(false)
               setVideoStatusKind('info')
+              setVideoStatusPhase('idle')
               setVideoStatusMessage(null)
               showIsland({
                 kind: 'toast',
@@ -329,6 +341,7 @@ export function TrackCardSheet({
             if (failureMessage) {
               setVideoBusy(false)
               setVideoStatusKind('error')
+              setVideoStatusPhase('error')
               setVideoStatusMessage(failureMessage)
               showIsland({
                 kind: 'error',
@@ -340,6 +353,7 @@ export function TrackCardSheet({
             if (attempt < 45) {
               setVideoBusy(true)
               setVideoStatusKind('info')
+              setVideoStatusPhase('processing')
               setVideoStatusMessage(
                 t('trackSheet.videoProcessing'),
               )
@@ -351,6 +365,7 @@ export function TrackCardSheet({
             )
             setVideoBusy(false)
             setVideoStatusKind('error')
+            setVideoStatusPhase('error')
             setVideoStatusMessage(timeoutMessage)
             showIsland({
               kind: 'error',
@@ -368,6 +383,7 @@ export function TrackCardSheet({
             )
             setVideoBusy(false)
             setVideoStatusKind('error')
+            setVideoStatusPhase('error')
             setVideoStatusMessage(message)
             showIsland({
               kind: 'error',
@@ -390,6 +406,7 @@ export function TrackCardSheet({
     videoPlaybackErrorShownRef.current = false
     setVideoReady(true)
     setVideoStatusKind('info')
+    setVideoStatusPhase('idle')
     setVideoStatusMessage(null)
   }, [])
 
@@ -401,6 +418,7 @@ export function TrackCardSheet({
     videoPlaybackErrorShownRef.current = true
     const message = t('trackSheet.videoPlaybackFailed')
     setVideoStatusKind('error')
+    setVideoStatusPhase('error')
     setVideoStatusMessage(message)
     showIsland({
       kind: 'error',
@@ -494,6 +512,7 @@ export function TrackCardSheet({
       setVideoReady(false)
       setVideoBusy(false)
       setVideoStatusKind('info')
+      setVideoStatusPhase('idle')
       setVideoStatusMessage(null)
       videoPlaybackErrorShownRef.current = false
       clearVideoPoll()
@@ -525,6 +544,7 @@ export function TrackCardSheet({
     ) {
       setVideoBusy(true)
       setVideoStatusKind('info')
+      setVideoStatusPhase('processing')
       setVideoStatusMessage(
         t('trackSheet.videoProcessing'),
       )
@@ -532,10 +552,12 @@ export function TrackCardSheet({
     } else if (currentVideoFailure) {
       setVideoBusy(false)
       setVideoStatusKind('error')
+      setVideoStatusPhase('error')
       setVideoStatusMessage(currentVideoFailure)
     } else {
       setVideoBusy(false)
       setVideoStatusKind('info')
+      setVideoStatusPhase('idle')
       setVideoStatusMessage(null)
     }
     setLoading(true)
@@ -1053,11 +1075,40 @@ export function TrackCardSheet({
     ) => {
       const file = e.target.files?.[0]
       if (!file || !track) return
+      if (!isSupportedVideoFile(file)) {
+        const message = t('trackSheet.videoFormatUnsupported')
+        setVideoBusy(false)
+        setVideoStatusKind('error')
+        setVideoStatusPhase('error')
+        setVideoStatusMessage(message)
+        showIsland({
+          kind: 'error',
+          title: message,
+          durationMs: 4500,
+        })
+        e.target.value = ''
+        return
+      }
+      if (file.size <= 0) {
+        const message = t('trackSheet.videoEmptyFile')
+        setVideoBusy(false)
+        setVideoStatusKind('error')
+        setVideoStatusPhase('error')
+        setVideoStatusMessage(message)
+        showIsland({
+          kind: 'error',
+          title: message,
+          durationMs: 4500,
+        })
+        e.target.value = ''
+        return
+      }
       clearVideoPoll()
       setVideoBusy(true)
       setVideoStatusKind('info')
+      setVideoStatusPhase('uploading')
       setVideoStatusMessage(
-        t('trackSheet.videoProcessing'),
+        t('trackSheet.videoUploading'),
       )
       try {
         const fd = new FormData()
@@ -1076,8 +1127,13 @@ export function TrackCardSheet({
         if (updated.video_key) {
           setVideoBusy(false)
           setVideoStatusKind('info')
+          setVideoStatusPhase('idle')
           setVideoStatusMessage(null)
         } else {
+          setVideoStatusPhase('processing')
+          setVideoStatusMessage(
+            t('trackSheet.videoProcessing'),
+          )
           pollVideoProcessing(track.id)
         }
       } catch (err) {
@@ -1087,6 +1143,7 @@ export function TrackCardSheet({
         )
         setVideoBusy(false)
         setVideoStatusKind('error')
+        setVideoStatusPhase('error')
         setVideoStatusMessage(message)
         showIsland({
           kind: 'error',
@@ -1121,6 +1178,7 @@ export function TrackCardSheet({
       setVideoReady(false)
       setVideoBusy(false)
       setVideoStatusKind('info')
+      setVideoStatusPhase('idle')
       setVideoStatusMessage(null)
     } catch (err) {
       const message = getApiErrorMessage(
@@ -1128,6 +1186,7 @@ export function TrackCardSheet({
         t('trackSheet.videoDeleteFailed'),
       )
       setVideoStatusKind('error')
+      setVideoStatusPhase('error')
       setVideoStatusMessage(message)
       showIsland({
         kind: 'error',
@@ -1327,6 +1386,10 @@ export function TrackCardSheet({
   const videoProcessing =
     videoBusy ||
     isVideoProcessingStatus(track.video_processing_status)
+  const videoStatusIsBusy =
+    videoStatusPhase === 'uploading' ||
+    videoStatusPhase === 'processing' ||
+    (videoProcessing && videoStatusKind !== 'error')
   const mappedVideoFailure = getVideoFailureMessage(
     track.video_processing_status,
   )
@@ -1338,6 +1401,25 @@ export function TrackCardSheet({
   const videoStatusIsError =
     videoStatusKind === 'error' ||
     mappedVideoFailure != null
+  const videoStatusIconName = videoStatusIsError
+    ? 'alert-triangle'
+    : videoStatusIsBusy
+      ? 'clock'
+      : 'video'
+  const videoFeedbackClassName = [
+    'tcs-video-feedback',
+    videoStatusIsError ? 'is-error' : '',
+    videoStatusIsBusy ? 'is-busy' : '',
+  ]
+    .filter(Boolean)
+    .join(' ')
+  const videoEditStatusClassName = [
+    'tcs-video-status',
+    videoStatusIsError ? 'is-error' : '',
+    videoStatusIsBusy ? 'is-busy' : '',
+  ]
+    .filter(Boolean)
+    .join(' ')
   const visualMode =
     showLyrics || hasActiveVideo
   const perfLite =
@@ -1406,6 +1488,25 @@ export function TrackCardSheet({
           key={track.id}
           className="tcs-track-content"
         >
+        {videoStatusText && (
+          <div
+            className={videoFeedbackClassName}
+            role={videoStatusIsError ? 'alert' : 'status'}
+            aria-live={videoStatusIsError ? 'assertive' : 'polite'}
+          >
+            <Icon
+              name={videoStatusIconName}
+              size={18}
+            />
+            <span>{videoStatusText}</span>
+            {videoStatusIsBusy && (
+              <span
+                className="tcs-video-feedback-meter"
+                aria-hidden="true"
+              />
+            )}
+          </div>
+        )}
         {hasActiveVideo && (
           <>
             <video
@@ -2412,17 +2513,21 @@ export function TrackCardSheet({
             </div>
             {videoStatusText && (
               <div
-                className={`tcs-video-status${videoStatusIsError ? ' is-error' : ''}`}
+                className={videoEditStatusClassName}
+                role={videoStatusIsError ? 'alert' : 'status'}
+                aria-live={videoStatusIsError ? 'assertive' : 'polite'}
               >
                 <Icon
-                  name={
-                    videoStatusIsError
-                      ? 'alert-triangle'
-                      : 'clock'
-                  }
+                  name={videoStatusIconName}
                   size={16}
                 />
                 <span>{videoStatusText}</span>
+                {videoStatusIsBusy && (
+                  <span
+                    className="tcs-video-status-meter"
+                    aria-hidden="true"
+                  />
+                )}
               </div>
             )}
           </div>
