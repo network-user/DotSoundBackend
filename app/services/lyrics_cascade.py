@@ -2,7 +2,8 @@
 
 Single authority on tier transitions. Three callers:
 - `LyricsService.trigger_auto_generation` for the initial dispatch
-- `/api/v1/internal/audio-compute/jobs/{id}/fail` after a worker reports failure
+- `/api/v1/internal/audio-compute/jobs/{id}/fail` after a worker
+  reports failure
 - `app/tasks/audio_compute_reaper.reap_once` when a lease expires
 - `AudioComputeAdminService.revoke_worker` to drain a revoked worker's queue
 
@@ -273,6 +274,8 @@ async def start_cascade(
     job: LyricsJob,
     with_sync: bool,
     bypass_cache: bool,
+    skip_tiers: tuple[str, ...] = (),
+    skip_reason: str | None = None,
 ) -> str:
     """Initial dispatch for a freshly created LyricsJob.
 
@@ -283,7 +286,19 @@ async def start_cascade(
     """
     cascade = await _build_cascade(session)
     job.tiers_planned = list(cascade)
-    job.tier_attempts = []
+    skip_set = set(skip_tiers)
+    skipped_at = _now_iso()
+    job.tier_attempts = [
+        {
+            "tier": tier,
+            "started_at": skipped_at,
+            "finished_at": skipped_at,
+            "status": "skipped",
+            "error": skip_reason or "tier_skipped",
+        }
+        for tier in cascade
+        if tier in skip_set
+    ]
     await session.flush()
     return await _advance_to_next_tier(
         session,

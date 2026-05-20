@@ -1,9 +1,13 @@
+from unittest.mock import AsyncMock
+
 import pytest
 from fastapi import HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.models.lyrics_job import LyricsJob
 from app.repositories.track import TrackRepository
 from app.repositories.user import UserRepository
+from app.services import compute_router, lyrics_cascade, lyrics_worker
 from app.services.lyrics_service import (
     LyricsService,
 )
@@ -202,6 +206,69 @@ async def test_update_sync_no_lyrics(
         await svc.update_sync(tid, uid, [{"time": 0, "text": "X"}])
 
     assert exc.value.status_code == 404
+
+
+async def test_trigger_sync_for_existing_text_skips_catalog_tier(
+    session: AsyncSession,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    uid = await _make_user(session)
+    tid = await _make_track(session, uid)
+    svc = LyricsService(session)
+    await svc.create_or_update(tid, uid, "Line 1\nLine 2")
+
+    captured: dict[str, object] = {}
+
+    async def fake_start_cascade(
+        _session: AsyncSession,
+        *,
+        job: LyricsJob,
+        with_sync: bool,
+        bypass_cache: bool,
+        skip_tiers: tuple[str, ...] = (),
+        skip_reason: str | None = None,
+    ) -> str:
+        captured["with_sync"] = with_sync
+        captured["bypass_cache"] = bypass_cache
+        captured["skip_tiers"] = skip_tiers
+        captured["skip_reason"] = skip_reason
+        captured["job_profile"] = job.profile
+        job.profile = "gpu_full"
+        job.current_tier = "remote_whisper"
+        job.status = "queued"
+        return "remote_whisper"
+
+    monkeypatch.setattr(
+        compute_router,
+        "get_routing_mode",
+        AsyncMock(return_value="auto"),
+    )
+    monkeypatch.setattr(
+        lyrics_worker,
+        "set_cached_lyrics_result",
+        AsyncMock(),
+    )
+    monkeypatch.setattr(
+        lyrics_worker,
+        "set_lyrics_progress",
+        AsyncMock(),
+    )
+    monkeypatch.setattr(
+        lyrics_cascade,
+        "start_cascade",
+        fake_start_cascade,
+    )
+
+    task_id = await svc.trigger_auto_generation(
+        tid,
+        uid,
+        with_sync=True,
+    )
+
+    assert task_id
+    assert captured["with_sync"] is True
+    assert captured["skip_tiers"] == ("catalog_only",)
+    assert captured["skip_reason"] == "existing_text_needs_timing"
 
 
 async def test_upsert_and_list_translations(

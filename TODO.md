@@ -1,5 +1,17 @@
 # DotSound - TODO Tracker
 
+- [x] **Lyrics timecode requests skip catalog-only stall (2026-05-20)**
+  - Backend now starts existing-text `with_sync=true` lyrics jobs at the
+    remote ASR tier by marking `catalog_only` as skipped, so
+    DotSoundComputeWorker can claim the job directly instead of seeing
+    repeated `204 No Content` while waiting for a Taskiq catalog task.
+  - PrivateCore owns the decision via
+    `skipped_tiers_for_existing_text_sync`; Backend only applies it when
+    creating the `LyricsJob` cascade.
+  - Tests: Backend `tests/app/services/test_lyrics_cascade.py` and
+    `tests/app/services/test_lyrics_service.py`; PrivateCore
+    `tests/dotsound_private_core/services/test_asr_policy.py`.
+
 - [x] **Home page progressive section loading (2026-05-19)**
   - Backend: added `GET /api/v1/recommendations/home/sections/{section_type}`
     so the Mini App can request one home section at a time instead of

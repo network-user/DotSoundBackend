@@ -195,6 +195,10 @@ class LyricsService:
         with_sync: bool = False,
         bypass_cache: bool = False,
     ) -> str:
+        from dotsound_private_core.services.asr_policy import (
+            skipped_tiers_for_existing_text_sync,
+        )
+
         from app.models.lyrics_job import LyricsJob
         from app.services.compute_router import (
             get_routing_mode,
@@ -265,6 +269,12 @@ class LyricsService:
                     exc_info=True,
                 )
 
+        skip_tiers = skipped_tiers_for_existing_text_sync(
+            with_sync=with_sync,
+            has_existing_text=bool(existing_text),
+            has_existing_sync=existing_has_sync,
+        )
+
         mode = await get_routing_mode(self._session)
         if mode == "disabled":
             raise HTTPException(
@@ -290,6 +300,10 @@ class LyricsService:
             job=job,
             with_sync=with_sync,
             bypass_cache=bypass_cache,
+            skip_tiers=skip_tiers,
+            skip_reason=(
+                "existing_text_needs_timing" if skip_tiers else None
+            ),
         )
         await self._session.commit()
 
