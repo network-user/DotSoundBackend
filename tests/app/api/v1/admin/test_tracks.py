@@ -12,6 +12,7 @@ from sqlalchemy.ext.asyncio import (
 )
 
 from app.models.background_job import BackgroundJob
+from app.models.lyrics import TrackLyrics
 from app.models.track import Track
 from app.models.track_playback_failure_event import (
     TrackPlaybackFailureEvent,
@@ -140,6 +141,68 @@ async def test_admin_list_track_ids_search_filter(
     body = r.json()
     assert body["total"] == 1
     assert body["ids"] == [matched["id"]]
+
+
+async def test_admin_list_tracks_exposes_and_filters_lyrics_sync_status(
+    client: AsyncClient,
+    db_session: AsyncSession,
+) -> None:
+    admin = await create_test_user(client, 130015)
+    headers = await admin_bearer_for_user(
+        client, db_session, user_id=admin["id"]
+    )
+    synced = await _create_track(
+        db_session,
+        title="Synced Timecodes",
+        uploader_id=admin["id"],
+    )
+    unsynced = await _create_track(
+        db_session,
+        title="Plain Lyrics",
+        uploader_id=admin["id"],
+    )
+    await _create_track(
+        db_session,
+        title="No Lyrics",
+        uploader_id=admin["id"],
+    )
+    db_session.add_all(
+        [
+            TrackLyrics(
+                track_id=int(synced["id"]),
+                plain_text="line",
+                synced_lines=[{"start": 0.0, "end": 1.0, "line": "line"}],
+            ),
+            TrackLyrics(
+                track_id=int(unsynced["id"]),
+                plain_text="plain",
+                synced_lines=[],
+            ),
+        ]
+    )
+    await db_session.commit()
+
+    r = await client.get(
+        "/api/v1/admin/tracks",
+        headers=headers,
+        params={"lyrics_sync_status": "synced"},
+    )
+    assert r.status_code == 200
+    data = r.json()
+    ids = [item["id"] for item in data["items"]]
+    assert ids == [synced["id"]]
+    assert data["items"][0]["has_synced_timecodes"] is True
+    assert data["items"][0]["lyrics_sync_status"] == "synced"
+
+    r = await client.get(
+        "/api/v1/admin/tracks/ids",
+        headers=headers,
+        params={"lyrics_sync_status": "unsynced"},
+    )
+    assert r.status_code == 200
+    body = r.json()
+    assert body["total"] == 1
+    assert body["ids"] == [unsynced["id"]]
 
 
 async def test_admin_playback_unavailable_includes_diagnostics(

@@ -14,6 +14,8 @@ class AdminTrackResponse(TrackResponse):
     is_active: bool = True
     deleted_reason: str | None = None
     lyrics_catalog_miss_at: datetime | None = None
+    has_synced_timecodes: bool = False
+    lyrics_sync_status: Literal["missing", "unsynced", "synced"] = "missing"
     playback_last_failure_at: datetime | None = None
     playback_last_http_status: int | None = None
     playback_last_failure_source: str | None = None

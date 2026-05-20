@@ -51,6 +51,8 @@ interface TrackRow {
   playback_suppressed_until?: string | null
   playback_last_checked_at?: string | null
   playback_last_repair_attempt_at?: string | null
+  has_synced_timecodes?: boolean
+  lyrics_sync_status?: 'missing' | 'unsynced' | 'synced'
 }
 
 interface ContextState {
@@ -168,6 +170,7 @@ type TrackIdScope =
   | 'deleted'
 
 type TrackListView = TrackIdScope
+type LyricsSyncFilter = 'all' | 'synced' | 'unsynced' | 'missing'
 
 type PlaybackRepairBulkResult = Awaited<
   ReturnType<typeof adminApi.repairTracksPlayback>
@@ -197,6 +200,8 @@ export function TracksRoute() {
   const [search, setSearch] = useState('')
   const [playbackErrorFilter, setPlaybackErrorFilter] = useState('')
   const [withoutLyricsOnly, setWithoutLyricsOnly] = useState(false)
+  const [lyricsSyncFilter, setLyricsSyncFilter] =
+    useState<LyricsSyncFilter>('all')
   const [listView, setListView] = useState<TrackListView>('all')
   const [playingId, setPlayingId] = useState<number | null>(null)
   const [busyId, setBusyId] = useState<number | null>(null)
@@ -330,6 +335,8 @@ export function TracksRoute() {
     return adminApi.listTracks({
       ...base,
       without_lyrics: withoutLyricsOnly || undefined,
+      lyrics_sync_status:
+        lyricsSyncFilter === 'all' ? undefined : lyricsSyncFilter,
       sort_by: sortBy !== 'created_at_desc' ? sortBy : undefined,
     })
   }
@@ -341,6 +348,7 @@ export function TracksRoute() {
       page,
       search,
       withoutLyricsOnly,
+      lyricsSyncFilter,
       listView,
       playbackErrorFilter,
       sortBy,
@@ -421,7 +429,14 @@ export function TracksRoute() {
 
   useEffect(() => {
     setSelectedIds(new Set())
-  }, [search, withoutLyricsOnly, listView, playbackErrorFilter, sortBy])
+  }, [
+    search,
+    withoutLyricsOnly,
+    lyricsSyncFilter,
+    listView,
+    playbackErrorFilter,
+    sortBy,
+  ])
 
   useEffect(() => {
     if (!sourceEditModal) return
@@ -1005,6 +1020,10 @@ export function TracksRoute() {
         scope === 'playback_failures' ? playbackErrorQuery : undefined,
       without_lyrics:
         listView === 'all' ? withoutLyricsOnly || undefined : undefined,
+      lyrics_sync_status:
+        listView === 'all' && lyricsSyncFilter !== 'all'
+          ? lyricsSyncFilter
+          : undefined,
     })
     return result.ids
   }
@@ -1104,6 +1123,26 @@ export function TracksRoute() {
           disabled={busyId === i.row.original.id}
         />
       ),
+    },
+    {
+      header: t('admin.tracks.colTimecodes'),
+      id: 'lyrics_sync_status',
+      cell: (i) => {
+        const status =
+          i.row.original.lyrics_sync_status ??
+          (i.row.original.has_synced_timecodes ? 'synced' : 'missing')
+        const kind =
+          status === 'synced'
+            ? 'ok'
+            : status === 'unsynced'
+              ? 'warn'
+              : 'unknown'
+        return (
+          <StatusPill kind={kind}>
+            {t(`admin.tracks.timecodes.${status}`)}
+          </StatusPill>
+        )
+      },
     },
     {
       header: 'Playback',
@@ -1511,6 +1550,35 @@ export function TracksRoute() {
           />
           {t('admin.tracks.filterWithoutLyrics')}
         </label>
+        {listView === 'all' && (
+          <AdminRangeSwitch
+            groupId="admin-tracks-lyrics-sync"
+            value={lyricsSyncFilter}
+            onChange={(v) => {
+              setLyricsSyncFilter(v as LyricsSyncFilter)
+              setPage(1)
+              setSelectedIds(new Set())
+            }}
+            options={[
+              {
+                value: 'all',
+                label: t('admin.tracks.timecodeFilterAll'),
+              },
+              {
+                value: 'synced',
+                label: t('admin.tracks.timecodes.synced'),
+              },
+              {
+                value: 'unsynced',
+                label: t('admin.tracks.timecodes.unsynced'),
+              },
+              {
+                value: 'missing',
+                label: t('admin.tracks.timecodes.missing'),
+              },
+            ]}
+          />
+        )}
         {listView === 'all' && (
           <AdminRangeSwitch
             groupId="admin-tracks-sort-by"

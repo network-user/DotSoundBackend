@@ -1,5 +1,28 @@
 # DotSound - TODO Tracker
 
+- [x] **Admin track lyrics sync filter (2026-05-21)**
+  - Admin track API now returns `has_synced_timecodes` and
+    `lyrics_sync_status` (`synced`, `unsynced`, `missing`) for each listed
+    track.
+  - Admin track list and bulk ID endpoints now support
+    `lyrics_sync_status` filtering, so operators can select tracks with
+    synchronized timecodes, lyrics without timecodes, or no lyrics row.
+  - Admin Tracks UI now shows a dedicated timecode status column and an
+    independent filter for all/synced/unsynced/missing timecodes.
+  - Added targeted API/service tests for lyrics sync status exposure and
+    filtering.
+  - Verification: `poetry run pytest
+    tests/app/api/v1/admin/test_tracks.py::test_admin_list_tracks_exposes_and_filters_lyrics_sync_status
+    tests/app/services/test_admin_service.py::test_admin_service_filters_tracks_by_lyrics_sync_status`;
+    `poetry run ruff check app/api/v1/admin/tracks.py
+    app/api/v1/admin/schemas.py app/services/admin_service.py
+    app/repositories/admin.py app/services/background_jobs.py
+    tests/app/api/v1/admin/test_tracks.py
+    tests/app/services/test_admin_service.py`; `poetry run mypy
+    app/api/v1/admin/tracks.py app/api/v1/admin/schemas.py
+    app/services/admin_service.py app/repositories/admin.py
+    app/services/background_jobs.py`; `npm run build`.
+
 - [x] **Track card video processing UX (2026-05-21)**
   - Track card video uploads now poll the track until async transcoding
     produces `video_key`, then refresh the active track so the uploaded video

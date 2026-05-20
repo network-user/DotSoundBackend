@@ -25,7 +25,7 @@ from __future__ import annotations
 
 import uuid
 from datetime import UTC, datetime
-from typing import Any, Protocol
+from typing import Any, Protocol, cast
 
 import structlog
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -62,7 +62,7 @@ class TaskKicker(Protocol):
 class EnqueueTask(Protocol):
     task_name: str
 
-    def kicker(self) -> TaskKicker: ...
+    def kicker(self) -> object: ...
 
 
 def _new_job_id() -> str:
@@ -143,7 +143,7 @@ async def enqueue(
         if own_session:
             await sess.close()
 
-    kicker = task.kicker().with_labels(
+    kicker = cast(TaskKicker, task.kicker()).with_labels(
         bgjob_id=job_id,
         bgjob_max_attempts=str(max_attempts),
         bgjob_queue=queue,

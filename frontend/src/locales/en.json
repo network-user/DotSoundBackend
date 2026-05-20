@@ -367,6 +367,13 @@
       "actionRestore": "Restore",
       "actionHardDelete": "Delete forever",
       "filterWithoutLyrics": "No lyrics",
+      "colTimecodes": "Timecodes",
+      "timecodeFilterAll": "All timecodes",
+      "timecodes": {
+        "synced": "Synced",
+        "unsynced": "No timecodes",
+        "missing": "No lyrics"
+      },
       "promptModalTitle": "Prompt for the model",
       "contextModalTitle": "Context — track #{{id}}",
       "contextStatus": "Status: {{status}}",

@@ -109,6 +109,7 @@ class AdminService:
         is_active: bool | None = None,
         without_lyrics: bool = False,
         lyrics_catalog_miss_only: bool = False,
+        lyrics_sync_status: str | None = None,
         search: str | None = None,
         for_playlist_owner_id: int | None = None,
         playable_only: bool = False,
@@ -120,6 +121,7 @@ class AdminService:
             is_active=is_active,
             without_lyrics=without_lyrics,
             lyrics_catalog_miss_only=lyrics_catalog_miss_only,
+            lyrics_sync_status=lyrics_sync_status,
             search=search,
             for_playlist_owner_id=for_playlist_owner_id,
             playable_only=playable_only,
@@ -139,6 +141,7 @@ class AdminService:
         is_active: bool | None = None,
         without_lyrics: bool = False,
         lyrics_catalog_miss_only: bool = False,
+        lyrics_sync_status: str | None = None,
         search: str | None = None,
         for_playlist_owner_id: int | None = None,
         playable_only: bool = False,
@@ -147,10 +150,17 @@ class AdminService:
             is_active=is_active,
             without_lyrics=without_lyrics,
             lyrics_catalog_miss_only=lyrics_catalog_miss_only,
+            lyrics_sync_status=lyrics_sync_status,
             search=search,
             for_playlist_owner_id=for_playlist_owner_id,
             playable_only=playable_only,
         )
+
+    async def get_lyrics_sync_statuses(
+        self,
+        track_ids: list[int],
+    ) -> dict[int, dict[str, object]]:
+        return await self._repo.track_lyrics_sync_statuses(track_ids)
 
     async def list_tracks_playback_unavailable(
         self,

@@ -1,5 +1,8 @@
 """Admin endpoints for track management."""
 
+from collections.abc import Sequence
+from typing import Any, Literal
+
 import structlog
 from fastapi import (
     APIRouter,
@@ -85,21 +88,29 @@ _ALLOWED_COVER_CT = frozenset(
 
 async def _admin_track_responses(
     service: AdminService,
-    tracks: list[object],
+    tracks: Sequence[object],
 ) -> list[AdminTrackResponse]:
     rows = [AdminTrackResponse.model_validate(t) for t in tracks]
+    sync_statuses = await service.get_lyrics_sync_statuses(
+        [row.id for row in rows],
+    )
     diagnostics = await service.get_playback_failure_diagnostics(
         [row.id for row in rows],
     )
     return [
-        row.model_copy(update=diagnostics.get(row.id, {}))
+        row.model_copy(
+            update={
+                **sync_statuses.get(row.id, {}),
+                **diagnostics.get(row.id, {}),
+            }
+        )
         for row in rows
     ]
 
 
 @router.get(
     "/tracks/visibility-counts",
-    response_model=dict,
+    response_model=dict[str, int],
     summary="[Admin] Count hidden and visible (non-deleted) tracks",
 )
 @limiter.limit("60/minute")
@@ -108,7 +119,7 @@ async def admin_track_visibility_counts(
     search: str | None = Query(None, max_length=128),
     session: AsyncSession = Depends(get_db),
     _admin: User = Depends(require_admin_session),
-) -> dict:
+) -> dict[str, int]:
     service = AdminService(session)
     hidden, visible = await service.get_visibility_counts(search=search)
     return {"hidden": hidden, "visible": visible}
@@ -131,6 +142,19 @@ async def admin_list_tracks(
         description=(
             "Tracks where automated catalog lyric lookup finished "
             "without text"
+        ),
+    ),
+    lyrics_sync_status: Literal[
+        "synced",
+        "unsynced",
+        "missing",
+    ]
+    | None = Query(
+        None,
+        description=(
+            "Filter by lyric timecode state: synced has non-empty "
+            "synced_lines, unsynced has lyrics without timecodes, "
+            "missing has no lyrics row"
         ),
     ),
     search: str | None = Query(None, max_length=128),
@@ -166,6 +190,7 @@ async def admin_list_tracks(
         is_active=is_active,
         without_lyrics=without_lyrics,
         lyrics_catalog_miss_only=lyrics_catalog_miss_only,
+        lyrics_sync_status=lyrics_sync_status,
         search=search,
         for_playlist_owner_id=for_playlist_owner_id,
         playable_only=playable_only,
@@ -197,6 +222,12 @@ async def admin_list_track_ids(
     is_active: bool | None = Query(None),
     without_lyrics: bool = Query(False),
     lyrics_catalog_miss_only: bool = Query(False),
+    lyrics_sync_status: Literal[
+        "synced",
+        "unsynced",
+        "missing",
+    ]
+    | None = Query(None),
     search: str | None = Query(None, max_length=128),
     playback_error: str | None = Query(None, max_length=160),
     for_playlist_owner_id: int | None = Query(None, ge=1),
@@ -210,6 +241,7 @@ async def admin_list_track_ids(
             is_active=is_active,
             without_lyrics=without_lyrics,
             lyrics_catalog_miss_only=lyrics_catalog_miss_only,
+            lyrics_sync_status=lyrics_sync_status,
             search=search,
             for_playlist_owner_id=for_playlist_owner_id,
             playable_only=playable_only,
@@ -860,7 +892,7 @@ async def admin_transcode_track(
     background_tasks: BackgroundTasks,
     session: AsyncSession = Depends(get_db),
     _admin: User = Depends(require_admin_session),
-) -> dict:
+) -> dict[str, bool | int]:
     service = AdminService(session)
     track = await service.get_track(track_id)
     if not track:
@@ -890,7 +922,7 @@ async def admin_transcode_batch(
     background_tasks: BackgroundTasks,
     session: AsyncSession = Depends(get_db),
     _admin: User = Depends(require_admin_session),
-) -> dict:
+) -> dict[str, int]:
     from app.repositories.track import TrackRepository
 
     tracks = await TrackRepository(session).list_internal_pending_hls()
@@ -1161,7 +1193,7 @@ async def admin_get_upload_meta(
     track_id: int,
     session: AsyncSession = Depends(get_db),
     _admin: User = Depends(require_admin_session),
-) -> dict:
+) -> dict[str, Any]:
     from app.repositories.track_upload_meta import (
         TrackUploadMetaRepository,
     )

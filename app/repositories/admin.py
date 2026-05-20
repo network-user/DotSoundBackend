@@ -53,10 +53,10 @@ class AdminRepository:
 
     def _apply_playback_error_filter(
         self,
-        query: Select,
+        query: Select[Any],
         *,
         playback_error: str | None,
-    ) -> Select:
+    ) -> Select[Any]:
         if not playback_error:
             return query
         latest = self._latest_playback_failure_details()
@@ -94,10 +94,10 @@ class AdminRepository:
 
     def _apply_simple_track_search(
         self,
-        query: Select,
+        query: Select[Any],
         *,
         search: str | None,
-    ) -> Select:
+    ) -> Select[Any]:
         if not search:
             return query
         pattern = f"%{search}%"
@@ -105,36 +105,57 @@ class AdminRepository:
             Track.title.ilike(pattern) | Track.artist.ilike(pattern)
         )
 
+    def _synced_lines_present(self) -> ColumnElement[bool]:
+        return and_(
+            TrackLyrics.synced_lines.isnot(None),
+            func.json_array_length(TrackLyrics.synced_lines) > 0,
+        )
+
     def _apply_track_list_filters(
         self,
-        query: Select,
+        query: Select[Any],
         *,
         is_active: bool | None,
         without_lyrics: bool,
         lyrics_catalog_miss_only: bool,
+        lyrics_sync_status: str | None,
         search: str | None,
         for_playlist_owner_id: int | None,
         playable_only: bool,
-    ) -> Select:
+    ) -> Select[Any]:
+        if without_lyrics or lyrics_sync_status:
+            query = query.outerjoin(
+                TrackLyrics, TrackLyrics.track_id == Track.id
+            )
         if lyrics_catalog_miss_only:
             query = query.where(
                 Track.lyrics_catalog_miss_at.isnot(None),
             )
         elif without_lyrics:
-            query = query.outerjoin(
-                TrackLyrics, TrackLyrics.track_id == Track.id
-            ).where(TrackLyrics.id.is_(None))
+            query = query.where(TrackLyrics.id.is_(None))
+        if lyrics_sync_status == "synced":
+            query = query.where(
+                TrackLyrics.id.isnot(None),
+                self._synced_lines_present(),
+            )
+        elif lyrics_sync_status == "unsynced":
+            query = query.where(
+                TrackLyrics.id.isnot(None),
+                ~self._synced_lines_present(),
+            )
+        elif lyrics_sync_status == "missing":
+            query = query.where(TrackLyrics.id.is_(None))
         if is_active is not None:
             query = query.where(Track.is_active.is_(is_active))
         if for_playlist_owner_id is not None:
             tr = TrackRepository
-            pub = (
+            pub: ColumnElement[bool] = (
                 Track.is_active.is_(True)
                 & Track.is_public.is_(True)
                 & tr._exclude_hidden_sources()
                 & tr._playback_listing_allowed()
             )
-            own = (
+            own: ColumnElement[bool] = (
                 Track.is_active.is_(True)
                 & (Track.uploaded_by_id == for_playlist_owner_id)
                 & tr._exclude_hidden_sources()
@@ -164,10 +185,10 @@ class AdminRepository:
 
     def _apply_sort(
         self,
-        query: Select,
+        query: Select[Any],
         *,
         sort_by: str | None,
-    ) -> Select:
+    ) -> Select[Any]:
         if sort_by == "visibility_asc":
             return query.order_by(
                 Track.is_active.asc(),
@@ -188,6 +209,7 @@ class AdminRepository:
         is_active: bool | None = None,
         without_lyrics: bool = False,
         lyrics_catalog_miss_only: bool = False,
+        lyrics_sync_status: str | None = None,
         search: str | None = None,
         for_playlist_owner_id: int | None = None,
         playable_only: bool = False,
@@ -198,6 +220,7 @@ class AdminRepository:
             is_active=is_active,
             without_lyrics=without_lyrics,
             lyrics_catalog_miss_only=lyrics_catalog_miss_only,
+            lyrics_sync_status=lyrics_sync_status,
             search=search,
             for_playlist_owner_id=for_playlist_owner_id,
             playable_only=playable_only,
@@ -207,6 +230,7 @@ class AdminRepository:
             is_active=is_active,
             without_lyrics=without_lyrics,
             lyrics_catalog_miss_only=lyrics_catalog_miss_only,
+            lyrics_sync_status=lyrics_sync_status,
             search=search,
             for_playlist_owner_id=for_playlist_owner_id,
             playable_only=playable_only,
@@ -251,6 +275,7 @@ class AdminRepository:
         is_active: bool | None = None,
         without_lyrics: bool = False,
         lyrics_catalog_miss_only: bool = False,
+        lyrics_sync_status: str | None = None,
         search: str | None = None,
         for_playlist_owner_id: int | None = None,
         playable_only: bool = False,
@@ -260,6 +285,7 @@ class AdminRepository:
             is_active=is_active,
             without_lyrics=without_lyrics,
             lyrics_catalog_miss_only=lyrics_catalog_miss_only,
+            lyrics_sync_status=lyrics_sync_status,
             search=search,
             for_playlist_owner_id=for_playlist_owner_id,
             playable_only=playable_only,
@@ -269,6 +295,7 @@ class AdminRepository:
             is_active=is_active,
             without_lyrics=without_lyrics,
             lyrics_catalog_miss_only=lyrics_catalog_miss_only,
+            lyrics_sync_status=lyrics_sync_status,
             search=search,
             for_playlist_owner_id=for_playlist_owner_id,
             playable_only=playable_only,
@@ -278,6 +305,38 @@ class AdminRepository:
         return [int(track_id) for track_id in rows.scalars().all()], int(
             total.scalar_one()
         )
+
+    async def track_lyrics_sync_statuses(
+        self,
+        track_ids: list[int],
+    ) -> dict[int, dict[str, object]]:
+        if not track_ids:
+            return {}
+        result = await self._session.execute(
+            select(
+                TrackLyrics.track_id,
+                TrackLyrics.synced_lines,
+            ).where(TrackLyrics.track_id.in_(track_ids))
+        )
+        by_track = {
+            int(track_id): synced_lines
+            for track_id, synced_lines in result.all()
+        }
+        statuses: dict[int, dict[str, object]] = {}
+        for track_id in track_ids:
+            if track_id not in by_track:
+                statuses[track_id] = {
+                    "has_synced_timecodes": False,
+                    "lyrics_sync_status": "missing",
+                }
+                continue
+            synced = by_track[track_id]
+            has_sync = isinstance(synced, list) and len(synced) > 0
+            statuses[track_id] = {
+                "has_synced_timecodes": has_sync,
+                "lyrics_sync_status": "synced" if has_sync else "unsynced",
+            }
+        return statuses
 
     async def list_tracks_playback_unavailable(
         self,
@@ -502,7 +561,8 @@ class AdminRepository:
                 playback_last_checked_at=failure_at,
             )
         )
-        return int(result.rowcount or 0)
+        rowcount = getattr(result, "rowcount", 0)
+        return int(rowcount or 0)
 
     async def latest_track_playback_failure_events(
         self,
@@ -612,7 +672,7 @@ class AdminRepository:
         size: int = 25,
         search: str | None = None,
     ) -> tuple[list[User], int]:
-        condition = User.deleted_at.is_not(None)
+        condition: ColumnElement[bool] = User.deleted_at.is_not(None)
         if search:
             pattern = f"%{search.strip()}%"
             cond = or_(

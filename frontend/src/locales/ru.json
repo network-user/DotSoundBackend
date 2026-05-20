@@ -367,6 +367,13 @@
       "actionRestore": "Восстановить",
       "actionHardDelete": "Удалить навсегда",
       "filterWithoutLyrics": "Без текста",
+      "colTimecodes": "Таймкоды",
+      "timecodeFilterAll": "Все таймкоды",
+      "timecodes": {
+        "synced": "Синхр.",
+        "unsynced": "Без таймкодов",
+        "missing": "Нет текста"
+      },
       "promptModalTitle": "Промпт для нейросети",
       "contextModalTitle": "Контекст — трек #{{id}}",
       "contextStatus": "Статус: {{status}}",

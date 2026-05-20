@@ -6,6 +6,7 @@ import pytest
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.complaint import Complaint
+from app.models.lyrics import TrackLyrics
 from app.models.track import Track
 from app.models.user import User
 from app.services.admin_service import AdminService
@@ -83,6 +84,70 @@ async def test_admin_service_list_tracks_filters(
     )
     assert total == 1
     assert rows[0].title == "hidden"
+
+
+async def test_admin_service_filters_tracks_by_lyrics_sync_status(
+    db_session: AsyncSession,
+) -> None:
+    uploader = await _seed_user(
+        db_session, telegram_id=400002
+    )
+    missing = await _seed_track(
+        db_session,
+        title="missing sync",
+        uploader_id=uploader.id,
+    )
+    unsynced = await _seed_track(
+        db_session,
+        title="plain only",
+        uploader_id=uploader.id,
+    )
+    synced = await _seed_track(
+        db_session,
+        title="synced lines",
+        uploader_id=uploader.id,
+    )
+    db_session.add_all(
+        [
+            TrackLyrics(
+                track_id=unsynced.id,
+                plain_text="plain",
+                synced_lines=None,
+            ),
+            TrackLyrics(
+                track_id=synced.id,
+                plain_text="line",
+                synced_lines=[{"start": 0.0, "end": 1.0, "line": "line"}],
+            ),
+        ]
+    )
+    await db_session.flush()
+
+    service = AdminService(db_session)
+    rows, total = await service.list_tracks(
+        page=1,
+        size=10,
+        lyrics_sync_status="synced",
+    )
+    assert total == 1
+    assert [row.id for row in rows] == [synced.id]
+
+    rows, total = await service.list_tracks(
+        page=1,
+        size=10,
+        lyrics_sync_status="unsynced",
+    )
+    assert total == 1
+    assert [row.id for row in rows] == [unsynced.id]
+
+    rows, total = await service.list_tracks(
+        page=1,
+        size=10,
+        lyrics_sync_status="missing",
+        search="missing",
+    )
+    assert total == 1
+    assert [row.id for row in rows] == [missing.id]
 
 
 async def test_admin_service_list_users_search(

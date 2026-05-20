@@ -1090,6 +1090,7 @@ export const adminApi = {
     is_active?: boolean
     without_lyrics?: boolean
     lyrics_catalog_miss_only?: boolean
+    lyrics_sync_status?: 'synced' | 'unsynced' | 'missing'
     search?: string
     for_playlist_owner_id?: number
     playable_only?: boolean
@@ -1111,6 +1112,7 @@ export const adminApi = {
     is_active?: boolean
     without_lyrics?: boolean
     lyrics_catalog_miss_only?: boolean
+    lyrics_sync_status?: 'synced' | 'unsynced' | 'missing'
     search?: string
     playback_error?: string
     for_playlist_owner_id?: number
