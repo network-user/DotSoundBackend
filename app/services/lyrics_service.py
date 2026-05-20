@@ -18,6 +18,8 @@ from app.services.lyrics_state import has_nonempty_synced_lines
 
 logger: structlog.stdlib.BoundLogger = structlog.get_logger(__name__)
 
+_URGENT_REMOTE_SYNC_PRIORITY = 1_000_000
+
 
 class LyricsService:
     def __init__(self, session: AsyncSession) -> None:
@@ -199,6 +201,7 @@ class LyricsService:
         bypass_cache: bool = False,
     ) -> str:
         from dotsound_private_core.services.asr_policy import (
+            TIER_CATALOG_ONLY,
             skipped_tiers_for_existing_text_sync,
         )
 
@@ -277,6 +280,15 @@ class LyricsService:
             has_existing_text=bool(existing_text),
             has_existing_sync=existing_has_sync,
         )
+        skip_reason = (
+            "existing_text_needs_timing" if skip_tiers else None
+        )
+        urgent_remote_sync = bool(
+            with_sync and (track.file_key or getattr(track, "sc_url", None))
+        )
+        if urgent_remote_sync and TIER_CATALOG_ONLY not in skip_tiers:
+            skip_tiers = (*skip_tiers, TIER_CATALOG_ONLY)
+            skip_reason = "manual_sync_prefers_remote_worker"
 
         mode = await get_routing_mode(self._session)
         if mode == "disabled":
@@ -292,6 +304,9 @@ class LyricsService:
             requested_by_user_id=user_id,
             profile="catalog_only",
             status="queued",
+            queue_priority=(
+                _URGENT_REMOTE_SYNC_PRIORITY if urgent_remote_sync else 0
+            ),
             request_with_sync=with_sync,
             request_bypass_cache=bypass_cache,
         )
@@ -304,9 +319,7 @@ class LyricsService:
             with_sync=with_sync,
             bypass_cache=bypass_cache,
             skip_tiers=skip_tiers,
-            skip_reason=(
-                "existing_text_needs_timing" if skip_tiers else None
-            ),
+            skip_reason=skip_reason,
         )
         await self._session.commit()
 

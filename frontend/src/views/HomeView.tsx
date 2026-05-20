@@ -279,6 +279,155 @@ function HomeGenreMixCard({
   )
 }
 
+interface HomeHeroQueueProps {
+  title: string
+  tracks: Track[]
+  fallbackArtist: string
+  onPlay: (track: Track) => void
+}
+
+function HomeHeroQueue({
+  title,
+  tracks,
+  fallbackArtist,
+  onPlay,
+}: HomeHeroQueueProps) {
+  if (!tracks.length) return null
+  return (
+    <div className="rh-home-hero-queue">
+      <div className="rh-home-hero-queue__head">
+        <Icon name="queue" size={14} />
+        <span>{title}</span>
+      </div>
+      <div className="rh-home-hero-queue__list">
+        {tracks.map((track) => {
+          const src = coverUrl(track.cover_key, 120)
+          return (
+            <button
+              key={track.id}
+              type="button"
+              className="rh-home-hero-queue__item"
+              onClick={() => onPlay(track)}
+              title={[track.title, track.artist]
+                .filter(Boolean)
+                .join(' — ')}
+            >
+              <span className="rh-home-hero-queue__cover">
+                {src ? (
+                  <img
+                    src={src}
+                    alt=""
+                    width={42}
+                    height={42}
+                    loading="lazy"
+                    decoding="async"
+                  />
+                ) : (
+                  <Icon name="music" size={16} />
+                )}
+              </span>
+              <span className="rh-home-hero-queue__meta">
+                <span className="rh-home-hero-queue__title">
+                  {track.title}
+                </span>
+                <span className="rh-home-hero-queue__artist">
+                  {track.artist || fallbackArtist}
+                </span>
+              </span>
+              <Icon name="play" size={14} />
+            </button>
+          )
+        })}
+      </div>
+    </div>
+  )
+}
+
+interface HomeStationCardProps {
+  eyebrow: string
+  title: string
+  hint: string
+  startLabel: string
+  searchLabel: string
+  onStart: () => void
+  onSearch: () => void
+}
+
+function HomeStationCard({
+  eyebrow,
+  title,
+  hint,
+  startLabel,
+  searchLabel,
+  onStart,
+  onSearch,
+}: HomeStationCardProps) {
+  return (
+    <section className="rh-home-station-card">
+      <div className="rh-home-station-card__wave" aria-hidden>
+        {Array.from({ length: 18 }).map((_, index) => (
+          <span key={index} />
+        ))}
+      </div>
+      <div className="rh-home-station-card__copy">
+        <span className="rh-home-station-card__eyebrow">
+          {eyebrow}
+        </span>
+        <h2 className="rh-home-station-card__title">
+          {title}
+        </h2>
+        <p className="rh-home-station-card__hint">
+          {hint}
+        </p>
+      </div>
+      <div className="rh-home-station-card__actions">
+        <button
+          type="button"
+          className="rh-home-station-card__primary"
+          onClick={onStart}
+        >
+          <Icon name="radio" size={17} />
+          <span>{startLabel}</span>
+        </button>
+        <button
+          type="button"
+          className="rh-home-station-card__ghost"
+          onClick={onSearch}
+          aria-label={searchLabel}
+        >
+          <Icon name="search" size={17} />
+        </button>
+      </div>
+    </section>
+  )
+}
+
+interface HomeClusterIntroProps {
+  eyebrow: string
+  title: string
+  hint: string
+}
+
+function HomeClusterIntro({
+  eyebrow,
+  title,
+  hint,
+}: HomeClusterIntroProps) {
+  return (
+    <div className="rh-home-cluster-intro">
+      <span className="rh-home-cluster-intro__eyebrow">
+        {eyebrow}
+      </span>
+      <h2 className="rh-home-cluster-intro__title">
+        {title}
+      </h2>
+      <p className="rh-home-cluster-intro__hint">
+        {hint}
+      </p>
+    </div>
+  )
+}
+
 interface HomeTrackSnapSectionProps {
   title: string
   tracks: Track[]
@@ -924,6 +1073,23 @@ export function HomeView({ onOpenArtist }: HomeViewProps) {
   const heroCoverSrcSet = featuredTrack?.cover_key
     ? coverProxySrcSet(featuredTrack.cover_key)
     : undefined
+  const heroQueueById = new Map<number, Track>()
+  const heroQueuePools = [
+    sectionMap.get('continue')?.tracks ?? [],
+    sectionMap.get('personalized')?.tracks ?? [],
+    sectionMap.get('user_choice')?.tracks ?? [],
+    recentlyPlayed ?? [],
+    fallbackTracks ?? [],
+  ]
+  for (const pool of heroQueuePools) {
+    for (const track of pool) {
+      if (featuredTrack && track.id === featuredTrack.id) continue
+      if (!heroQueueById.has(track.id)) {
+        heroQueueById.set(track.id, track)
+      }
+    }
+  }
+  const heroQueueTracks = [...heroQueueById.values()].slice(0, 3)
 
   const genreTrackCount = (n: number) =>
     t('artist.catalog_release_card_tracks_other', {
@@ -979,6 +1145,28 @@ export function HomeView({ onOpenArtist }: HomeViewProps) {
               coverUrl={heroCoverSrc ?? undefined}
             >
               <div className="rh-home-hero__inner">
+                <div className="rh-home-hero__visual">
+                  <div className="rh-home-hero__cover">
+                    {heroCoverSrc ? (
+                      <KenBurnsCover
+                        src={heroCoverSrc}
+                        srcSet={heroCoverSrcSet}
+                        alt=""
+                      />
+                    ) : (
+                      <div className="rh-home-tile__ph">
+                        <Icon name="music" size={36} />
+                      </div>
+                    )}
+                  </div>
+                  <div className="rh-home-hero__signal" aria-hidden>
+                    <span />
+                    <span />
+                    <span />
+                    <span />
+                    <span />
+                  </div>
+                </div>
                 <div className="rh-home-hero__copy">
                   <span className="rh-home-hero__eyebrow">
                     {featuredEyebrow}
@@ -1034,6 +1222,16 @@ export function HomeView({ onOpenArtist }: HomeViewProps) {
                   >
                     {featuredTrack.artist || brandLabel}
                   </p>
+                  <div className="rh-home-hero__signals">
+                    <span>
+                      <Icon name="radio" size={14} />
+                      {t('redesign.home.heroSignalRadio')}
+                    </span>
+                    <span>
+                      <Icon name="sparkle" size={14} />
+                      {t('redesign.home.heroSignalDiscovery')}
+                    </span>
+                  </div>
                   <div className="rh-home-hero__actions">
                     <MotionPress
                       variant="primary"
@@ -1057,19 +1255,12 @@ export function HomeView({ onOpenArtist }: HomeViewProps) {
                     </MotionPress>
                   </div>
                 </div>
-                <div className="rh-home-hero__cover">
-                  {heroCoverSrc ? (
-                    <KenBurnsCover
-                      src={heroCoverSrc}
-                      srcSet={heroCoverSrcSet}
-                      alt=""
-                    />
-                  ) : (
-                    <div className="rh-home-tile__ph">
-                      <Icon name="music" size={36} />
-                    </div>
-                  )}
-                </div>
+                <HomeHeroQueue
+                  title={t('redesign.home.heroQueueTitle')}
+                  tracks={heroQueueTracks}
+                  fallbackArtist={brandLabel}
+                  onPlay={handlePlay}
+                />
               </div>
             </AmbientStage>
           </div>
@@ -1080,16 +1271,38 @@ export function HomeView({ onOpenArtist }: HomeViewProps) {
           </div>
         ) : null}
 
-        <div className="rh-home-quick rh-home-quick--few-tiles">
+        <HomeStationCard
+          eyebrow={t('redesign.home.stationEyebrow')}
+          title={t('redesign.home.stationTitle')}
+          hint={t('redesign.home.stationHint')}
+          startLabel={t('redesign.home.stationStart')}
+          searchLabel={t('redesign.home.stationSearch')}
+          onStart={() => {
+            void handleStartRadioFromHomeRecommendations(
+              'home_start_radio',
+            )
+          }}
+          onSearch={() => navigate('/search')}
+        />
+
+        <div className="rh-home-quick rh-home-command-deck">
           {MIX_SHORTCUT_TILES.slice(
             0,
-            HOME_QUICK_VISIBLE_COUNT,
+            Math.max(HOME_QUICK_VISIBLE_COUNT, 6),
           ).map((item) => (
             <MotionPress
               key={item.path}
               variant="subtle"
               className="rh-home-quick-card glass--medium"
-              onClick={() => navigate(item.path)}
+              onClick={() => {
+                if (item.path === '/radio') {
+                  void handleStartRadioFromHomeRecommendations(
+                    'home_start_radio',
+                  )
+                  return
+                }
+                navigate(item.path)
+              }}
             >
               <span
                 className="rh-home-quick-card__icon"
@@ -1109,6 +1322,13 @@ export function HomeView({ onOpenArtist }: HomeViewProps) {
             </MotionPress>
           ))}
         </div>
+
+        <section className="rh-home-discovery-band">
+          <HomeClusterIntro
+            eyebrow={t('redesign.home.discoveryEyebrow')}
+            title={t('redesign.home.discoveryTitle')}
+            hint={t('redesign.home.discoveryHint')}
+          />
 
         {genreMixes === null ? (
           <div ref={genreMixesSentinelRef}>
@@ -1173,6 +1393,8 @@ export function HomeView({ onOpenArtist }: HomeViewProps) {
           />
         )}
 
+        </section>
+
         {sections === null ? (
           <div>
             <div className="rh-home-section-head">
@@ -1207,6 +1429,13 @@ export function HomeView({ onOpenArtist }: HomeViewProps) {
             )
           })()
         )}
+
+        <section className="rh-home-social-band">
+          <HomeClusterIntro
+            eyebrow={t('redesign.home.socialEyebrow')}
+            title={t('redesign.home.socialTitle')}
+            hint={t('redesign.home.socialHint')}
+          />
 
         {recentlyPlayed === null ? (
           <div>
@@ -1309,6 +1538,8 @@ export function HomeView({ onOpenArtist }: HomeViewProps) {
             />
           </>
         ) : null}
+
+        </section>
 
         {sections &&
           HOME_TRACK_SECTIONS.map(({ key, morePath }) => (

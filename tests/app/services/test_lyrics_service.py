@@ -235,6 +235,7 @@ async def test_trigger_sync_for_existing_text_skips_catalog_tier(
         captured["skip_tiers"] = skip_tiers
         captured["skip_reason"] = skip_reason
         captured["job_profile"] = job.profile
+        captured["queue_priority"] = job.queue_priority
         job.profile = "gpu_full"
         job.current_tier = "remote_whisper"
         job.status = "queued"
@@ -271,6 +272,65 @@ async def test_trigger_sync_for_existing_text_skips_catalog_tier(
     assert captured["with_sync"] is True
     assert captured["skip_tiers"] == ("catalog_only",)
     assert captured["skip_reason"] == "existing_text_needs_timing"
+    assert captured["queue_priority"] == 1_000_000
+
+
+async def test_trigger_sync_without_text_prefers_remote_worker(
+    session: AsyncSession,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    uid = await _make_user(session)
+    tid = await _make_track(session, uid)
+    svc = LyricsService(session)
+
+    captured: dict[str, object] = {}
+
+    async def fake_start_cascade(
+        _session: AsyncSession,
+        *,
+        job: LyricsJob,
+        with_sync: bool,
+        bypass_cache: bool,
+        skip_tiers: tuple[str, ...] = (),
+        skip_reason: str | None = None,
+    ) -> str:
+        captured["with_sync"] = with_sync
+        captured["bypass_cache"] = bypass_cache
+        captured["skip_tiers"] = skip_tiers
+        captured["skip_reason"] = skip_reason
+        captured["queue_priority"] = job.queue_priority
+        job.profile = "gpu_full"
+        job.current_tier = "remote_whisper"
+        job.status = "queued"
+        return "remote_whisper"
+
+    monkeypatch.setattr(
+        compute_router,
+        "get_routing_mode",
+        AsyncMock(return_value="auto"),
+    )
+    monkeypatch.setattr(
+        lyrics_worker,
+        "set_lyrics_progress",
+        AsyncMock(),
+    )
+    monkeypatch.setattr(
+        lyrics_cascade,
+        "start_cascade",
+        fake_start_cascade,
+    )
+
+    task_id = await svc.trigger_auto_generation(
+        tid,
+        uid,
+        with_sync=True,
+    )
+
+    assert task_id
+    assert captured["with_sync"] is True
+    assert captured["skip_tiers"] == ("catalog_only",)
+    assert captured["skip_reason"] == "manual_sync_prefers_remote_worker"
+    assert captured["queue_priority"] == 1_000_000
 
 
 async def test_trigger_sync_ignores_stale_lines_without_time_ms(
@@ -303,6 +363,7 @@ async def test_trigger_sync_ignores_stale_lines_without_time_ms(
         captured["with_sync"] = with_sync
         captured["skip_tiers"] = skip_tiers
         captured["skip_reason"] = skip_reason
+        captured["queue_priority"] = job.queue_priority
         job.profile = "gpu_full"
         job.current_tier = "remote_whisper"
         job.status = "queued"
@@ -339,6 +400,7 @@ async def test_trigger_sync_ignores_stale_lines_without_time_ms(
     assert captured["with_sync"] is True
     assert captured["skip_tiers"] == ("catalog_only",)
     assert captured["skip_reason"] == "existing_text_needs_timing"
+    assert captured["queue_priority"] == 1_000_000
 
 
 async def test_redefine_sync_clears_existing_timing_and_queues_job(
@@ -379,6 +441,7 @@ async def test_redefine_sync_clears_existing_timing_and_queues_job(
         captured["bypass_cache"] = bypass_cache
         captured["skip_tiers"] = skip_tiers
         captured["skip_reason"] = skip_reason
+        captured["queue_priority"] = job.queue_priority
         job.profile = "gpu_full"
         job.current_tier = "remote_whisper"
         job.status = "queued"
@@ -420,6 +483,7 @@ async def test_redefine_sync_clears_existing_timing_and_queues_job(
     assert captured["with_sync"] is True
     assert captured["skip_tiers"] == ("catalog_only",)
     assert captured["skip_reason"] == "existing_text_needs_timing"
+    assert captured["queue_priority"] == 1_000_000
     job = (
         await session.execute(
             select(LyricsJob).where(LyricsJob.track_id == tid)

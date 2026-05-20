@@ -402,6 +402,12 @@ export function MiniPlayerBar() {
                 }
                 transition={INFO_EASE}
               >
+                <span className="mp-kicker">
+                  <span className="mp-kicker__dot" aria-hidden />
+                  {radioMode
+                    ? t('redesign.playerBar.radioMode')
+                    : t('redesign.playerBar.nowPlayingMini')}
+                </span>
                 <p className="mp-title">
                   {track.title}
                 </p>

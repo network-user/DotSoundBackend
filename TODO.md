@@ -1,17 +1,31 @@
 # DotSound - TODO Tracker
 
+- [x] **Home UI refresh + premium mini player (2026-05-20)**
+  - Frontend home: rebuilt the first screen around a premium mono
+    personal-radio hero with cover ambient, action signals and a ready-next
+    queue preview, while keeping existing recommendation/promotions APIs.
+  - Home content: added a personal station card, expanded quick command deck,
+    and grouped discovery/social content into stronger editorial bands.
+  - Mini player: added a compact now-playing/radio status line and refreshed
+    the shell, cover, controls and responsive spacing.
+  - i18n: added RU/EN copy for the new home sections and mini-player status.
+  - Verification: `npm run build`.
+
 - [x] **Playback continuation, ASR sync queue, Telegram urgent normalize (2026-05-20)**
   - Frontend player: natural `ended` now advances through prefetched
     tracks and falls back to radio/adjacent queue instead of leaving playback
     paused at the end of a track.
   - Lyrics sync: redefining lyrics with `with_sync=true` clears stale timing
     metadata before reusing existing text, so a fresh remote ASR/alignment job
-    is created instead of short-circuiting as already synced.
+    is created instead of short-circuiting as already synced. Manual
+    `with_sync=true` requests now bypass `catalog_only` when audio is present
+    and enter the remote worker queue with priority `1000000`.
   - Admin tracks: added urgent Telegram playback normalization endpoint and
     button. It enqueues Telegram import transcodes with the highest compute
     priority and a dedicated feature version.
   - Tests: targeted service/API coverage for lyrics re-sync queueing,
-    urgent Telegram normalization endpoint, and compute priority override.
+    urgent manual ASR routing, urgent Telegram normalization endpoint, and
+    compute priority override.
 
 - [x] **Perf Phase 3+4: modulePreload polyfill + trigram GIN indexes (2026-05-20)**
   - Части 3 и 4 из 5 плана мобильной оптимизации

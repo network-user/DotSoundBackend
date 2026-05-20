@@ -1646,3 +1646,163 @@ body.ds-perf-lite .mp-btn--playing {
     margin-top: 0;
   }
 }
+
+#player-bar.rp-player-bar--touch {
+  left: 10px;
+  right: 10px;
+  bottom: calc(var(--nav-h) + var(--safe-bottom) + 10px);
+}
+
+.mp-shell {
+  border-radius: 14px;
+  border-color: rgba(255, 255, 255, 0.13);
+  background:
+    linear-gradient(
+      180deg,
+      rgba(34, 34, 34, 0.78) 0%,
+      rgba(8, 8, 8, 0.94) 100%
+    );
+  box-shadow:
+    0 20px 48px rgba(0, 0, 0, 0.52),
+    0 0 0 1px rgba(255, 255, 255, 0.03),
+    inset 0 1px 0 rgba(255, 255, 255, 0.12);
+}
+
+.mp-shell::before {
+  opacity: 0.26;
+  filter: blur(24px) saturate(1.1);
+}
+
+.mp-shell::after {
+  background:
+    linear-gradient(
+      90deg,
+      color-mix(in srgb, var(--mp-tone-a) 20%, transparent),
+      transparent 36%,
+      color-mix(in srgb, var(--mp-tone-b) 18%, transparent)
+    ),
+    linear-gradient(
+      180deg,
+      rgba(255, 255, 255, 0.105) 0%,
+      color-mix(in srgb, var(--mp-tone-c) 24%, transparent) 100%
+    );
+}
+
+.mp-zone {
+  gap: 10px;
+  padding: 5px 10px 10px 11px;
+}
+
+.rp-player-bar--touch .mp-zone::before {
+  border-radius: 0 0 13px 13px;
+  opacity: 0.72;
+}
+
+.mp-swipe-content {
+  gap: 10px;
+}
+
+.mp-cover {
+  width: 56px;
+  height: 56px;
+  border-radius: 10px;
+  box-shadow:
+    0 12px 26px rgba(0, 0, 0, 0.42),
+    0 0 0 1px rgba(255, 255, 255, 0.11);
+}
+
+.mp-cover-img,
+.mp-cover .shared-cover {
+  border-radius: 10px;
+}
+
+.mp-info-body {
+  gap: 1px;
+}
+
+.mp-kicker {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  color: color-mix(in srgb, var(--text-secondary) 84%, transparent);
+  font-size: 10px;
+  font-weight: 760;
+  line-height: 1.2;
+  letter-spacing: 0;
+  text-transform: uppercase;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.mp-kicker__dot {
+  width: 5px;
+  height: 5px;
+  border-radius: 999px;
+  background: #fff;
+  box-shadow: 0 0 12px rgba(255, 255, 255, 0.45);
+  flex-shrink: 0;
+}
+
+.mp-title {
+  font-size: var(--fs-15);
+  font-weight: 720;
+  letter-spacing: 0;
+}
+
+.mp-artist {
+  letter-spacing: 0;
+}
+
+.mp-actions {
+  gap: 5px;
+}
+
+.mp-transport {
+  gap: 1px;
+  padding: 3px;
+  background: rgba(255, 255, 255, 0.055);
+}
+
+.mp-btn {
+  width: 36px;
+  height: 36px;
+}
+
+.mp-btn--play {
+  width: 44px;
+  height: 44px;
+}
+
+@media (max-width: 390px) {
+  #player-bar.rp-player-bar--touch {
+    left: 7px;
+    right: 7px;
+    bottom: calc(var(--nav-h) + var(--safe-bottom) + 7px);
+  }
+
+  .mp-kicker {
+    display: none;
+  }
+
+  .mp-cover {
+    width: 50px;
+    height: 50px;
+  }
+
+  .mp-actions {
+    gap: 3px;
+  }
+
+}
+
+@media (orientation: landscape) and (max-height: 500px) {
+  #player-bar.rp-player-bar--touch {
+    bottom: calc(var(--nav-h) + var(--safe-bottom) + 5px);
+  }
+
+  .mp-kicker {
+    display: none;
+  }
+}
