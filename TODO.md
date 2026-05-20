@@ -1,5 +1,86 @@
 # DotSound - TODO Tracker
 
+- [x] **Perf Phase 3+4: modulePreload polyfill + trigram GIN indexes (2026-05-20)**
+  - Части 3 и 4 из 5 плана мобильной оптимизации
+    (`.claude/plans/merry-wishing-tide.md`).
+  - **Phase 3.3 — `modulePreload.polyfill: true`** в
+    `frontend/vite.config.ts`. Раньше было `false` — экономило
+    несколько KB JS на Chromium, но ломало нативный preload на
+    iOS Safari <16.4 (Telegram WKWebView). Теперь поведение
+    одинаково на всех целевых WebView'ах: цепочка transitively
+    зависимых chunks начинает грузиться параллельно сразу после
+    парсинга entry-модуля, а не последовательно по ходу импорта.
+    `resolveDependencies`-фильтр (`/secure/`, `admin-bundle`,
+    `/hls-`) остался — те бандлы и должны грузиться лениво.
+  - **Phase 4 — alembic `0115_trigram_indexes_for_search.py`.**
+    `CREATE EXTENSION IF NOT EXISTS pg_trgm` + GIN-индексы с
+    `gin_trgm_ops` на `artists.name_normalized`, `tracks.title`,
+    `playlists.name`, `albums.title`. Эти поля используются в
+    поиске через `ILIKE '%foo%'`, который не покрывается стандартным
+    btree-индексом и до этого деградировал до seq scan. Миграция
+    идемпотентна (`IF NOT EXISTS`). На больших таблицах ops может
+    предпочесть запустить `CREATE INDEX CONCURRENTLY` вручную в
+    maintenance-окно и `alembic stamp 0115` — комментарий в файле
+    миграции описывает оба пути.
+  - **Что НЕ вошло в эту итерацию (со ссылкой на план):**
+    - Phase 3.1 (параллелизация запросов Home) — verified-no-op:
+      `frontend/src/views/HomeView.tsx` уже параллелизует все
+      первичные запросы (`continue`, highlight, listen-history,
+      profile, promo hero/section), а `genre-mixes` и
+      `followed-artists` лениво подгружаются через
+      `useAutoLoadMore`+IntersectionObserver. Диагноз агента про
+      "waterfall" не подтвердился.
+    - Phase 3.2 (расцепить i18n init от React render) — deferred.
+      i18next требует `init()` до первого `useTranslation`, иначе
+      компоненты покажут сырые ключи. Реальный размер локалей
+      ~десятки KB gzipped; на mobile это <300ms — плохой ROI
+      против риска UX-регрессии (flash сырых ключей).
+    - Phase 2.2 (asyncio.Lock в egress pool) — deferred.
+      Критсекции в `pick`/`finish` полностью синхронны, внутри
+      одного asyncio event loop sync-код атомарен между task
+      switches; `threading.Lock` не блокирует event loop в
+      практическом смысле, а конверсия 8+ call sites — плохой
+      ROI и риск в hot-path плеера.
+    - Phase 5 (web-vitals → бэкенд endpoint → дашборд) — отдельный
+      backlog: требует нового маршрута, схемы, агрегации,
+      ретенции, UI. Сейчас без баз для измерений после фаз 1-4
+      нет смысла наращивать. Возвращаемся, когда нужно будет
+      померить эффект.
+
+- [x] **Perf Phase 2: HLS via /stream + Link preload (2026-05-20)**
+  - Часть 2/5 плана мобильной оптимизации
+    (`.claude/plans/merry-wishing-tide.md`). Цель — убрать лишний RTT
+    перед стартом HLS-плеера на мобильном.
+  - **HLS-ветка в `/stream`** — `app/api/v1/tracks/playback.py`. Для
+    internal-треков с `hls_manifest_key` (не third-party и не cached
+    source) `/stream` теперь возвращает
+    `StreamResponse(stream_type="hls", url="/api/v1/tracks/{id}/hls/master.m3u8")`
+    напрямую. Frontend уже умеет читать `stream_type === 'hls'`
+    (`frontend/src/store/PlayerContext.tsx`), так что плеер сразу
+    обращается к manifest'у вместо хода через `/audio` → 302.
+  - **`Link: rel=preload` на 302 из `/audio`** — там же, в эндпоинте
+    `audio_stream`. Для клиентов, которые всё-таки идут через
+    `/audio` (legacy `<audio src>`), браузер видит preload-хинт и
+    начинает качать manifest параллельно с обработкой редиректа.
+  - **Cache-Control HLS** — проверено: `app/api/v1/tracks/hls.py`
+    уже отдаёт manifest как `public, max-age=60`, CAS-сегменты
+    `hls-blobs/...` как `public, max-age=31536000, immutable`,
+    legacy `hls/{id}/...` — `public, max-age=86400`, плюс ETag/304.
+    Изменения не требуются.
+  - **`threading.Lock` в `streaming_egress_pool`** — оставлено как
+    есть. Анализ: критсекции `pick()`/`finish()` полностью синхронны
+    (нет `await`), внутри одного asyncio event loop sync-код атомарен
+    между task switches, так что лок не блокирует loop в практическом
+    смысле. Конверсия 8+ call sites ради микросекундной выгоды —
+    плохой ROI.
+  - **Tests:** `tests/app/api/v1/tracks/test_playback.py` —
+    `test_stream_returns_hls_url_for_internal_hls_track`,
+    `test_audio_hls_redirect_includes_link_preload_header`.
+    Запуск: `poetry run pytest tests/app/api/v1/tracks/test_playback.py`.
+  - **Legal readiness:** playback-touching изменение, проверено —
+    `LEGAL.md` и `docs/legal/` не требуют правок (не меняли catalog
+    типы/access modes, только маршрутизацию ответа).
+
 - [x] **Perf Phase 1: Home cache + N+1 fixes + Cache-Control (2026-05-20)**
   - Часть 1/5 плана мобильной оптимизации (`.claude/plans/merry-wishing-tide.md`).
     Фокус — backend quick wins на самых тяжёлых эндпоинтах ленты.
