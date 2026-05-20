@@ -1,9 +1,9 @@
 """Recommendation-cache pre-warming tasks.
 
-Warms ``rec:daily_mix:{user_id}`` and ``rec:genre_mixes:{user_id}`` for
-users who have been active in the last ``_ACTIVE_WINDOW_DAYS`` days, so
-the first request of each new day is served from cache rather than
-triggering a full on-demand recalculation.
+Warms ``rec:daily_mix:{user_id}``, ``rec:genre_mixes:{user_id}`` and
+``rec:home:{user_id}`` for users who have been active in the last
+``_ACTIVE_WINDOW_DAYS`` days, so the first request of each new day is
+served from cache rather than triggering a full on-demand recalculation.
 
 Intended cadence: once per day, shortly after midnight UTC (e.g. the
 ``seed_rec_cache_warmer_job`` scheduled-job row uses ``5 0 * * *``).
@@ -52,11 +52,13 @@ async def _warm_one(user_id: int) -> dict:
     redis = get_redis_client()
     mix_key = f"rec:daily_mix:{user_id}"
     genre_key = f"rec:genre_mixes:{user_id}"
+    home_key = f"rec:home:{user_id}"
 
     mix_warm = bool(await redis.exists(mix_key))
     genre_warm = bool(await redis.exists(genre_key))
+    home_warm = bool(await redis.exists(home_key))
 
-    if mix_warm and genre_warm:
+    if mix_warm and genre_warm and home_warm:
         return {"user_id": user_id, "skipped": True}
 
     from app.services.recommendation_service import RecommendationService
@@ -81,6 +83,16 @@ async def _warm_one(user_id: int) -> dict:
             except Exception as exc:
                 logger.warning(
                     "rec_warm_genre_mixes_failed",
+                    user_id=user_id,
+                    error=str(exc),
+                )
+        if not home_warm:
+            try:
+                await svc.get_home_sections(user_id)
+                warmed.append("home_sections")
+            except Exception as exc:
+                logger.warning(
+                    "rec_warm_home_failed",
                     user_id=user_id,
                     error=str(exc),
                 )

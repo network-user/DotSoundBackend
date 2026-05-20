@@ -17,7 +17,6 @@ import {
   usePlayerActions,
   usePlayerMeta,
   usePlayerState,
-  usePlayer,
 } from '@/store/PlayerContext'
 import { getInternalUserId, getIsAdmin } from '@/lib/telegram'
 import { useLikes } from '@/store/LikesContext'
@@ -78,7 +77,7 @@ export function NowPlayingView() {
   const navigate = useNavigate()
   const { t } = useTranslation()
   const reduce = useReducedMotion()
-  const { track, shuffleOn, repeatMode } = usePlayerMeta()
+  const { track, shuffleOn, repeatMode, queue } = usePlayerMeta()
   const {
     currentTime,
     duration,
@@ -98,7 +97,6 @@ export function NowPlayingView() {
   const desktopFineNav = useDesktopFinePointer()
   const goArtistByName = useNavigateToArtistByName()
   const { isLiked, toggleLike } = useLikes()
-  const { queue } = usePlayer()
 
   usePrefetchTracks(
     queue.length > 0 ? queue : null,

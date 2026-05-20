@@ -5,6 +5,7 @@ from typing import Any
 
 import structlog
 from fastapi import APIRouter, Depends, WebSocket, WebSocketDisconnect
+from pydantic import BaseModel, Field
 
 from app.core.auth import AuthError, decode_access_token
 from app.core.db import AsyncSessionLocal
@@ -103,6 +104,36 @@ async def get_user_presence(
         "user_id": target_id,
         "status": data.get("status", "offline"),
         "last_seen": data.get("ts", 0),
+    }
+
+
+_PRESENCE_BATCH_MAX = 200
+
+
+class PresenceBatchRequest(BaseModel):
+    user_ids: list[int] = Field(
+        default_factory=list,
+        max_length=_PRESENCE_BATCH_MAX,
+    )
+
+
+@router.post("/users/presence/batch")
+async def get_users_presence_batch(
+    payload: PresenceBatchRequest,
+    user: User = Depends(get_current_user),
+) -> dict[str, Any]:
+    unique_ids = list({int(uid) for uid in payload.user_ids})[
+        :_PRESENCE_BATCH_MAX
+    ]
+    bulk = await ws_manager.get_presence_bulk(unique_ids)
+    return {
+        "members": {
+            str(uid): {
+                "status": data.get("status", "offline"),
+                "last_seen": data.get("ts", 0),
+            }
+            for uid, data in bulk.items()
+        }
     }
 
 

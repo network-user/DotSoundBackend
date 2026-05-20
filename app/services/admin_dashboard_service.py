@@ -9,7 +9,7 @@ from datetime import UTC, datetime, timedelta
 from typing import Any
 
 import structlog
-from sqlalchemy import func, or_, select
+from sqlalchemy import case, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.redis import get_redis_client
@@ -93,29 +93,48 @@ async def collect_overview(
     day_ago = now - timedelta(days=1)
     hour_ago = now - timedelta(hours=1)
 
-    users_total = await _safe_count(session, select(func.count(User.id)))
-    users_active = await _safe_count(
-        session,
-        select(func.count(User.id)).where(User.is_active.is_(True)),
-    )
-    users_admins = await _safe_count(
-        session,
-        select(func.count(User.id)).where(User.is_admin.is_(True)),
-    )
-    users_new_24h = await _safe_count(
-        session,
-        select(func.count(User.id)).where(User.created_at >= day_ago),
-    )
+    users_total = 0
+    users_active = 0
+    users_admins = 0
+    users_new_24h = 0
+    try:
+        row = (
+            await session.execute(
+                select(
+                    func.count(User.id),
+                    func.sum(case((User.is_active.is_(True), 1), else_=0)),
+                    func.sum(case((User.is_admin.is_(True), 1), else_=0)),
+                    func.sum(case((User.created_at >= day_ago, 1), else_=0)),
+                )
+            )
+        ).first()
+        if row is not None:
+            users_total = int(row[0] or 0)
+            users_active = int(row[1] or 0)
+            users_admins = int(row[2] or 0)
+            users_new_24h = int(row[3] or 0)
+    except Exception:
+        logger.exception("admin_dashboard_user_counts_failed")
 
-    tracks_total = await _safe_count(session, select(func.count(Track.id)))
-    tracks_active = await _safe_count(
-        session,
-        select(func.count(Track.id)).where(Track.is_active.is_(True)),
-    )
-    tracks_new_24h = await _safe_count(
-        session,
-        select(func.count(Track.id)).where(Track.created_at >= day_ago),
-    )
+    tracks_total = 0
+    tracks_active = 0
+    tracks_new_24h = 0
+    try:
+        row = (
+            await session.execute(
+                select(
+                    func.count(Track.id),
+                    func.sum(case((Track.is_active.is_(True), 1), else_=0)),
+                    func.sum(case((Track.created_at >= day_ago, 1), else_=0)),
+                )
+            )
+        ).first()
+        if row is not None:
+            tracks_total = int(row[0] or 0)
+            tracks_active = int(row[1] or 0)
+            tracks_new_24h = int(row[2] or 0)
+    except Exception:
+        logger.exception("admin_dashboard_track_counts_failed")
 
     complaints_open = await _safe_count(
         session,

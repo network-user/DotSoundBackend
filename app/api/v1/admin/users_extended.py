@@ -46,6 +46,7 @@ from app.services.admin_alert_service import (
 )
 from app.services.admin_manifest_service import (
     KNOWN_CAPABILITIES,
+    invalidate_admin_capabilities_cache,
 )
 from app.services.admin_service import AdminService
 
@@ -262,6 +263,7 @@ async def grant_admin(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="user not found",
         )
+    await invalidate_admin_capabilities_cache(user_id)
     await dispatch_alert(
         event_type="admin_role_granted",
         severity="warning",
@@ -290,6 +292,7 @@ async def revoke_admin(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="user not found",
         )
+    await invalidate_admin_capabilities_cache(user_id)
     await dispatch_alert(
         event_type="admin_role_revoked",
         severity="warning",
@@ -330,6 +333,7 @@ async def grant_capability(
         capability=capability,
         granted_by=admin.id,
     )
+    await invalidate_admin_capabilities_cache(user_id)
     await dispatch_alert(
         event_type="admin_capability_granted",
         severity="info",
@@ -359,6 +363,7 @@ async def revoke_capability(
             detail="capability row not found",
         )
     await cap_repo.revoke(row)
+    await invalidate_admin_capabilities_cache(user_id)
     return {
         "user_id": user_id,
         "capability": capability,

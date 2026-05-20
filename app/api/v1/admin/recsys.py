@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 from fastapi import APIRouter, Depends, Query
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
 
 from app.dependencies import (
     get_db,
@@ -31,9 +33,19 @@ async def backfill_embeddings(
     track_ids = await repo.list_tracks_missing_embedding(
         limit=limit,
     )
+    if not track_ids:
+        return {"enqueued_count": 0, "track_ids": []}
+
+    rows = await session.execute(
+        select(Track)
+        .where(Track.id.in_(track_ids))
+        .options(selectinload(Track.audio_blob))
+    )
+    tracks_by_id = {t.id: t for t in rows.scalars().all()}
+
     enqueued: list[int] = []
     for tid in track_ids:
-        track = await session.get(Track, tid)
+        track = tracks_by_id.get(tid)
         blob_key = f"track:{tid}"
         if track is not None and track.audio_blob is not None:
             blob_key = track.audio_blob.s3_key

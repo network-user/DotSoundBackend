@@ -38,6 +38,14 @@ class AlbumRepository:
         )
         return result.scalar_one_or_none()
 
+    async def get_by_ids(self, album_ids: list[int]) -> list[Album]:
+        if not album_ids:
+            return []
+        result = await self._session.execute(
+            select(Album).where(Album.id.in_(album_ids))
+        )
+        return list(result.scalars().all())
+
     async def get_with_tracks(self, album_id: int) -> Album | None:
         result = await self._session.execute(
             select(Album)

@@ -35,6 +35,7 @@ import type {
   LyricsResponse,
   Playlist,
   PlaylistListResponse,
+  PromotionListResponse,
   BCSearchResult,
   PlaylistWithTracks,
   SCSearchResult,
@@ -102,6 +103,7 @@ import type {
   RadioResponse,
   MyComplaintsResponse,
   UserPresenceResponse,
+  UsersPresenceBatchResponse,
   TrackQueueResponse,
   UnreadCountResponse,
   UserListeningStatsResponse,
@@ -2124,6 +2126,15 @@ export const api = {
     return request(`/api/v1/users/${userId}/presence`)
   },
 
+  getUsersPresenceBatch(
+    userIds: number[],
+  ): Promise<UsersPresenceBatchResponse> {
+    return request('/api/v1/users/presence/batch', {
+      method: 'POST',
+      body: JSON.stringify({ user_ids: userIds }),
+    })
+  },
+
   getChatPresence(convId: number): Promise<ChatPresenceResponse> {
     return request(`/api/v1/chats/${convId}/presence`)
   },
@@ -2864,5 +2875,36 @@ export const api = {
       qs.set('exclude_ids', excludeIds.join(','))
     }
     return request(`/api/v1/recommendations/radio?${qs}`)
+  },
+
+  getHeroPromotions(limit = 3): Promise<PromotionListResponse> {
+    return request(`/api/v1/promotions/hero?limit=${limit}`)
+  },
+
+  getSectionPromotions(limit = 10): Promise<PromotionListResponse> {
+    return request(`/api/v1/promotions/section?limit=${limit}`)
+  },
+
+  getSearchPinPromotions(
+    query?: string,
+    limit = 3,
+  ): Promise<PromotionListResponse> {
+    const qs = new URLSearchParams({ limit: String(limit) })
+    if (query) qs.set('query', query)
+    return request(`/api/v1/promotions/search-pin?${qs}`)
+  },
+
+  recordPromotionEvent(
+    promotionId: number,
+    body: {
+      event_type: 'impression' | 'click'
+      surface?: 'hero' | 'section' | 'in_feed' | 'search_pin'
+    },
+  ): Promise<{ ok: boolean }> {
+    return request(`/api/v1/promotions/${promotionId}/event`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    })
   },
 }

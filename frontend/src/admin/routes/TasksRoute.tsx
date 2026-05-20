@@ -2440,7 +2440,7 @@ export function TasksRoute() {
                             {t('admin.tasks.bg.live.track')}
                           </span>
                           <strong className="admin-mono">
-                            {live.track_id ?? 'РІР‚вЂњ'}
+                            {live.track_id ?? '—'}
                           </strong>
                           {liveTrackId != null && (
                             <MotionPress
@@ -2466,7 +2466,7 @@ export function TasksRoute() {
                             {t('admin.tasks.bg.live.progressId')}
                           </span>
                           <strong className="admin-mono">
-                            {live.progress_id ?? 'РІР‚вЂњ'}
+                            {live.progress_id ?? '—'}
                           </strong>
                         </div>
                         <div>

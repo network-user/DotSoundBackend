@@ -112,6 +112,54 @@ class TrackService:
             return None
         return track
 
+    async def search_cursor(
+        self,
+        query: str,
+        *,
+        cursor: str | None,
+        size: int = 20,
+        playable_only: bool = False,
+        genre_filter: str | None = None,
+    ) -> tuple[list[Track], int, str | None, bool]:
+        """Cursor-paginated track search (Postgres path only).
+
+        Skips Elasticsearch even when configured — keyset paging on
+        ``(play_count, id)`` requires the relational ordering ES does
+        not expose. Returns ``(tracks, total, next_cursor, has_more)``.
+        """
+        cursor_play_count: int | None = None
+        cursor_id: int | None = None
+        if cursor:
+            try:
+                pc_raw, id_raw = cursor.split(":", 1)
+                cursor_play_count = int(pc_raw)
+                cursor_id = int(id_raw)
+            except (TypeError, ValueError):
+                cursor_play_count = None
+                cursor_id = None
+
+        tracks, total, has_more = await self._repo.search_cursor(
+            query=query,
+            cursor_play_count=cursor_play_count,
+            cursor_id=cursor_id,
+            limit=size,
+            playable_only=playable_only,
+            genre_filter=genre_filter,
+        )
+        next_cursor: str | None = None
+        if has_more and tracks:
+            tail = tracks[-1]
+            next_cursor = f"{int(tail.play_count or 0)}:{int(tail.id)}"
+        logger.info(
+            "tracks_searched",
+            source="postgresql_cursor",
+            query=query,
+            total=total,
+            returned=len(tracks),
+            has_more=has_more,
+        )
+        return tracks, total, next_cursor, has_more
+
     async def search(
         self,
         query: str,

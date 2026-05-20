@@ -62,9 +62,19 @@
       "quickLess": "Свернуть",
       "sectionGenreMixes": "Миксы по жанрам",
       "sectionSubscriptions": "Подписки",
+      "sectionPromoted": "Рекомендуем",
       "sectionContinue": "Продолжить",
       "sectionRecent": "Недавно слушали",
       "sectionTracks": "Треки",
+      "sectionTitle": {
+        "continue": "Продолжить слушать",
+        "personalized": "Для вас",
+        "new_releases": "Новые релизы",
+        "user_choice": "Выбор пользователей",
+        "fav_artists": "Любимые исполнители",
+        "popular": "Популярное",
+        "genre_popular": "Популярное"
+      },
       "ptrPull": "Потяните",
       "ptrRefresh": "Обновляем…",
       "ptrRelease": "Отпустите",
@@ -1113,5 +1123,9 @@
   },
   "artist": {
     "follow_failed": "Не удалось обновить подписку"
+  },
+  "promotion": {
+    "kicker": "Рекомендуем",
+    "sectionTitle": "Рекомендуем"
   }
 }

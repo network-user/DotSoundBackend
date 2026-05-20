@@ -2,6 +2,7 @@ from datetime import datetime
 
 import structlog
 from sqlalchemy import and_, delete, func, select
+from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.sql.elements import ColumnElement
 
@@ -52,6 +53,19 @@ class DislikeRepository(BaseRepository[Dislike]):
 
     async def add(self, user_id: int, track_id: int) -> Dislike:
         return await self.create(user_id=user_id, track_id=track_id)
+
+    async def add_idempotent(
+        self, user_id: int, track_id: int
+    ) -> bool:
+        stmt = (
+            pg_insert(Dislike)
+            .values(user_id=user_id, track_id=track_id)
+            .on_conflict_do_nothing(
+                index_elements=["user_id", "track_id"]
+            )
+        )
+        result = await self._session.execute(stmt)
+        return bool((getattr(result, "rowcount", 0) or 0) > 0)
 
     async def remove(self, user_id: int, track_id: int) -> bool:
         result = await self._session.execute(

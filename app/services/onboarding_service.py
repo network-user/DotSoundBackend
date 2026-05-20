@@ -54,6 +54,7 @@ async def _invalidate_rec_caches(user_id: int) -> None:
     await redis.delete(
         f"rec:daily_mix:{user_id}",
         f"rec:genre_mixes:{user_id}",
+        f"rec:home:{user_id}",
     )
 _ACTIVATION_COUNTER_PREFIX = "activation:counters:"
 _ACTIVATION_USERS_PREFIX = "activation:users:"

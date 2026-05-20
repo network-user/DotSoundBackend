@@ -95,7 +95,7 @@ class UserTrackLibraryRepository:
         playable_only: bool = False,
     ) -> tuple[list[Track], int]:
         count_stmt = (
-            select(func.count(func.distinct(Track.id)))
+            select(func.count(Track.id))
             .select_from(Track)
             .outerjoin(
                 UserTrackLibrary,
@@ -195,7 +195,7 @@ class UserTrackLibraryRepository:
 
     async def count_by_user(self, user_id: int) -> int:
         result = await self._session.execute(
-            select(func.count(func.distinct(Track.id)))
+            select(func.count(Track.id))
             .select_from(Track)
             .outerjoin(
                 UserTrackLibrary,

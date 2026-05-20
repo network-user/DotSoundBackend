@@ -695,6 +695,10 @@ export interface ChatPresenceResponse {
   members: Record<string, ChatPresenceMember>
 }
 
+export interface UsersPresenceBatchResponse {
+  members: Record<string, ChatPresenceMember>
+}
+
 export interface SimilarTracksResponse {
   seed_track_id: number
   tracks: Track[]
@@ -1232,4 +1236,40 @@ export interface OfflineEligibilityBatchResponse {
   items: Record<string, OfflineEligibilityBatchItem>
   max_track_bytes: number
   max_total_bytes_per_user: number
+}
+
+export type PromotionEntityType =
+  | 'artist'
+  | 'track'
+  | 'playlist'
+  | 'album'
+export type PromotionSurface =
+  | 'hero'
+  | 'section'
+  | 'in_feed'
+  | 'search_pin'
+
+export interface PromotionEntityRef {
+  entity_type: PromotionEntityType
+  entity_id: number
+  title: string
+  subtitle: string | null
+  cover_url: string | null
+}
+
+export interface PromotionPublic {
+  id: number
+  entity_type: PromotionEntityType
+  entity_id: number
+  surfaces: PromotionSurface[]
+  priority: number
+  title: string
+  subtitle: string | null
+  cta_label: string | null
+  cover_url: string | null
+  entity: PromotionEntityRef
+}
+
+export interface PromotionListResponse {
+  items: PromotionPublic[]
 }

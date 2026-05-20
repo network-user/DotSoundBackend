@@ -24,30 +24,32 @@ export function ChatList({ items }: Props) {
 
   useEffect(() => {
     if (items.length === 0) return
-    let cancelled = false
-    Promise.all(
-      items.map((item) =>
-        api
-          .getChatPresence(item.conversation.id)
-          .then((res) => {
-            const members = Object.values(res.members)
-            const online = members.some(
-              (m) => m.status === 'online',
-            )
-            return [item.conversation.id, online] as const
-          })
-          .catch(() =>
-            [item.conversation.id, false] as const,
-          ),
-      ),
-    ).then((results) => {
-      if (cancelled) return
-      const map: Record<number, boolean> = {}
-      for (const [id, online] of results) {
-        map[id] = online
+    const peers: { convId: number; userId: number }[] = []
+    for (const item of items) {
+      const uid = item.peer?.id
+      if (typeof uid === 'number') {
+        peers.push({ convId: item.conversation.id, userId: uid })
       }
-      setOnlineMap(map)
-    })
+    }
+    if (peers.length === 0) return
+    let cancelled = false
+    const uniqueIds = Array.from(
+      new Set(peers.map((p) => p.userId)),
+    )
+    api
+      .getUsersPresenceBatch(uniqueIds)
+      .then((res) => {
+        if (cancelled) return
+        const map: Record<number, boolean> = {}
+        for (const { convId, userId } of peers) {
+          const entry = res.members[String(userId)]
+          map[convId] = entry?.status === 'online'
+        }
+        setOnlineMap(map)
+      })
+      .catch(() => {
+        /* ignore presence errors — list still renders */
+      })
     return () => {
       cancelled = true
     }

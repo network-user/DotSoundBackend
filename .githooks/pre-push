@@ -4,6 +4,8 @@ root="$(git rev-parse --show-toplevel)"
 cd "$root" || exit 1
 if command -v poetry >/dev/null 2>&1; then
     poetry run python scripts/check_boundary_policy.py
+    poetry run python scripts/check_no_mojibake.py
 else
     python scripts/check_boundary_policy.py
+    python scripts/check_no_mojibake.py
 fi

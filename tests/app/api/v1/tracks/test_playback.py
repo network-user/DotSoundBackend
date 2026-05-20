@@ -725,3 +725,58 @@ async def test_sc_502_manifest_all_404_triggers_url_refresh() -> None:
     assert protocol == "hls"
     refresh_mock.assert_awaited_once_with(track)
     fallback_mock.assert_not_awaited()
+
+
+async def test_stream_returns_hls_url_for_internal_hls_track(
+    client: AsyncClient,
+    db_session: AsyncSession,
+) -> None:
+    user = await create_test_user(client, 50231)
+    t = await create_test_track(client, "InternalHls", user["id"])
+    track_id = t["id"]
+    await db_session.execute(
+        update(Track)
+        .where(Track.id == track_id)
+        .values(
+            hls_manifest_key=f"hls-blobs/aa/sha/{track_id}/master.m3u8",
+            audio_cache_status="pending",
+        )
+    )
+    await db_session.commit()
+
+    r = await client.get(f"/api/v1/tracks/{track_id}/stream")
+    assert r.status_code == 200
+    body = r.json()
+    assert body["stream_type"] == "hls"
+    assert body["url"] == f"/api/v1/tracks/{track_id}/hls/master.m3u8"
+    assert body["track_id"] == track_id
+
+
+async def test_audio_hls_redirect_includes_link_preload_header(
+    client: AsyncClient,
+    db_session: AsyncSession,
+) -> None:
+    user = await create_test_user(client, 50232)
+    t = await create_test_track(client, "HlsLinkPreload", user["id"])
+    track_id = t["id"]
+    await db_session.execute(
+        update(Track)
+        .where(Track.id == track_id)
+        .values(
+            hls_manifest_key=f"hls/{track_id}/master.m3u8",
+            file_key=f"anon/playback-link-{track_id}.mp3",
+        )
+    )
+    await db_session.commit()
+
+    r = await client.get(
+        f"/api/v1/tracks/{track_id}/audio",
+        follow_redirects=False,
+    )
+    assert r.status_code == 302
+    expected_url = f"/api/v1/tracks/{track_id}/hls/master.m3u8"
+    assert r.headers["location"].endswith(expected_url)
+    link = r.headers.get("link", "")
+    assert expected_url in link
+    assert "rel=preload" in link
+    assert "as=fetch" in link

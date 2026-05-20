@@ -190,6 +190,12 @@ Backend (file_validator.py):
   аномалий воркеров (processing_too_fast, duplicate_result,
   failure_rate, stale_after_claim) + `should_auto_suspend`.
   Используется в `app/services/compute_anomaly_service.py`.
+- `services/promotion_policy.py` -- ranking/mixing decisions for
+  editorial promotions (hero/section/in-feed/search-pin surfaces):
+  per-user frequency caps, insertion positions for in-feed,
+  spacing/dedupe, locale weighting. Backend adapter лежит в
+  `app/services/promotion_policy_adapter.py` и работает в pass-through
+  режиме, пока модуль не появится. Контракт: `docs/promotion-policy-contract.md`.
 - `services/streaming_egress_policy.py` -- decision-функции пула
   egress для байтового стриминга стороннего аудио (sticky-TTL,
   quarantine threshold, exponential back-off, capacity per egress,

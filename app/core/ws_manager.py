@@ -195,11 +195,24 @@ class ConnectionManager:
     async def get_presence_bulk(
         self, user_ids: list[int]
     ) -> dict[int, dict[str, Any]]:
+        if not user_ids:
+            return {}
+        if not self._redis:
+            return {
+                uid: {"status": "offline", "ts": 0}
+                for uid in user_ids
+            }
+        keys = [f"{_PRESENCE_PREFIX}{uid}" for uid in user_ids]
+        raws = await self._redis.mget(keys)
         result: dict[int, dict[str, Any]] = {}
-        for uid in user_ids:
-            result[uid] = await self.get_presence(
-                uid
-            )
+        for uid, raw in zip(user_ids, raws, strict=False):
+            if not raw:
+                result[uid] = {"status": "offline", "ts": 0}
+                continue
+            try:
+                result[uid] = json.loads(raw)
+            except (TypeError, ValueError):
+                result[uid] = {"status": "offline", "ts": 0}
         return result
 
     async def broadcast_activity(

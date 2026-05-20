@@ -109,6 +109,27 @@ class CommentService:
             "author_label": self._author_label(au),
         }
 
+    def _comment_dict_sync(
+        self,
+        c: TrackComment,
+        users: dict[int, User],
+        votes_map: dict[int, tuple[int, int]],
+    ) -> dict[str, Any]:
+        likes, dislikes = votes_map.get(c.id, (0, 0))
+        au = users.get(c.user_id) if c.user_id is not None else None
+        return {
+            "id": c.id,
+            "track_id": c.track_id,
+            "user_id": c.user_id,
+            "parent_id": c.parent_id,
+            "text": c.text,
+            "is_pinned": c.is_pinned,
+            "created_at": c.created_at.isoformat(),
+            "likes": likes,
+            "dislikes": dislikes,
+            "author_label": self._author_label(au),
+        }
+
     async def _notify_comment_reply(
         self,
         *,
@@ -332,23 +353,29 @@ class CommentService:
 
         uid_set: set[int] = set()
         for x in roots:
-            uid_set.add(x.user_id)
+            if x.user_id is not None:
+                uid_set.add(x.user_id)
         for x in all_flat:
-            uid_set.add(x.user_id)
+            if x.user_id is not None:
+                uid_set.add(x.user_id)
         users = await self._user_repo.get_by_ids(list(uid_set))
 
-        async def branch(
+        all_comment_ids = [r.id for r in roots] + [
+            n.id for n in all_flat
+        ]
+        votes_map = await self._repo.get_vote_counts_batch(
+            all_comment_ids
+        )
+
+        def branch(
             node: TrackComment,
         ) -> dict[str, Any]:
-            d = await self._comment_dict(node, users)
+            d = self._comment_dict_sync(node, users, votes_map)
             kids = by_parent.get(node.id, [])
-            d["replies"] = [await branch(ch) for ch in kids]
+            d["replies"] = [branch(ch) for ch in kids]
             return d
 
-        out: list[dict[str, Any]] = []
-        for root in roots:
-            out.append(await branch(root))
-        return out
+        return [branch(root) for root in roots]
 
     async def delete_comment(self, comment_id: int, user_id: int) -> None:
         c = await self._repo.get_by_id(comment_id)

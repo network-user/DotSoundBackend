@@ -64,13 +64,16 @@ const MEDIA_SESSION_PLACEHOLDER_SIZES = [192, 512] as const
 const MEDIA_SESSION_SWITCH_HOLD_MS = 15000
 // Time-to-live for a pre-resolved stream URL (third_party_stream or
 // private). Keeps the URL usable as long as the upstream signed link
-// has not expired; we still cross-check ``expires_at`` per item.
-const PREFETCHED_STREAM_TTL_MS = 60_000
-// How many upcoming tracks we eagerly resolve a stream URL for. 3 is
-// the smallest number that survives the typical Android background
-// fetch deadline (~30-60 s of suspended network) for two consecutive
-// gapless track switches while the screen is locked.
-const PREFETCH_STREAM_AHEAD = 3
+// has not expired; we still cross-check ``expires_at`` per item, so
+// a longer in-memory TTL never serves a stale URL — it just collapses
+// the extra ``getStream`` RTT on re-plays of recently touched tracks.
+const PREFETCHED_STREAM_TTL_MS = 300_000
+// How many upcoming tracks we eagerly resolve a stream URL for.
+// Bumped from 3 to 5 so longer radio queues survive the typical
+// Android background fetch deadline (~30-60 s of suspended network)
+// across more than two consecutive gapless track switches with the
+// screen locked.
+const PREFETCH_STREAM_AHEAD = 5
 // Volume tween durations for soft track transitions. 80 ms fade-out
 // before src swap removes the click that some Chromium builds emit
 // when the audio engine cuts off mid-buffer. 180 ms fade-in after

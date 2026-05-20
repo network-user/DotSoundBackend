@@ -176,7 +176,8 @@
     "platformTracks": "Треки",
     "featuredPlaylists": "Подборки редакции",
     "openPlaylistAria": "Открыть плейлист: {{name}}",
-    "playlistsTabEmpty": "Плейлисты по запросу не найдены"
+    "playlistsTabEmpty": "Плейлисты по запросу не найдены",
+    "pinnedPromotions": "Рекомендуем"
   },
   "myTop": {
     "title": "Ваш топ",

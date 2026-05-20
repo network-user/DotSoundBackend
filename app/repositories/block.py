@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import structlog
 from sqlalchemy import delete, or_, select
+from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.block import UserBlock
@@ -19,14 +20,19 @@ class BlockRepository:
 
     async def block(
         self, blocker_id: int, blocked_id: int
-    ) -> UserBlock:
-        b = UserBlock(
-            blocker_id=blocker_id,
-            blocked_id=blocked_id,
+    ) -> None:
+        stmt = (
+            pg_insert(UserBlock)
+            .values(
+                blocker_id=blocker_id,
+                blocked_id=blocked_id,
+            )
+            .on_conflict_do_nothing(
+                index_elements=["blocker_id", "blocked_id"]
+            )
         )
-        self._s.add(b)
+        await self._s.execute(stmt)
         await self._s.flush()
-        return b
 
     async def unblock(
         self, blocker_id: int, blocked_id: int

@@ -256,9 +256,13 @@ const AdminApp = lazyWithRetry(() =>
   })),
 )
 
-function TrackDeepLinkRoute() {
+function TrackDeepLinkRoute({
+  onOpenArtist,
+}: {
+  onOpenArtist: (id: number) => void
+}) {
   useTrackDeepLink()
-  return null
+  return <HomeView onOpenArtist={onOpenArtist} />
 }
 
 function AnimatedRoutes({
@@ -741,10 +745,15 @@ export function App() {
   }, [isInitialized])
 
   useEffect(() => {
-    const mono =
-      localStorage.getItem(
-        'setting-monochrome',
-      ) === 'true'
+    let mono = false
+    try {
+      mono =
+        localStorage.getItem(
+          'setting-monochrome',
+        ) === 'true'
+    } catch {
+      mono = false
+    }
     document.body.classList.toggle(
       'monochrome',
       mono,
@@ -1069,7 +1078,14 @@ export function App() {
               />
             }
           />
-          <Route path="/track/:trackId" element={<TrackDeepLinkRoute />} />
+          <Route
+            path="/track/:trackId"
+            element={
+              <TrackDeepLinkRoute
+                onOpenArtist={(id) => navigate(`/artist/${id}`)}
+              />
+            }
+          />
           <Route
             path="/settings/connections"
             element={<OauthConnectionsReturn />}

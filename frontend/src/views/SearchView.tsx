@@ -26,11 +26,13 @@ import type {
   DiscoverResponse,
   Playlist,
   PlaylistWithTracks,
+  PromotionPublic,
   SCSearchResult,
   SearchSuggestItem,
   Track,
   YTSearchResult,
 } from '@/types/api'
+import { PromotionSection } from '@/components/Promotion/PromotionSection'
 
 type SearchViewProps = {
   onOpenArtist?: (id: number) => void
@@ -307,8 +309,50 @@ export function SearchView({ onOpenArtist }: SearchViewProps) {
     PlaylistWithTracks[] | null
   >(null)
   const [searchTotal, setSearchTotal] = useState(0)
+  const [pinnedPromotions, setPinnedPromotions] = useState<
+    PromotionPublic[]
+  >([])
 
   const debouncedQuery = useDebounce(query, SEARCH_DEBOUNCE_MS)
+
+  useEffect(() => {
+    let active = true
+    const q = debouncedQuery.trim()
+    if (!q) {
+      setPinnedPromotions([])
+      return
+    }
+    void api
+      .getSearchPinPromotions(q, 3)
+      .then((res) => {
+        if (active) setPinnedPromotions(res.items)
+      })
+      .catch(() => {
+        if (active) setPinnedPromotions([])
+      })
+    return () => {
+      active = false
+    }
+  }, [debouncedQuery])
+
+  const handlePinnedPromotionSelect = (item: PromotionPublic) => {
+    switch (item.entity_type) {
+      case 'artist':
+        if (onOpenArtist) onOpenArtist(item.entity_id)
+        else navigate(`/artist/${item.entity_id}`)
+        break
+      case 'track':
+        navigate(`/track/${item.entity_id}`)
+        break
+      case 'playlist':
+        navigate(`/playlist/${item.entity_id}`)
+        break
+      case 'album':
+        navigate(`/album/${item.entity_id}`)
+        break
+    }
+  }
+
   const inputRef = useRef<HTMLInputElement>(null)
   const requestSeqRef = useRef(0)
   const activeGenreTerm = useMemo(() => {
@@ -909,6 +953,15 @@ export function SearchView({ onOpenArtist }: SearchViewProps) {
             </button>
           )}
         </div>
+
+        {isSearching && pinnedPromotions.length > 0 && (
+          <PromotionSection
+            items={pinnedPromotions}
+            surface="search_pin"
+            title={t('search.pinnedPromotions', 'Рекомендуем')}
+            onSelect={handlePinnedPromotionSelect}
+          />
+        )}
 
         {isSearching && (
           <div className="search-tabs" role="tablist">

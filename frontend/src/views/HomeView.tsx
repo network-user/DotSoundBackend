@@ -40,9 +40,12 @@ import '@/styles/redesign-home.css'
 import type {
   FollowedArtistItem,
   GenreMixItem,
+  PromotionPublic,
   Track,
   UserResponse,
 } from '@/types/api'
+import { PromotionHero } from '@/components/Promotion/PromotionHero'
+import { PromotionSection } from '@/components/Promotion/PromotionSection'
 
 interface HomeSection {
   title: string
@@ -381,6 +384,16 @@ interface HomeLazyTrackSectionProps {
   moreLabel: string
 }
 
+function resolveSectionTitle(
+  section: HomeSection,
+  t: (key: string, defaultValue: string) => string,
+): string {
+  return t(
+    `redesign.home.sectionTitle.${section.section_type}`,
+    section.title,
+  )
+}
+
 function HomeLazyTrackSection({
   sectionKey,
   initialSection,
@@ -390,6 +403,7 @@ function HomeLazyTrackSection({
   onMore,
   moreLabel,
 }: HomeLazyTrackSectionProps) {
+  const { t } = useTranslation()
   const [section, setSection] = useState<HomeSection | null>(
     initialSection,
   )
@@ -452,14 +466,15 @@ function HomeLazyTrackSection({
     )
   }
 
+  const title = resolveSectionTitle(section, t)
   return (
     <HomeTrackSnapSection
-      title={section.title}
+      title={title}
       tracks={section.tracks}
       onPlay={onPlay}
       onMore={onMore}
       moreLabel={moreLabel}
-      snapAria={section.title}
+      snapAria={title}
     />
   )
 }
@@ -487,6 +502,10 @@ export function HomeView({ onOpenArtist }: HomeViewProps) {
     useState(false)
   const [recentlyPlayed, setRecentlyPlayed] = useState<Track[] | null>(null)
   const [fallbackTracks, setFallbackTracks] = useState<Track[] | null>(null)
+  const [promoHero, setPromoHero] = useState<PromotionPublic[] | null>(null)
+  const [promoSection, setPromoSection] = useState<
+    PromotionPublic[] | null
+  >(null)
   const [highlight, setHighlight] = useState<{
     kind: string
     reason_code: string
@@ -499,6 +518,50 @@ export function HomeView({ onOpenArtist }: HomeViewProps) {
   } | null>(null)
   const [headerStuck, setHeaderStuck] = useState(false)
   const sentinelRef = useRef<HTMLDivElement | null>(null)
+
+  useEffect(() => {
+    let active = true
+    void api
+      .getHeroPromotions(3)
+      .then((res) => {
+        if (active) setPromoHero(res.items)
+      })
+      .catch(() => {
+        if (active) setPromoHero([])
+      })
+    void api
+      .getSectionPromotions(10)
+      .then((res) => {
+        if (active) setPromoSection(res.items)
+      })
+      .catch(() => {
+        if (active) setPromoSection([])
+      })
+    return () => {
+      active = false
+    }
+  }, [])
+
+  const handlePromotionSelect = useCallback(
+    (item: PromotionPublic) => {
+      switch (item.entity_type) {
+        case 'artist':
+          if (onOpenArtist) onOpenArtist(item.entity_id)
+          else navigate(`/artist/${item.entity_id}`)
+          break
+        case 'track':
+          navigate(`/track/${item.entity_id}`)
+          break
+        case 'playlist':
+          navigate(`/playlist/${item.entity_id}`)
+          break
+        case 'album':
+          navigate(`/album/${item.entity_id}`)
+          break
+      }
+    },
+    [navigate, onOpenArtist],
+  )
 
   const upsertHomeSection = useCallback((section: HomeSection) => {
     setSections((prev) => {
@@ -849,7 +912,7 @@ export function HomeView({ onOpenArtist }: HomeViewProps) {
       (featuredSource &&
       (featuredSource.section_type === 'continue' ||
         featuredSource.section_type === 'user_choice')
-        ? featuredSource.title
+        ? resolveSectionTitle(featuredSource, t)
         : brandLabel)
   const loadingFeatured =
     sections === null &&
@@ -1094,6 +1157,22 @@ export function HomeView({ onOpenArtist }: HomeViewProps) {
           </>
         ) : null}
 
+        {promoHero && promoHero.length > 0 && (
+          <PromotionHero
+            items={promoHero}
+            onSelect={handlePromotionSelect}
+          />
+        )}
+
+        {promoSection && promoSection.length > 0 && (
+          <PromotionSection
+            items={promoSection}
+            surface="section"
+            title={t('redesign.home.sectionPromoted', 'Рекомендуем')}
+            onSelect={handlePromotionSelect}
+          />
+        )}
+
         {sections === null ? (
           <div>
             <div className="rh-home-section-head">
@@ -1111,15 +1190,22 @@ export function HomeView({ onOpenArtist }: HomeViewProps) {
             </div>
           </div>
         ) : (
-          sectionMap.get('continue') && (
-            <HomeTrackSnapSection
-              title={sectionMap.get('continue')!.title}
-              tracks={sectionMap.get('continue')!.tracks}
-              onPlay={handlePlay}
-              moreLabel={t('redesign.home.more')}
-              snapAria={sectionMap.get('continue')!.title}
-            />
-          )
+          sectionMap.get('continue') && (() => {
+            const continueSection = sectionMap.get('continue')!
+            const continueTitle = resolveSectionTitle(
+              continueSection,
+              t,
+            )
+            return (
+              <HomeTrackSnapSection
+                title={continueTitle}
+                tracks={continueSection.tracks}
+                onPlay={handlePlay}
+                moreLabel={t('redesign.home.more')}
+                snapAria={continueTitle}
+              />
+            )
+          })()
         )}
 
         {recentlyPlayed === null ? (

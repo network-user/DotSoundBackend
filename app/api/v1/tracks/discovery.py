@@ -41,11 +41,35 @@ async def list_tracks(
     q: str | None = Query(None),
     genre: str | None = Query(None),
     playable: bool = Query(False),
+    cursor: str | None = Query(
+        None,
+        description=(
+            "Opaque keyset cursor from previous response's next_cursor. "
+            "When provided, page is ignored and Postgres path is used."
+        ),
+    ),
     session: AsyncSession = Depends(get_db),
     current_user: User | None = Depends(get_optional_user),
 ) -> TrackListResponse:
     service = TrackService(session)
-    if q or genre:
+    next_cursor: str | None = None
+    has_more = False
+    if (q or genre) and cursor is not None:
+        effective_query = q or genre or ""
+        structlog.contextvars.bind_contextvars(search_query=effective_query)
+        (
+            tracks,
+            total,
+            next_cursor,
+            has_more,
+        ) = await service.search_cursor(
+            effective_query,
+            cursor=cursor,
+            size=size,
+            playable_only=playable,
+            genre_filter=genre,
+        )
+    elif q or genre:
         effective_query = q or genre or ""
         structlog.contextvars.bind_contextvars(search_query=effective_query)
         tracks, total = await service.search(
@@ -55,12 +79,14 @@ async def list_tracks(
             playable_only=playable,
             genre_filter=genre,
         )
+        has_more = page * size < total
     else:
         tracks, total = await service.list_tracks(
             page=page,
             size=size,
             playable_only=playable,
         )
+        has_more = page * size < total
     viewer_id = current_user.id if current_user else None
     items = await dedupe_and_build_track_list(
         session, tracks, viewer_id=viewer_id
@@ -70,6 +96,8 @@ async def list_tracks(
         total=total,
         page=page,
         size=size,
+        has_more=has_more,
+        next_cursor=next_cursor,
     )
 
 

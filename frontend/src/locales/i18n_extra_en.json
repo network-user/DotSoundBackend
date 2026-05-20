@@ -176,7 +176,8 @@
     "platformTracks": "Tracks",
     "featuredPlaylists": "Editorial picks",
     "openPlaylistAria": "Open playlist: {{name}}",
-    "playlistsTabEmpty": "No playlists match this search"
+    "playlistsTabEmpty": "No playlists match this search",
+    "pinnedPromotions": "Featured"
   },
   "myTop": {
     "title": "Your top",

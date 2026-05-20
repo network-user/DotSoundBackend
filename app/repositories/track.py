@@ -1,7 +1,7 @@
 from datetime import UTC, datetime
 
 import structlog
-from sqlalchemy import case, delete, func, or_, select, update
+from sqlalchemy import and_, case, delete, func, or_, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.sql.elements import ColumnElement
 
@@ -75,7 +75,7 @@ class TrackRepository(BaseRepository[Track]):
             )
         )
         row = result.first()
-        if row is None:
+        if row is None or row[1] is None:
             return None
         return bool(row[0]), int(row[1])
 
@@ -298,14 +298,13 @@ class TrackRepository(BaseRepository[Track]):
         )
         return [g for g in result.scalars().all() if g is not None]
 
-    async def search(
+    def _search_condition(
         self,
         query: str,
-        offset: int = 0,
-        limit: int = 20,
-        playable_only: bool = False,
-        genre_filter: str | None = None,
-    ) -> tuple[list[Track], int]:
+        *,
+        playable_only: bool,
+        genre_filter: str | None,
+    ):  # noqa: ANN202
         q = query.strip()
         base = (
             Track.is_active.is_(True)
@@ -323,7 +322,21 @@ class TrackRepository(BaseRepository[Track]):
                 | Track.artist.ilike(pattern)
                 | Track.genre.ilike(pattern)
             )
-        condition = base & self._playable_filter() if playable_only else base
+        return base & self._playable_filter() if playable_only else base
+
+    async def search(
+        self,
+        query: str,
+        offset: int = 0,
+        limit: int = 20,
+        playable_only: bool = False,
+        genre_filter: str | None = None,
+    ) -> tuple[list[Track], int]:
+        condition = self._search_condition(
+            query,
+            playable_only=playable_only,
+            genre_filter=genre_filter,
+        )
         logger.debug(
             "db_search_tracks",
             query=query,
@@ -338,11 +351,55 @@ class TrackRepository(BaseRepository[Track]):
         tracks_result = await self._session.execute(
             select(Track)
             .where(condition)
-            .order_by(Track.play_count.desc())
+            .order_by(Track.play_count.desc(), Track.id.desc())
             .offset(offset)
             .limit(limit)
         )
         return list(tracks_result.scalars().all()), total
+
+    async def search_cursor(
+        self,
+        query: str,
+        *,
+        cursor_play_count: int | None,
+        cursor_id: int | None,
+        limit: int = 20,
+        playable_only: bool = False,
+        genre_filter: str | None = None,
+    ) -> tuple[list[Track], int, bool]:
+        """Keyset-paginate ``search`` on ``(play_count desc, id desc)``.
+
+        Avoids the OFFSET cost of deep pagination; ``has_more`` tells
+        the caller whether another page is available so the client can
+        keep loading without re-counting.
+        """
+        condition = self._search_condition(
+            query,
+            playable_only=playable_only,
+            genre_filter=genre_filter,
+        )
+        total = (
+            await self._session.execute(
+                select(func.count()).where(condition)
+            )
+        ).scalar_one()
+
+        if cursor_play_count is not None and cursor_id is not None:
+            condition = condition & or_(
+                Track.play_count < cursor_play_count,
+                and_(
+                    Track.play_count == cursor_play_count,
+                    Track.id < cursor_id,
+                ),
+            )
+        rows_result = await self._session.execute(
+            select(Track)
+            .where(condition)
+            .order_by(Track.play_count.desc(), Track.id.desc())
+            .limit(limit + 1)
+        )
+        rows = list(rows_result.scalars().all())
+        return rows[:limit], int(total), len(rows) > limit
 
     async def find_variants_by_title_and_duration(
         self,

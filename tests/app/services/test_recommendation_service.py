@@ -518,3 +518,104 @@ async def test_get_radio_filters_non_streamable_external_links(
         result = await svc.get_radio(seed_track_id=5, user_id=None)
 
     assert result == []
+
+
+async def test_get_home_sections_cache_hit_batches_track_fetch(
+    session: AsyncSession,
+) -> None:
+    cached_payload = json.dumps(
+        {
+            "sections": [
+                {
+                    "title": "Continue",
+                    "section_type": "continue",
+                    "track_ids": [1, 2],
+                },
+                {
+                    "title": "Popular",
+                    "section_type": "popular",
+                    "track_ids": [2, 3],
+                },
+            ],
+            "highlights": [
+                {
+                    "track_id": 1,
+                    "label": "Continue",
+                    "reason": "Resume",
+                },
+            ],
+            "maturity": "warm",
+        }
+    )
+    mock_redis = AsyncMock()
+    mock_redis.get = AsyncMock(return_value=cached_payload)
+    mock_redis.setex = AsyncMock()
+
+    track1 = SimpleNamespace(id=1)
+    track2 = SimpleNamespace(id=2)
+    track3 = SimpleNamespace(id=3)
+
+    mock_track_repo = AsyncMock()
+    mock_track_repo.get_by_ids_preserve_order = AsyncMock(
+        return_value=[track1, track2, track3]
+    )
+
+    with (
+        patch(f"{_MOD}.get_redis_client", return_value=mock_redis),
+        patch(
+            "app.repositories.track.TrackRepository",
+            return_value=mock_track_repo,
+        ),
+    ):
+        svc = RecommendationService(session)
+        result = await svc.get_home_sections(user_id=42)
+
+    mock_track_repo.get_by_ids_preserve_order.assert_called_once()
+    fetched_ids = mock_track_repo.get_by_ids_preserve_order.call_args[0][0]
+    assert set(fetched_ids) == {1, 2, 3}
+
+    mock_redis.setex.assert_not_called()
+
+    assert result["maturity"] == "warm"
+    assert len(result["sections"]) == 2
+    assert [t.id for t in result["sections"][0]["tracks"]] == [1, 2]
+    assert [t.id for t in result["sections"][1]["tracks"]] == [2, 3]
+    assert len(result["highlights"]) == 1
+    assert result["highlights"][0]["track"].id == 1
+    assert result["highlights"][0]["label"] == "Continue"
+
+
+async def test_get_genre_mixes_cache_hit_uses_single_batch_fetch(
+    session: AsyncSession,
+) -> None:
+    cached_payload = json.dumps(
+        [
+            {"genre": "rock", "title": "Rock", "track_ids": [1, 2]},
+            {"genre": "pop", "title": "Pop", "track_ids": [3, 4]},
+        ]
+    )
+    mock_redis = AsyncMock()
+    mock_redis.get = AsyncMock(return_value=cached_payload)
+
+    tracks = [SimpleNamespace(id=i) for i in (1, 2, 3, 4)]
+
+    mock_rec_repo = AsyncMock()
+    mock_rec_repo.get_tracks_by_ids = AsyncMock(return_value=tracks)
+
+    with (
+        patch(f"{_MOD}.get_redis_client", return_value=mock_redis),
+        patch(
+            "app.services.recommendation_service.RecommendationRepository",
+            return_value=mock_rec_repo,
+        ),
+    ):
+        svc = RecommendationService(session)
+        result = await svc.get_genre_mixes(user_id=42)
+
+    mock_rec_repo.get_tracks_by_ids.assert_called_once()
+    fetched_ids = mock_rec_repo.get_tracks_by_ids.call_args[0][0]
+    assert set(fetched_ids) == {1, 2, 3, 4}
+
+    assert len(result) == 2
+    assert [t.id for t in result[0]["tracks"]] == [1, 2]
+    assert [t.id for t in result[1]["tracks"]] == [3, 4]

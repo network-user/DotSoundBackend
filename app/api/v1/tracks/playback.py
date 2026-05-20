@@ -835,6 +835,17 @@ async def stream_track(
             stream_type="direct",
             expires_in=3600,
         )
+    if (
+        track.hls_manifest_key
+        and track.access_mode != "third_party_stream"
+    ):
+        logger.info("stream_url_from_internal_hls", track_id=track_id)
+        return StreamResponse(
+            track_id=track_id,
+            url=f"/api/v1/tracks/{track_id}/hls/master.m3u8",
+            stream_type="hls",
+            expires_in=3600,
+        )
     if track.access_mode == "third_party_stream":
         spf = getattr(track, "source_platform", None)
         if spf == "youtube" and not settings.youtube_enabled:
@@ -1142,9 +1153,13 @@ async def audio_stream(
         )
 
     if track.hls_manifest_key and not force_progressive:
+        manifest_url = f"/api/v1/tracks/{track_id}/hls/master.m3u8"
         return RedirectResponse(
-            url=f"/api/v1/tracks/{track_id}/hls/master.m3u8",
+            url=manifest_url,
             status_code=302,
+            headers={
+                "Link": f"<{manifest_url}>; rel=preload; as=fetch",
+            },
         )
 
     # Serve from local S3 cache when available.
@@ -1437,13 +1452,14 @@ async def get_share_links(
     _check_access(track, current_user)
     from app.config import settings
 
-    mini_app_url = settings.mini_app_url or ""
+    configured = (settings.mini_app_url or "").rstrip("/")
+    if configured:
+        web_base = configured
+    else:
+        origin = str(request.base_url).rstrip("/")
+        web_base = f"{origin}/mini_app"
+    web_url = f"{web_base}/track/{track_id}"
     bot_username = settings.telegram_bot_username or ""
-    web_url = (
-        f"{mini_app_url}/track/{track_id}"
-        if mini_app_url
-        else f"/api/v1/tracks/{track_id}"
-    )
     tg_url = (
         f"https://t.me/{bot_username}/app?startapp=track_{track_id}"
         if bot_username

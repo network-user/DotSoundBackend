@@ -175,9 +175,9 @@ async def upload_my_artist_avatar(
             detail="Avatar exceeds 5 MB limit",
         )
 
-    from app.services.file_validator import validate_image
+    from app.services.file_validator import validate_image_async
 
-    validate_image(data, avatar.filename)
+    await validate_image_async(data, avatar.filename)
 
     img_key, _, _, _ = await s3.upload_image(
         data,

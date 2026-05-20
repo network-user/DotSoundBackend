@@ -440,7 +440,7 @@ export default defineConfig({
     emptyOutDir: true,
     sourcemap: false,
     modulePreload: {
-      polyfill: false,
+      polyfill: true,
       resolveDependencies: (_filename, deps) =>
         deps.filter((d) => {
           const normalized = normalizeModuleId(d)

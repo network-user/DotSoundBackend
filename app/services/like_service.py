@@ -59,7 +59,7 @@ class LikeService:
             for vid in variant_ids:
                 await self._dislike_repo.remove(resolved_user_id, vid)
             for vid in variant_ids:
-                await self._repo.add(resolved_user_id, vid)
+                await self._repo.add_idempotent(resolved_user_id, vid)
             liked = True
 
         logger.info(

@@ -1,16 +1,209 @@
 # DotSound - TODO Tracker
 
-- [x] **Lyrics timecode requests skip catalog-only stall (2026-05-20)**
-  - Backend now starts existing-text `with_sync=true` lyrics jobs at the
-    remote ASR tier by marking `catalog_only` as skipped, so
-    DotSoundComputeWorker can claim the job directly instead of seeing
-    repeated `204 No Content` while waiting for a Taskiq catalog task.
-  - PrivateCore owns the decision via
-    `skipped_tiers_for_existing_text_sync`; Backend only applies it when
-    creating the `LyricsJob` cascade.
-  - Tests: Backend `tests/app/services/test_lyrics_cascade.py` and
-    `tests/app/services/test_lyrics_service.py`; PrivateCore
-    `tests/dotsound_private_core/services/test_asr_policy.py`.
+- [x] **Perf Phase 3+4: modulePreload polyfill + trigram GIN indexes (2026-05-20)**
+  - Части 3 и 4 из 5 плана мобильной оптимизации
+    (`.claude/plans/merry-wishing-tide.md`).
+  - **Phase 3.3 — `modulePreload.polyfill: true`** в
+    `frontend/vite.config.ts`. Раньше было `false` — экономило
+    несколько KB JS на Chromium, но ломало нативный preload на
+    iOS Safari <16.4 (Telegram WKWebView). Теперь поведение
+    одинаково на всех целевых WebView'ах: цепочка transitively
+    зависимых chunks начинает грузиться параллельно сразу после
+    парсинга entry-модуля, а не последовательно по ходу импорта.
+    `resolveDependencies`-фильтр (`/secure/`, `admin-bundle`,
+    `/hls-`) остался — те бандлы и должны грузиться лениво.
+  - **Phase 4 — alembic `0115_trigram_indexes_for_search.py`.**
+    `CREATE EXTENSION IF NOT EXISTS pg_trgm` + GIN-индексы с
+    `gin_trgm_ops` на `artists.name_normalized`, `tracks.title`,
+    `playlists.name`, `albums.title`. Эти поля используются в
+    поиске через `ILIKE '%foo%'`, который не покрывается стандартным
+    btree-индексом и до этого деградировал до seq scan. Миграция
+    идемпотентна (`IF NOT EXISTS`). На больших таблицах ops может
+    предпочесть запустить `CREATE INDEX CONCURRENTLY` вручную в
+    maintenance-окно и `alembic stamp 0115` — комментарий в файле
+    миграции описывает оба пути.
+  - **Что НЕ вошло в эту итерацию (со ссылкой на план):**
+    - Phase 3.1 (параллелизация запросов Home) — verified-no-op:
+      `frontend/src/views/HomeView.tsx` уже параллелизует все
+      первичные запросы (`continue`, highlight, listen-history,
+      profile, promo hero/section), а `genre-mixes` и
+      `followed-artists` лениво подгружаются через
+      `useAutoLoadMore`+IntersectionObserver. Диагноз агента про
+      "waterfall" не подтвердился.
+    - Phase 3.2 (расцепить i18n init от React render) — deferred.
+      i18next требует `init()` до первого `useTranslation`, иначе
+      компоненты покажут сырые ключи. Реальный размер локалей
+      ~десятки KB gzipped; на mobile это <300ms — плохой ROI
+      против риска UX-регрессии (flash сырых ключей).
+    - Phase 2.2 (asyncio.Lock в egress pool) — deferred.
+      Критсекции в `pick`/`finish` полностью синхронны, внутри
+      одного asyncio event loop sync-код атомарен между task
+      switches; `threading.Lock` не блокирует event loop в
+      практическом смысле, а конверсия 8+ call sites — плохой
+      ROI и риск в hot-path плеера.
+    - Phase 5 (web-vitals → бэкенд endpoint → дашборд) — отдельный
+      backlog: требует нового маршрута, схемы, агрегации,
+      ретенции, UI. Сейчас без баз для измерений после фаз 1-4
+      нет смысла наращивать. Возвращаемся, когда нужно будет
+      померить эффект.
+
+- [x] **Perf Phase 2: HLS via /stream + Link preload (2026-05-20)**
+  - Часть 2/5 плана мобильной оптимизации
+    (`.claude/plans/merry-wishing-tide.md`). Цель — убрать лишний RTT
+    перед стартом HLS-плеера на мобильном.
+  - **HLS-ветка в `/stream`** — `app/api/v1/tracks/playback.py`. Для
+    internal-треков с `hls_manifest_key` (не third-party и не cached
+    source) `/stream` теперь возвращает
+    `StreamResponse(stream_type="hls", url="/api/v1/tracks/{id}/hls/master.m3u8")`
+    напрямую. Frontend уже умеет читать `stream_type === 'hls'`
+    (`frontend/src/store/PlayerContext.tsx`), так что плеер сразу
+    обращается к manifest'у вместо хода через `/audio` → 302.
+  - **`Link: rel=preload` на 302 из `/audio`** — там же, в эндпоинте
+    `audio_stream`. Для клиентов, которые всё-таки идут через
+    `/audio` (legacy `<audio src>`), браузер видит preload-хинт и
+    начинает качать manifest параллельно с обработкой редиректа.
+  - **Cache-Control HLS** — проверено: `app/api/v1/tracks/hls.py`
+    уже отдаёт manifest как `public, max-age=60`, CAS-сегменты
+    `hls-blobs/...` как `public, max-age=31536000, immutable`,
+    legacy `hls/{id}/...` — `public, max-age=86400`, плюс ETag/304.
+    Изменения не требуются.
+  - **`threading.Lock` в `streaming_egress_pool`** — оставлено как
+    есть. Анализ: критсекции `pick()`/`finish()` полностью синхронны
+    (нет `await`), внутри одного asyncio event loop sync-код атомарен
+    между task switches, так что лок не блокирует loop в практическом
+    смысле. Конверсия 8+ call sites ради микросекундной выгоды —
+    плохой ROI.
+  - **Tests:** `tests/app/api/v1/tracks/test_playback.py` —
+    `test_stream_returns_hls_url_for_internal_hls_track`,
+    `test_audio_hls_redirect_includes_link_preload_header`.
+    Запуск: `poetry run pytest tests/app/api/v1/tracks/test_playback.py`.
+  - **Legal readiness:** playback-touching изменение, проверено —
+    `LEGAL.md` и `docs/legal/` не требуют правок (не меняли catalog
+    типы/access modes, только маршрутизацию ответа).
+
+- [x] **Perf Phase 1: Home cache + N+1 fixes + Cache-Control (2026-05-20)**
+  - Часть 1/5 плана мобильной оптимизации (`.claude/plans/merry-wishing-tide.md`).
+    Фокус — backend quick wins на самых тяжёлых эндпоинтах ленты.
+  - **Redis-кэш `get_home_sections`** — `app/services/recommendation_service.py`:
+    ключ `rec:home:{user_id}`, TTL 10 мин. Payload сериализует только
+    `track_ids` + метаданные секций/хайлайтов; на cache-hit единственный
+    батч-fetch через `TrackRepository.get_by_ids_preserve_order` вместо
+    повторного `_scoring_candidate_tracks(200)` + `_tracks_to_features` +
+    `score_tracks_for_user`. Helpers: `_serialize_home_payload`,
+    `_rebuild_home_from_cache`.
+  - **N+1 в `get_genre_mixes` на cache-hit** — там же. Раньше после
+    `redis.get` шёл `for item in raw_items: get_tracks_by_ids(item.ids)`
+    (N round-trip). Заменено на один батч-вызов с распределением
+    треков по mix'ам по `by_id`-карте.
+  - **Batch album cover fallback** — `app/services/track_response_build.py`
+    + `AlbumRepository.get_by_ids` в `app/repositories/album.py`. В
+    `build_track_responses` собираем все `album_id` ответа и одним
+    запросом получаем карту `album_id -> cover_key`; `build_track_response`
+    принимает её через новый kwarg `preloaded_album_covers`, fallback к
+    старому `get_by_id` остаётся для одиночных вызовов.
+  - **Cache-Control заголовки** — `app/api/v1/recommendations.py`:
+    `/recommendations/home` → `private, max-age=60`,
+    `/recommendations/genre-mixes` → `private, max-age=300`,
+    `/recommendations/discover` → `private|public, max-age=120`
+    (scope зависит от `get_optional_user`).
+  - **Инвалидация и warm-up:** `_invalidate_rec_caches`
+    (`app/services/onboarding_service.py`) теперь удаляет и
+    `rec:home:{user_id}`. `rec_cache_warmer._warm_one`
+    (`app/tasks/rec_cache_warmer.py`) прогревает home_sections наравне
+    с daily_mix/genre_mixes; существующий cron `daily-rec-cache-warmup`
+    не меняется.
+  - **Tests:** `tests/app/services/test_recommendation_service.py`
+    (`test_get_home_sections_cache_hit_batches_track_fetch`,
+    `test_get_genre_mixes_cache_hit_uses_single_batch_fetch`),
+    `tests/app/services/test_track_response_build.py`
+    (`test_build_track_responses_batches_album_cover_fetch`).
+    Запуск: `poetry run pytest tests/app/services/test_recommendation_service.py
+    tests/app/services/test_track_response_build.py`.
+
+- [x] **Track deep-link SPA fallback + auto-open card (2026-05-20)**
+  - Backend: `/mini_app/*` теперь раздаётся через `MiniAppStaticFiles`:
+    extensionless SPA-маршруты вроде `/mini_app/track/{id}` получают
+    `index.html`, а реальные промахи по assets/sounds остаются 404.
+    Монтирование Mini App требует наличия `app/static/mini_app/index.html`,
+    чтобы частичная сборка не выглядела рабочей.
+  - Frontend: маршрут `/track/:trackId` больше не рендерит пустой экран:
+    под карточкой показывается `HomeView`, deep-link валидирует id,
+    дедупит StrictMode-effect, загружает трек, запускает playback,
+    открывает карточку и заменяет URL на `/`.
+  - Проверки: `poetry run pytest tests/app/test_main.py
+    tests/app/middlewares/test_security_headers.py --basetemp .pytest_tmp`;
+    `poetry run ruff check app/main.py tests/app/test_main.py
+    tests/app/middlewares/test_security_headers.py`;
+    `poetry run mypy app/main.py tests/app/test_main.py
+    tests/app/middlewares/test_security_headers.py`; frontend
+    `npm run build`.
+  - Legal readiness: `LEGAL.md` и `docs/legal/` проверены для
+    playback-touching изменения; модель `third_party_stream` не
+    расширялась, юридические тексты не менялись.
+
+- [x] **Promotions: revert capability gating to tracks.manage (2026-05-19)**
+  - Menu pin и API gating (`app/api/v1/admin/promotions.py`,
+    `app/services/admin_manifest_service.py`) откатил на
+    `tracks.manage`, потому что существующим init-админам новый
+    `promotions.manage` автоматически не выдаётся, и вкладка не
+    появлялась после автодеплоя.
+  - `promotions.manage` оставлен в `KNOWN_CAPABILITIES` как
+    зарезервированный — будущая миграция должна выдать его всем
+    init-админам (через UPDATE/INSERT в `admin_capabilities`),
+    после чего можно вернуть строгий gating.
+
+- [x] **Promotions polish: i18n, CSS, dedicated capability, period selector, impression dedup (2026-05-19)**
+  - i18n: `admin.promotions.*` block в `locales/{ru,en}.json`, ключи
+    `promotion.kicker`/`promotion.sectionTitle` и `redesign.home.sectionPromoted`/`search.pinnedPromotions`
+    в `i18n_extra*` — захардкоженные RU-строки убраны из всех promotion-компонентов.
+  - CSS: новый `frontend/src/styles/promotion.css` с классами
+    `.promotion-hero*`, `.promotion-section*`, `.promotion-card*`;
+    `PromotionHero/PromotionSection` переписаны без inline-стилей.
+  - Capability: добавлен `promotions.manage` в `KNOWN_CAPABILITIES`
+    (`admin_manifest_service.py`), admin-endpoints и пункт меню
+    переключены с `tracks.manage` на новый capability.
+    **Действие операторам:** существующим админам выдать capability
+    через `users.grant_capability` (новый capability получают
+    автоматически только при первом init админа через
+    `grant_all_known_if_empty`).
+  - Period selector: в `PromotionDetailRoute.tsx` добавлены
+    переключатели 7/30/90 дней для статистики, query-key включает
+    период.
+  - Impression dedup: `PromotionHero`/`PromotionSection` используют
+    `sessionStorage` (`dotsound.promo.imp.{surface}.{id}`), чтобы не
+    пинговать impression повторно в рамках одной сессии.
+
+- [x] **Editorial promotions: hero, section, search-pin + admin panel (2026-05-19)**
+  - DB: alembic `0113_add_promotions.py` adds `promotions` (entity_type ∈
+    {artist, track, playlist, album}, surfaces JSON, start/end window,
+    priority, override fields, audit FKs) и `promotion_events`
+    (impression/click).
+  - Backend: `app/models/promotion.py`, `app/schemas/promotion.py`,
+    `app/repositories/promotion.py`, `app/services/promotion_service.py`;
+    admin CRUD + audit + stats: `app/api/v1/admin/promotions.py`;
+    публичные эндпоинты hero/section/search-pin/event:
+    `app/api/v1/promotions.py`. Сущности, ставшие недоступными
+    (трек скрыт/удалён, плейлист private и т.д.), фильтруются для
+    публичной выдачи и маркируются бейджем в админке.
+  - Ranking adapter: `app/services/promotion_policy_adapter.py` —
+    pass-through, реальная логика смешивания живёт в PrivateCore. См.
+    `docs/promotion-policy-contract.md`. **In-feed surface не активен**,
+    пока PrivateCore не добавит `mix_in_feed`.
+  - Admin UI: `frontend/src/admin/routes/PromotionsListRoute.tsx`,
+    `PromotionDetailRoute.tsx`, регистрация в `AdminApp.tsx`, манифест
+    `admin_manifest_service.py`, методы в `adminApi.ts`. Группа меню
+    catalog обновлена в `AdminMenu.tsx`.
+  - Mini App: `components/Promotion/PromotionHero.tsx`,
+    `PromotionSection.tsx` (импрешены через хук + клики), вставка в
+    `HomeView.tsx` между genre mixes и continue, pin-блок в
+    `SearchView.tsx` сверху результатов.
+  - Тесты: `tests/app/repositories/test_promotion.py`,
+    `tests/app/services/test_promotion_service.py` (CRUD, окна,
+    availability-фильтр, override fallback, stats, ивенты).
+  - Запуск проверок: `poetry run alembic upgrade head`;
+    `poetry run pytest tests/app/repositories/test_promotion.py
+    tests/app/services/test_promotion_service.py`; frontend
+    `npm run build` (или `npx tsc --noEmit`).
 
 - [x] **Home page progressive section loading (2026-05-19)**
   - Backend: added `GET /api/v1/recommendations/home/sections/{section_type}`
@@ -2882,11 +3075,23 @@
   Все 14 хендлеров теперь не содержат `select()`, `session.execute()`
   или `session.get()`. Внутренние модели остаются только для
   серилизаторов и factory (ScheduledJob ctor) — это разрешено.
-- [ ] **P-3 recommendations build batching:** сейчас секции в
-  `/recommendations/home` собираются последовательно (loop по
-  sections с `dedupe_and_build_track_list` на каждой). Можно
-  объединить в один build-pass — но требует snapshot-теста на
-  состав/порядок ответа до рефактора.
+- [ ] **`/discover` runtime bug — `ArtistResponse.model_validate(a, update=...)`
+  (2026-05-19):** `app/api/v1/recommendations.py:520` использует
+  несуществующий kwarg `update=` у Pydantic v2 `model_validate`, что
+  должно бросать `TypeError` при любом запросе с непустым
+  `artists_raw`. Фикс: `ArtistResponse.model_validate(a).model_copy(update={"monthly_listeners": listeners_map.get(a.id, 0)})`.
+  Обнаружено при mypy-cleanup рекомендейшнс-роутера; не патчилось, чтобы
+  не сваливать в один коммит с cosmetic.
+- [ ] **P-3 recommendations build batching (partial, 2026-05-19):**
+  highlights в `/recommendations/home` теперь собираются одним
+  `build_track_responses(N треков)` вместо N×`dedupe_and_build_track_list([1 трек])`
+  (per-highlight dedup сохранён, поведение endpoint identical) —
+  `app/api/v1/recommendations.py:get_home`.
+  Sections остаются последовательными (loop по sections с
+  `_home_section_response` на каждой): глобальный dedup на уровне
+  endpoint изменит поведение (тот же primary не появится в двух
+  секциях), поэтому до рефактора нужен endpoint-snapshot-тест на
+  состав и порядок sections + highlights.
 - [-] **F-2/F-3/F-11 frontend race (false positive на bug-severity):**
   при второй проверке закрытое `let cancelled = false` в каждом
   effect run + `if (!cancelled) setState(...)` гард корректно
@@ -4149,7 +4354,7 @@
 
 ---
 
-*Последнее обновление: 2026-05-16 (Mobile PWA scroll gesture unblocking).*
+*Последнее обновление: 2026-05-20 (Track deep-link SPA fallback).*
 
 ## Session Updates (2026-05-06)
 

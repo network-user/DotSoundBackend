@@ -3,10 +3,15 @@ from unittest.mock import AsyncMock, patch
 import pytest
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.models.album import Album
 from app.models.track import Track
 from app.models.user import User
+from app.repositories.album import AlbumRepository
 from app.services.playback_variant_service import PlaybackVariantService
-from app.services.track_response_build import build_track_response
+from app.services.track_response_build import (
+    build_track_response,
+    build_track_responses,
+)
 
 pytestmark = pytest.mark.anyio
 
@@ -83,3 +88,58 @@ async def test_build_track_response_borrows_cover_from_variant_group(
         )
 
     assert resp.cover_key == "covers/variant.webp"
+
+
+async def test_build_track_responses_batches_album_cover_fetch(
+    session: AsyncSession,
+) -> None:
+    owner = await _make_user(session, 3302)
+    album = Album(
+        owner_id=owner.id,
+        title="Shared Album",
+        cover_key="covers/album.webp",
+        is_public=True,
+    )
+    session.add(album)
+    await session.flush()
+    await session.refresh(album)
+
+    t1 = await _make_track(session, owner, cover_key=None, track_id_seed=11)
+    t2 = await _make_track(session, owner, cover_key=None, track_id_seed=12)
+    t3 = await _make_track(session, owner, cover_key=None, track_id_seed=13)
+    for t in (t1, t2, t3):
+        t.album_id = album.id
+    await session.flush()
+
+    original_get_by_ids = AlbumRepository.get_by_ids
+    original_get_by_id = AlbumRepository.get_by_id
+    batch_calls: list[list[int]] = []
+    single_calls: list[int] = []
+
+    async def spy_get_by_ids(self, album_ids):
+        batch_calls.append(list(album_ids))
+        return await original_get_by_ids(self, album_ids)
+
+    async def spy_get_by_id(self, album_id):
+        single_calls.append(album_id)
+        return await original_get_by_id(self, album_id)
+
+    with (
+        patch.object(AlbumRepository, "get_by_ids", spy_get_by_ids),
+        patch.object(AlbumRepository, "get_by_id", spy_get_by_id),
+        patch.object(
+            PlaybackVariantService,
+            "resolve_variant_track_ids",
+            new=AsyncMock(side_effect=lambda tr: [tr.id]),
+        ),
+    ):
+        responses = await build_track_responses(session, [t1, t2, t3])
+
+    assert len(batch_calls) == 1
+    assert set(batch_calls[0]) == {album.id}
+    assert single_calls == []
+    assert [r.cover_key for r in responses] == [
+        "covers/album.webp",
+        "covers/album.webp",
+        "covers/album.webp",
+    ]
