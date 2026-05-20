@@ -14,7 +14,7 @@ import json
 import time
 from collections.abc import AsyncIterator
 from datetime import UTC, datetime
-from typing import Any
+from typing import Any, cast
 
 import httpx
 import structlog
@@ -229,7 +229,7 @@ async def _enforce_rate_limit(
 async def heartbeat(
     request: Request,
     session: AsyncSession = Depends(get_db),
-) -> dict:
+) -> dict[str, Any]:
     worker, _ = await verify_worker_hmac_request(request, session)
     await _enforce_rate_limit(
         request,
@@ -273,12 +273,28 @@ async def claim(
     )
     job = await cws.claim_next_job(session, worker=worker)
     if job is None:
+        try:
+            claim_meta = await cws.diagnose_empty_lyrics_claim(
+                session,
+                worker=worker,
+            )
+        except Exception as exc:
+            logger.warning(
+                "audio_compute_claim_diagnostic_failed",
+                worker_id=worker.id,
+                error=str(exc)[:256],
+            )
+            claim_meta = {
+                "reason": "diagnostic_failed",
+                "error": str(exc)[:256],
+            }
         await cws._log_audit(
             session,
             worker_id=worker.id,
             ip=client_ip(request),
             action="claim_empty",
             status_code=204,
+            meta=claim_meta,
         )
         await session.commit()
         # 204 must have no body; ``JSONResponse(..., content=None)``
@@ -322,7 +338,7 @@ async def job_progress(
     job_id: str,
     request: Request,
     session: AsyncSession = Depends(get_db),
-) -> dict:
+) -> dict[str, Any]:
     worker, body = await verify_worker_hmac_request(request, session)
     await _enforce_rate_limit(
         request,
@@ -374,7 +390,7 @@ async def job_result(
     job_id: str,
     request: Request,
     session: AsyncSession = Depends(get_db),
-) -> dict:
+) -> dict[str, Any]:
     worker, body = await verify_worker_hmac_request(request, session)
     await _enforce_rate_limit(
         request,
@@ -428,38 +444,55 @@ async def job_result(
     lyrics_repo = LyricsRepository(session)
     existing = await lyrics_repo.get_by_track_id(job.track_id)
 
-    plain_out = clean["plain_text"]
-    synced_out = clean["synced_lines"]
-    sq_out = clean["sync_quality"]
-    sp_out = clean["sync_profile"]
+    plain_out = cast(str, clean["plain_text"])
+    synced_out = cast(
+        list[dict[str, Any]] | None,
+        clean["synced_lines"],
+    )
+    sq_out = cast(str | None, clean["sync_quality"])
+    sp_out = cast(str | None, clean["sync_profile"])
+    asr_timed_words = cast(
+        list[dict[str, float | str]] | None,
+        clean.get("asr_timed_words"),
+    )
+    clean_audio_seconds = cast(
+        float | None,
+        clean.get("audio_seconds"),
+    )
     sn_out: str | None
     ssn_out: str | None
 
-    use_catalog = (
-        existing is not None
-        and (existing.plain_text or "").strip()
-        and clean.get("asr_timed_words")
+    existing_text = (
+        (existing.plain_text or "").strip()
+        if existing is not None
+        else ""
     )
-    aligned: list | None = None
+    use_catalog = bool(
+        existing is not None
+        and existing_text
+        and asr_timed_words
+    )
+    aligned: list[Any] | None = None
     if use_catalog:
+        assert existing is not None
         try:
             from dotsound_private_core.services.lyrics_provider import (
                 SyncedLine,
                 align_text_to_precomputed_asr_timed_words,
             )
 
-            tw_list = clean["asr_timed_words"] or []
+            tw_list = asr_timed_words or []
             tw_pairs: list[tuple[float, str]] = [
                 (float(x["t"]), str(x["w"])) for x in tw_list
             ]
 
             def _align() -> list[SyncedLine] | None:
-                audio_seconds = float(clean.get("audio_seconds") or 0.0)
+                audio_seconds = float(clean_audio_seconds or 0.0)
                 audio_duration_ms = (
                     int(audio_seconds * 1000) if audio_seconds > 0.0 else 0
                 )
                 return align_text_to_precomputed_asr_timed_words(
-                    existing.plain_text,  # type: ignore[arg-type]
+                    existing.plain_text,
                     tw_pairs,
                     audio_duration_ms=audio_duration_ms,
                 )
@@ -485,7 +518,7 @@ async def job_result(
             if (sl.text or "").strip()
         ] or None
         sq_out = "line"
-        sp_out = clean.get("sync_profile")
+        sp_out = cast(str | None, clean.get("sync_profile"))
         base = (existing.source_name or "").strip() or "Catalog"
         sn_out = base
         sp_lbl = sp_out or "asr"
@@ -494,16 +527,16 @@ async def job_result(
             "remote_lyrics_catalog_align_applied",
             job_id=job.id,
             aligned_lines=len(synced_out or []),
-            asr_words=len(clean.get("asr_timed_words") or []),
-            audio_seconds=clean.get("audio_seconds"),
+            asr_words=len(asr_timed_words or []),
+            audio_seconds=clean_audio_seconds,
         )
     else:
         if use_catalog:
             logger.info(
                 "remote_lyrics_catalog_align_skipped",
                 job_id=job.id,
-                asr_words=len(clean.get("asr_timed_words") or []),
-                audio_seconds=clean.get("audio_seconds"),
+                asr_words=len(asr_timed_words or []),
+                audio_seconds=clean_audio_seconds,
             )
         sn_out, ssn_out = cws.attribution_for_remote_worker_result(
             current_tier=job.current_tier,
@@ -578,7 +611,7 @@ async def job_fail(
     job_id: str,
     request: Request,
     session: AsyncSession = Depends(get_db),
-) -> dict:
+) -> dict[str, Any]:
     worker, body = await verify_worker_hmac_request(request, session)
     await _enforce_rate_limit(
         request,
@@ -709,7 +742,7 @@ async def download_audio(
         proxy=proxy,
         has_file_key=bool(file_key),
     )
-    payload: dict
+    payload: dict[str, Any]
     s3_presigned: str | None = None
     sc_url_pair: tuple[str, str] | None = None
     if file_key:
@@ -745,7 +778,8 @@ async def download_audio(
                 detail="worker_third_party_audio_disabled",
             )
         track = await session.get(Track, job.track_id)
-        if not track or not getattr(track, "sc_url", None):
+        sc_url = track.sc_url if track is not None else None
+        if not sc_url:
             logger.warning(
                 "audio_download_no_file_key",
                 job_id=job_id,
@@ -772,7 +806,7 @@ async def download_audio(
         try:
             sc_stream_url, protocol = await asyncio.wait_for(
                 sc.get_stream_info(
-                    track.sc_url,
+                    sc_url,
                     use_cache=False,
                 ),
                 timeout=(settings.lyrics_audio_resolve_timeout_seconds),

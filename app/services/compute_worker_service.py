@@ -20,15 +20,16 @@ from dotsound_private_core.services.network_policy import (
 )
 from sqlalchemy import func, or_, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.sql.elements import ColumnElement
 
 from app.config import settings
 from app.core.redis import get_redis_client
 from app.models.compute_worker import ComputeWorker
 from app.models.lyrics_job import LyricsJob
+from app.models.worker_audit import WorkerAuditLog
 from app.services.worker_job_control import (
     worker_claims_blocked,
 )
-from app.models.worker_audit import WorkerAuditLog
 
 logger: structlog.stdlib.BoundLogger = structlog.get_logger(
     __name__
@@ -142,7 +143,7 @@ async def _log_audit(
     action: str,
     job_id: str | None = None,
     status_code: int | None = None,
-    meta: dict | None = None,
+    meta: dict[str, object] | None = None,
 ) -> None:
     entry = WorkerAuditLog(
         worker_id=worker_id,
@@ -179,11 +180,16 @@ async def _log_audit(
         )
 
         if action == "auth_fail":
-            reason = (
+            raw_reason = (
                 meta.get("reason")
                 if isinstance(meta, dict)
                 else None
-            ) or "unknown"
+            )
+            reason = (
+                raw_reason
+                if isinstance(raw_reason, str) and raw_reason
+                else "unknown"
+            )
             hmac_auth_failure_observed(reason=reason)
     except Exception:
         pass
@@ -345,6 +351,127 @@ def worker_can_run_lyrics_profile(
         list(worker.allowed_profiles or [worker.profile])
     )
     return job_profile in profiles
+
+
+def _dt_iso(value: datetime | None) -> str | None:
+    return value.isoformat() if value is not None else None
+
+
+async def _count_lyrics_jobs(
+    session: AsyncSession,
+    *conditions: ColumnElement[bool],
+) -> int:
+    result = await session.execute(
+        select(func.count()).select_from(LyricsJob).where(*conditions)
+    )
+    return int(result.scalar() or 0)
+
+
+async def _queued_profile_counts(
+    session: AsyncSession,
+) -> dict[str, int]:
+    result = await session.execute(
+        select(LyricsJob.profile, func.count())
+        .where(LyricsJob.status == "queued")
+        .group_by(LyricsJob.profile)
+    )
+    return {
+        str(profile): int(count or 0)
+        for profile, count in result.all()
+        if profile is not None
+    }
+
+
+async def diagnose_empty_lyrics_claim(
+    session: AsyncSession,
+    *,
+    worker: ComputeWorker,
+) -> dict[str, object]:
+    """Explain why ``claim_next_job`` returned no ASR work.
+
+    The result is designed for ``WorkerAuditLog.meta``: JSON-safe,
+    concise, and aligned with the filters in ``claim_next_job``.
+    """
+    now = datetime.now(UTC)
+    raw_profiles = list(worker.allowed_profiles or [worker.profile])
+    profiles = _expand_profiles_for_lyrics_claim(raw_profiles)
+    max_concurrent = max(1, int(worker.max_concurrent_jobs or 1))
+    meta: dict[str, object] = {
+        "worker_profile": worker.profile,
+        "allowed_profiles": list(worker.allowed_profiles or []),
+        "claim_profiles": profiles,
+        "max_concurrent_jobs": max_concurrent,
+    }
+
+    if worker.revoked_at is not None:
+        meta["reason"] = "worker_revoked"
+        meta["revoked_at"] = _dt_iso(worker.revoked_at)
+        return meta
+
+    if worker_claims_blocked(worker, now=now):
+        meta["reason"] = "claims_paused"
+        meta["claims_paused_until"] = _dt_iso(worker.claims_paused_until)
+        meta["claims_pause_reason"] = worker.claims_pause_reason
+        return meta
+
+    if (
+        worker.suspended_until is not None
+        and worker.suspended_until > now
+    ):
+        meta["reason"] = "worker_suspended"
+        meta["suspended_until"] = _dt_iso(worker.suspended_until)
+        meta["suspended_reason"] = worker.suspended_reason
+        return meta
+
+    in_flight = await _count_lyrics_jobs(
+        session,
+        LyricsJob.routed_to_worker == worker.id,
+        LyricsJob.status == "running",
+    )
+    meta["in_flight"] = in_flight
+    if in_flight >= max_concurrent:
+        meta["reason"] = "worker_at_capacity"
+        return meta
+
+    if not profiles:
+        meta["reason"] = "worker_has_no_claim_profiles"
+        return meta
+
+    queued_profiles = await _queued_profile_counts(session)
+    queued_total = sum(queued_profiles.values())
+    meta["queued_total"] = queued_total
+    meta["queued_profiles"] = queued_profiles
+    if queued_total == 0:
+        meta["reason"] = "no_queued_jobs"
+        return meta
+
+    queued_matching_profiles = sum(
+        queued_profiles.get(profile, 0) for profile in profiles
+    )
+    meta["queued_matching_profiles"] = queued_matching_profiles
+    if queued_matching_profiles == 0:
+        meta["reason"] = "profile_mismatch"
+        return meta
+
+    queued_claimable = await _count_lyrics_jobs(
+        session,
+        LyricsJob.status == "queued",
+        LyricsJob.profile.in_(profiles),
+        or_(
+            LyricsJob.pinned_worker_id.is_(None),
+            LyricsJob.pinned_worker_id == worker.id,
+        ),
+    )
+    meta["queued_claimable"] = queued_claimable
+    meta["queued_pinned_elsewhere"] = (
+        queued_matching_profiles - queued_claimable
+    )
+    if queued_claimable == 0:
+        meta["reason"] = "jobs_pinned_to_other_workers"
+        return meta
+
+    meta["reason"] = "claim_race_or_locked"
+    return meta
 
 
 async def claim_next_job(
@@ -649,7 +776,9 @@ def verify_single_use_token(
     return hmac.compare_digest(expected, sig)
 
 
-def validate_lyrics_result(payload: dict) -> dict:
+def validate_lyrics_result(
+    payload: dict[str, object],
+) -> dict[str, object]:
     """Raise ValueError if a worker result payload is unsafe.
 
     Returns a sanitized copy suitable for persisting. Pure
@@ -667,14 +796,14 @@ def validate_lyrics_result(payload: dict) -> dict:
     plain_text = html.escape(text, quote=False)[:20_000]
 
     synced_raw = payload.get("synced_lines")
-    synced: list[dict] | None = None
+    synced: list[dict[str, object]] | None = None
     if synced_raw is not None:
         if not isinstance(synced_raw, list):
             raise ValueError("synced_lines_type")
         if len(synced_raw) > 2_000:
             raise ValueError("synced_lines_too_long")
         prev_ms = -1
-        clean: list[dict] = []
+        clean: list[dict[str, object]] = []
         for item in synced_raw:
             if not isinstance(item, dict):
                 continue
@@ -689,14 +818,14 @@ def validate_lyrics_result(payload: dict) -> dict:
             if time_ms < prev_ms:
                 time_ms = prev_ms
             prev_ms = time_ms
-            entry: dict = {
+            entry: dict[str, object] = {
                 "time_ms": time_ms,
                 "text": html.escape(line_text, quote=False),
                 "confidence": max(0.0, min(1.0, conf)),
             }
             wts = item.get("word_times")
             if isinstance(wts, list) and wts:
-                clean_wts: list[dict] = []
+                clean_wts: list[dict[str, object]] = []
                 for w in wts[:200]:
                     if not isinstance(w, dict):
                         continue
@@ -760,9 +889,12 @@ def validate_lyrics_result(payload: dict) -> dict:
     audio_seconds: float | None = None
     raw_audio_seconds = payload.get("audio_seconds")
     if raw_audio_seconds is not None:
-        try:
-            parsed_audio_seconds = float(raw_audio_seconds)
-        except (TypeError, ValueError):
+        if isinstance(raw_audio_seconds, str | int | float):
+            try:
+                parsed_audio_seconds = float(raw_audio_seconds)
+            except (TypeError, ValueError):
+                parsed_audio_seconds = 0.0
+        else:
             parsed_audio_seconds = 0.0
         if parsed_audio_seconds > 0.0:
             audio_seconds = parsed_audio_seconds
@@ -781,7 +913,7 @@ def validate_lyrics_result(payload: dict) -> dict:
 def attribution_for_remote_worker_result(
     *,
     current_tier: str | None,
-    synced_lines: list[dict] | None,
+    synced_lines: list[dict[str, object]] | None,
     sync_profile: str | None,
 ) -> tuple[str | None, str | None]:
     """Labels for :class:`TrackLyrics` ``source_name`` and
@@ -789,10 +921,11 @@ def attribution_for_remote_worker_result(
     (same pipeline as in-app ``faster-whisper``).
     """
     t = (current_tier or "").strip()
-    if t in ("", "remote_whisper"):
-        base = "faster-whisper"
-    else:
-        base = f"ASR ({t})"
+    base = (
+        "faster-whisper"
+        if t in ("", "remote_whisper")
+        else f"ASR ({t})"
+    )
     if not synced_lines:
         return base, None
     if sync_profile == "gpu_full":
@@ -807,6 +940,7 @@ __all__ = [
     "WorkerAuthError",
     "WorkerNotFoundError",
     "claim_next_job",
+    "diagnose_empty_lyrics_claim",
     "generate_single_use_token",
     "invalidate_worker_nonces",
     "mark_job_failed",

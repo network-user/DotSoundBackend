@@ -20,12 +20,16 @@
     is created instead of short-circuiting as already synced. Manual
     `with_sync=true` requests now bypass `catalog_only` when audio is present
     and enter the remote worker queue with priority `1000000`.
+  - Audio-compute diagnostics: empty ASR worker claims now write a
+    JSON reason into `worker_audit_log.meta` (`no_queued_jobs`,
+    `profile_mismatch`, `worker_at_capacity`, paused/suspended/pinned, etc.)
+    so admin audit explains repeated `204 No Content`.
   - Admin tracks: added urgent Telegram playback normalization endpoint and
     button. It enqueues Telegram import transcodes with the highest compute
     priority and a dedicated feature version.
   - Tests: targeted service/API coverage for lyrics re-sync queueing,
-    urgent manual ASR routing, urgent Telegram normalization endpoint, and
-    compute priority override.
+    urgent manual ASR routing, empty-claim diagnostics, urgent Telegram
+    normalization endpoint, and compute priority override.
 
 - [x] **Perf Phase 3+4: modulePreload polyfill + trigram GIN indexes (2026-05-20)**
   - Части 3 и 4 из 5 плана мобильной оптимизации
