@@ -34,10 +34,10 @@ DEFAULT_LIMITS_PER_MIN: dict[str, int] = {
     "compute_progress": 300,
     "compute_fail": 120,
     "compute_status": 60,
-    "result": 30,
-    "progress": 60,
-    "fail": 30,
-    "audio": 10,
+    "result": 300,
+    "progress": 300,
+    "fail": 300,
+    "audio": 120,
 }
 
 STRIKE_KEY_PREFIX = "worker:rl_strikes:"

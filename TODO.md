@@ -24,12 +24,16 @@
     JSON reason into `worker_audit_log.meta` (`no_queued_jobs`,
     `profile_mismatch`, `worker_at_capacity`, paused/suspended/pinned, etc.)
     so admin audit explains repeated `204 No Content`.
+  - Worker rate limits: raised internal ASR audio/result/progress/fail quotas
+    so claimed jobs do not get blocked by backend-side `429 Too Many
+    Requests` while downloading audio or reporting failure.
   - Admin tracks: added urgent Telegram playback normalization endpoint and
     button. It enqueues Telegram import transcodes with the highest compute
     priority and a dedicated feature version.
   - Tests: targeted service/API coverage for lyrics re-sync queueing,
-    urgent manual ASR routing, empty-claim diagnostics, urgent Telegram
-    normalization endpoint, and compute priority override.
+    urgent manual ASR routing, empty-claim diagnostics, worker rate-limit
+    bursts, urgent Telegram normalization endpoint, and compute priority
+    override.
 
 - [x] **Perf Phase 3+4: modulePreload polyfill + trigram GIN indexes (2026-05-20)**
   - Части 3 и 4 из 5 плана мобильной оптимизации
