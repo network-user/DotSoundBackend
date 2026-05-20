@@ -90,6 +90,7 @@ async def build_track_response(
     *,
     include_has_lyrics: bool = True,
     preloaded_artists: list[tuple] | None = None,
+    preloaded_album_covers: dict[int, str | None] | None = None,
     viewer_id: int | None = None,
 ) -> TrackResponse:
     base = TrackResponse.model_validate(track)
@@ -139,13 +140,19 @@ async def build_track_response(
         if borrowed:
             enriched = enriched.model_copy(update={"cover_key": borrowed})
     if not enriched.cover_key and track.album_id is not None:
-        album = await AlbumRepository(session).get_by_id(
-            int(track.album_id),
-        )
-        if album and album.cover_key:
-            enriched = enriched.model_copy(
-                update={"cover_key": album.cover_key},
-            )
+        album_id_int = int(track.album_id)
+        if preloaded_album_covers is not None:
+            borrowed_cover = preloaded_album_covers.get(album_id_int)
+            if borrowed_cover:
+                enriched = enriched.model_copy(
+                    update={"cover_key": borrowed_cover},
+                )
+        else:
+            album = await AlbumRepository(session).get_by_id(album_id_int)
+            if album and album.cover_key:
+                enriched = enriched.model_copy(
+                    update={"cover_key": album.cover_key},
+                )
 
     if preloaded_artists is not None:
         artist_rows = preloaded_artists
@@ -186,6 +193,14 @@ async def build_track_responses(
         session
     ).get_tracks_artists_with_roles_batch(track_ids)
 
+    album_ids = list(
+        {int(t.album_id) for t in tracks if t.album_id is not None}
+    )
+    album_covers_by_id: dict[int, str | None] = {}
+    if album_ids:
+        albums = await AlbumRepository(session).get_by_ids(album_ids)
+        album_covers_by_id = {a.id: a.cover_key for a in albums}
+
     results = await asyncio.gather(
         *[
             build_track_response(
@@ -193,6 +208,7 @@ async def build_track_responses(
                 t,
                 include_has_lyrics=False,
                 preloaded_artists=artists_by_track.get(t.id, []),
+                preloaded_album_covers=album_covers_by_id,
             )
             for t in tracks
         ],

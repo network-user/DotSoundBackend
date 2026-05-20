@@ -3,7 +3,7 @@ import contextlib
 import sys
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 
 import structlog
 from fastapi import FastAPI
@@ -11,8 +11,11 @@ from fastapi.staticfiles import StaticFiles
 from slowapi import _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
 from slowapi.middleware import SlowAPIMiddleware
+from starlette.exceptions import HTTPException as StarletteHTTPException
 from starlette.middleware.cors import CORSMiddleware
 from starlette.middleware.trustedhost import TrustedHostMiddleware
+from starlette.responses import Response
+from starlette.types import Scope
 
 from app.api.router import api_router
 from app.config import settings
@@ -39,11 +42,40 @@ from app.middlewares.internal_api_allowlist import (
 )
 from app.middlewares.request_logging import RequestLoggingMiddleware
 from app.middlewares.secure_static import SecureStaticMiddleware
-
-MINI_APP_STATIC_DIR = Path(__file__).resolve().parent / "static" / "mini_app"
 from app.middlewares.security_headers import SecurityHeadersMiddleware
 
+MINI_APP_STATIC_DIR = Path(__file__).resolve().parent / "static" / "mini_app"
+MINI_APP_INDEX_FILE = MINI_APP_STATIC_DIR / "index.html"
+
 logger: structlog.stdlib.BoundLogger = structlog.get_logger(__name__)
+
+
+class MiniAppStaticFiles(StaticFiles):
+    async def get_response(
+        self,
+        path: str,
+        scope: Scope,
+    ) -> Response:
+        try:
+            response = await super().get_response(path, scope)
+        except StarletteHTTPException as exc:
+            if exc.status_code != 404 or not self._is_spa_route(path):
+                raise
+            return await super().get_response("index.html", scope)
+
+        if response.status_code == 404 and self._is_spa_route(path):
+            return await super().get_response("index.html", scope)
+        return response
+
+    @staticmethod
+    def _is_spa_route(path: str) -> bool:
+        normalized = path.replace("\\", "/").strip("/")
+        if not normalized:
+            return False
+        first_segment = normalized.split("/", 1)[0]
+        if first_segment in {"assets", "sounds"}:
+            return False
+        return PurePosixPath(normalized).suffix == ""
 
 
 async def _elasticsearch_drain_lifecycle(
@@ -390,10 +422,10 @@ def create_app() -> FastAPI:
     application.add_middleware(AdminAuditLogMiddleware)
 
     application.include_router(api_router)
-    if MINI_APP_STATIC_DIR.is_dir():
+    if MINI_APP_INDEX_FILE.is_file():
         application.mount(
             "/mini_app",
-            StaticFiles(
+            MiniAppStaticFiles(
                 directory=str(MINI_APP_STATIC_DIR),
                 html=True,
             ),
@@ -403,6 +435,7 @@ def create_app() -> FastAPI:
         structlog.get_logger(__name__).warning(
             "mini_app_static_missing",
             path=str(MINI_APP_STATIC_DIR),
+            index_path=str(MINI_APP_INDEX_FILE),
         )
 
     setup_observability(application)

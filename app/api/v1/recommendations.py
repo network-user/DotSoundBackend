@@ -4,7 +4,15 @@ from typing import Any
 from dotsound_private_core.services.playcount_policy import (
     USER_CHOICE_SCORE_VERSION,
 )
-from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
+from fastapi import (
+    APIRouter,
+    Depends,
+    HTTPException,
+    Query,
+    Request,
+    Response,
+    status,
+)
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.rate_limit import limiter
@@ -87,9 +95,11 @@ async def _home_section_response(
 
 @router.get("/home", response_model=HomePageResponse)
 async def get_home(
+    response: Response,
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> HomePageResponse:
+    response.headers["Cache-Control"] = "private, max-age=60"
     svc = RecommendationService(db)
     data = await svc.get_home_sections(user.id)
 
@@ -197,9 +207,11 @@ async def get_daily_mix(
     response_model=GenreMixesResponse,
 )
 async def get_genre_mixes(
+    response: Response,
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> GenreMixesResponse:
+    response.headers["Cache-Control"] = "private, max-age=300"
     svc = RecommendationService(db)
     mixes = await svc.get_genre_mixes(user.id)
     result = []
@@ -498,11 +510,14 @@ async def refresh_genre_mixes(
     summary="Personalized discover page for search empty state",
 )
 async def get_discover(
+    response: Response,
     user: User | None = Depends(get_optional_user),
     db: AsyncSession = Depends(get_db),
     trending_limit: int = Query(default=10, ge=1, le=20),
     artist_limit: int = Query(default=8, ge=1, le=20),
 ) -> DiscoverResponse:
+    cache_scope = "private" if user is not None else "public"
+    response.headers["Cache-Control"] = f"{cache_scope}, max-age=120"
     rec_repo = RecommendationRepository(db)
     artist_repo = ArtistRepository(db)
 

@@ -99,6 +99,7 @@ _EXTERNAL_DISCOVERY_TIMEOUT = 8
 _EXTERNAL_IMPORT_TIMEOUT = 15
 _GENRE_MIXES_CACHE_TTL = 3 * 60 * 60
 _GENRE_MIXES_CACHE_PATTERN = "rec:genre_mixes:*"
+_HOME_CACHE_TTL = 10 * 60
 _HOME_SECTION_TITLES = {
     "continue": "Продолжить слушать",
     "personalized": "Для вас",
@@ -669,6 +670,14 @@ class RecommendationService:
         return [tid for tid in results if tid is not None]
 
     async def get_home_sections(self, user_id: int) -> dict[str, Any]:
+        redis = get_redis_client()
+        cache_key = f"rec:home:{user_id}"
+        cached = await redis.get(cache_key)
+        if cached:
+            rebuilt = await self._rebuild_home_from_cache(cached)
+            if rebuilt is not None:
+                return rebuilt
+
         pref = await self._pref_repo.get_by_user_id(user_id)
         listen_count = await self._listen_repo.count_for_user(user_id)
 
@@ -830,10 +839,112 @@ class RecommendationService:
                     }
                 )
 
+        if sections:
+            await redis.setex(
+                cache_key,
+                _HOME_CACHE_TTL,
+                json.dumps(
+                    self._serialize_home_payload(
+                        sections, highlights, maturity
+                    )
+                ),
+            )
+
         return {
             "sections": sections,
             "highlights": highlights,
             "maturity": maturity,
+        }
+
+    def _serialize_home_payload(
+        self,
+        sections: list[dict[str, Any]],
+        highlights: list[dict[str, Any]],
+        maturity: str,
+    ) -> dict[str, Any]:
+        return {
+            "sections": [
+                {
+                    "title": s["title"],
+                    "section_type": s["section_type"],
+                    "track_ids": [t.id for t in s["tracks"]],
+                }
+                for s in sections
+            ],
+            "highlights": [
+                {
+                    "track_id": h["track"].id,
+                    "label": h["label"],
+                    "reason": h.get("reason"),
+                }
+                for h in highlights
+            ],
+            "maturity": maturity,
+        }
+
+    async def _rebuild_home_from_cache(
+        self, cached: str
+    ) -> dict[str, Any] | None:
+        from app.repositories.track import TrackRepository
+
+        try:
+            raw = json.loads(cached)
+        except (TypeError, ValueError):
+            return None
+
+        all_ids: list[int] = []
+        seen_ids: set[int] = set()
+        for s in raw.get("sections", []):
+            for tid in s.get("track_ids", []):
+                if tid not in seen_ids:
+                    seen_ids.add(tid)
+                    all_ids.append(tid)
+        for h in raw.get("highlights", []):
+            tid = h.get("track_id")
+            if isinstance(tid, int) and tid not in seen_ids:
+                seen_ids.add(tid)
+                all_ids.append(tid)
+
+        if not all_ids:
+            return None
+
+        track_repo = TrackRepository(self._session)
+        fetched = await track_repo.get_by_ids_preserve_order(all_ids)
+        by_id = {t.id: t for t in fetched}
+
+        sections: list[dict[str, Any]] = []
+        for s in raw.get("sections", []):
+            section_tracks = [
+                by_id[tid] for tid in s.get("track_ids", []) if tid in by_id
+            ]
+            sections.append(
+                {
+                    "title": s.get("title", ""),
+                    "section_type": s.get("section_type", ""),
+                    "tracks": section_tracks,
+                }
+            )
+
+        highlights: list[dict[str, Any]] = []
+        for h in raw.get("highlights", []):
+            tid = h.get("track_id")
+            if not isinstance(tid, int):
+                continue
+            track = by_id.get(tid)
+            if track is None:
+                continue
+            highlights.append(
+                {
+                    "track": track,
+                    "label": h.get("label", ""),
+                    "reason": h.get("reason"),
+                }
+            )
+
+        return {
+            "sections": sections,
+            "highlights": highlights,
+            "maturity": raw.get("maturity", "cold"),
         }
 
     async def get_home_section(
@@ -1262,11 +1373,20 @@ class RecommendationService:
         cached = await redis.get(cache_key)
         if cached:
             raw_items: list[dict[str, Any]] = json.loads(cached)
+            all_ids: list[int] = []
+            seen_ids: set[int] = set()
+            for item in raw_items:
+                for tid in item["track_ids"]:
+                    if tid not in seen_ids:
+                        seen_ids.add(tid)
+                        all_ids.append(tid)
+            fetched = await self._rec_repo.get_tracks_by_ids(all_ids)
+            by_id = {t.id: t for t in fetched}
             output: list[dict[str, Any]] = []
             for item in raw_items:
-                tracks = await self._rec_repo.get_tracks_by_ids(
-                    item["track_ids"]
-                )
+                tracks = [
+                    by_id[tid] for tid in item["track_ids"] if tid in by_id
+                ]
                 output.append(
                     {
                         "genre": item["genre"],

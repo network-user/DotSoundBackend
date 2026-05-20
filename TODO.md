@@ -1,5 +1,65 @@
 # DotSound - TODO Tracker
 
+- [x] **Perf Phase 1: Home cache + N+1 fixes + Cache-Control (2026-05-20)**
+  - Часть 1/5 плана мобильной оптимизации (`.claude/plans/merry-wishing-tide.md`).
+    Фокус — backend quick wins на самых тяжёлых эндпоинтах ленты.
+  - **Redis-кэш `get_home_sections`** — `app/services/recommendation_service.py`:
+    ключ `rec:home:{user_id}`, TTL 10 мин. Payload сериализует только
+    `track_ids` + метаданные секций/хайлайтов; на cache-hit единственный
+    батч-fetch через `TrackRepository.get_by_ids_preserve_order` вместо
+    повторного `_scoring_candidate_tracks(200)` + `_tracks_to_features` +
+    `score_tracks_for_user`. Helpers: `_serialize_home_payload`,
+    `_rebuild_home_from_cache`.
+  - **N+1 в `get_genre_mixes` на cache-hit** — там же. Раньше после
+    `redis.get` шёл `for item in raw_items: get_tracks_by_ids(item.ids)`
+    (N round-trip). Заменено на один батч-вызов с распределением
+    треков по mix'ам по `by_id`-карте.
+  - **Batch album cover fallback** — `app/services/track_response_build.py`
+    + `AlbumRepository.get_by_ids` в `app/repositories/album.py`. В
+    `build_track_responses` собираем все `album_id` ответа и одним
+    запросом получаем карту `album_id -> cover_key`; `build_track_response`
+    принимает её через новый kwarg `preloaded_album_covers`, fallback к
+    старому `get_by_id` остаётся для одиночных вызовов.
+  - **Cache-Control заголовки** — `app/api/v1/recommendations.py`:
+    `/recommendations/home` → `private, max-age=60`,
+    `/recommendations/genre-mixes` → `private, max-age=300`,
+    `/recommendations/discover` → `private|public, max-age=120`
+    (scope зависит от `get_optional_user`).
+  - **Инвалидация и warm-up:** `_invalidate_rec_caches`
+    (`app/services/onboarding_service.py`) теперь удаляет и
+    `rec:home:{user_id}`. `rec_cache_warmer._warm_one`
+    (`app/tasks/rec_cache_warmer.py`) прогревает home_sections наравне
+    с daily_mix/genre_mixes; существующий cron `daily-rec-cache-warmup`
+    не меняется.
+  - **Tests:** `tests/app/services/test_recommendation_service.py`
+    (`test_get_home_sections_cache_hit_batches_track_fetch`,
+    `test_get_genre_mixes_cache_hit_uses_single_batch_fetch`),
+    `tests/app/services/test_track_response_build.py`
+    (`test_build_track_responses_batches_album_cover_fetch`).
+    Запуск: `poetry run pytest tests/app/services/test_recommendation_service.py
+    tests/app/services/test_track_response_build.py`.
+
+- [x] **Track deep-link SPA fallback + auto-open card (2026-05-20)**
+  - Backend: `/mini_app/*` теперь раздаётся через `MiniAppStaticFiles`:
+    extensionless SPA-маршруты вроде `/mini_app/track/{id}` получают
+    `index.html`, а реальные промахи по assets/sounds остаются 404.
+    Монтирование Mini App требует наличия `app/static/mini_app/index.html`,
+    чтобы частичная сборка не выглядела рабочей.
+  - Frontend: маршрут `/track/:trackId` больше не рендерит пустой экран:
+    под карточкой показывается `HomeView`, deep-link валидирует id,
+    дедупит StrictMode-effect, загружает трек, запускает playback,
+    открывает карточку и заменяет URL на `/`.
+  - Проверки: `poetry run pytest tests/app/test_main.py
+    tests/app/middlewares/test_security_headers.py --basetemp .pytest_tmp`;
+    `poetry run ruff check app/main.py tests/app/test_main.py
+    tests/app/middlewares/test_security_headers.py`;
+    `poetry run mypy app/main.py tests/app/test_main.py
+    tests/app/middlewares/test_security_headers.py`; frontend
+    `npm run build`.
+  - Legal readiness: `LEGAL.md` и `docs/legal/` проверены для
+    playback-touching изменения; модель `third_party_stream` не
+    расширялась, юридические тексты не менялись.
+
 - [x] **Promotions: revert capability gating to tracks.manage (2026-05-19)**
   - Menu pin и API gating (`app/api/v1/admin/promotions.py`,
     `app/services/admin_manifest_service.py`) откатил на
@@ -4213,7 +4273,7 @@
 
 ---
 
-*Последнее обновление: 2026-05-16 (Mobile PWA scroll gesture unblocking).*
+*Последнее обновление: 2026-05-20 (Track deep-link SPA fallback).*
 
 ## Session Updates (2026-05-06)
 

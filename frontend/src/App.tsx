@@ -256,9 +256,13 @@ const AdminApp = lazyWithRetry(() =>
   })),
 )
 
-function TrackDeepLinkRoute() {
+function TrackDeepLinkRoute({
+  onOpenArtist,
+}: {
+  onOpenArtist: (id: number) => void
+}) {
   useTrackDeepLink()
-  return null
+  return <HomeView onOpenArtist={onOpenArtist} />
 }
 
 function AnimatedRoutes({
@@ -1074,7 +1078,14 @@ export function App() {
               />
             }
           />
-          <Route path="/track/:trackId" element={<TrackDeepLinkRoute />} />
+          <Route
+            path="/track/:trackId"
+            element={
+              <TrackDeepLinkRoute
+                onOpenArtist={(id) => navigate(`/artist/${id}`)}
+              />
+            }
+          />
           <Route
             path="/settings/connections"
             element={<OauthConnectionsReturn />}
