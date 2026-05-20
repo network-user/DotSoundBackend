@@ -16,7 +16,11 @@ async def test_dispatch_runs_local_when_offload_disabled(
     db_session: AsyncSession,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    monkeypatch.setattr(dispatcher.settings, "compute_offload_enabled", False)
+    monkeypatch.setattr(
+        dispatcher,
+        "should_enqueue_remote",
+        lambda *_args, **_kwargs: False,
+    )
 
     async def _handler(job: LocalComputeJob) -> dict:
         return {"status": "local_ok", "artist_id": int(job.target_id or 0)}
@@ -40,7 +44,11 @@ async def test_dispatch_enqueues_when_offload_enabled(
     db_session: AsyncSession,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    monkeypatch.setattr(dispatcher.settings, "compute_offload_enabled", True)
+    monkeypatch.setattr(
+        dispatcher,
+        "should_enqueue_remote",
+        lambda *_args, **_kwargs: True,
+    )
 
     async def _handler(job: LocalComputeJob) -> dict:
         raise AssertionError("local handler must not run")
@@ -65,3 +73,35 @@ async def test_dispatch_enqueues_when_offload_enabled(
     assert job.max_attempts == q.default_max_attempts(
         q.JOB_SC_ARTIST_CATALOG_SYNC
     )
+
+
+async def test_dispatch_enqueues_with_priority_override(
+    db_session: AsyncSession,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        dispatcher,
+        "should_enqueue_remote",
+        lambda *_args, **_kwargs: True,
+    )
+
+    async def _handler(job: LocalComputeJob) -> dict:
+        raise AssertionError("local handler must not run")
+
+    result = await dispatcher.dispatch_compute_job(
+        db_session,
+        job_type=q.JOB_TRACK_TRANSCODING,
+        target_kind=q.TARGET_KIND_TRACK,
+        target_id=88,
+        payload={"track_id": 88},
+        local_handler=_handler,
+        priority=0,
+    )
+    await db_session.commit()
+
+    assert result.status == "queued"
+    assert result.job_id is not None
+    job = await db_session.get(ComputeJob, result.job_id)
+    assert job is not None
+    assert job.job_type == q.JOB_TRACK_TRANSCODING
+    assert job.priority == 0

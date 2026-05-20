@@ -112,7 +112,10 @@ class LyricsService:
         return lyrics
 
     async def update_sync(
-        self, track_id: int, user_id: int, synced_lines: list[dict]
+        self,
+        track_id: int,
+        user_id: int,
+        synced_lines: list[dict[str, object]],
     ) -> TrackLyrics:
         await self._get_owned_track(track_id, user_id)
         lyrics = await self._repo.update_sync(track_id, synced_lines)
@@ -555,6 +558,12 @@ class LyricsService:
         )
 
         if use_existing_text_for_sync:
+            assert existing is not None
+            existing.synced_lines = None
+            existing.sync_quality = None
+            existing.sync_profile = None
+            existing.sync_source_name = None
+            await self._session.flush()
             try:
                 await set_cached_lyrics_result(
                     artist,

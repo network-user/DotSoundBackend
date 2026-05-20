@@ -57,6 +57,7 @@ async def dispatch_compute_job(
     local_handler: LocalComputeHandler | None = None,
     force_local: bool = False,
     force_offload: bool = False,
+    priority: int | None = None,
 ) -> ComputeDispatchResult:
     canonical_type = q.canonical_job_type(job_type)
     target_id_str = None if target_id is None else str(target_id)
@@ -88,7 +89,11 @@ async def dispatch_compute_job(
             target_id=target_id_str,
             payload=payload or {},
             feature_version=feature_version,
-            priority=q.default_priority(canonical_type),
+            priority=(
+                q.default_priority(canonical_type)
+                if priority is None
+                else int(priority)
+            ),
             max_attempts=q.default_max_attempts(canonical_type),
         )
         await session.flush()

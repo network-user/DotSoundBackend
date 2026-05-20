@@ -147,6 +147,43 @@ async def test_apply_copies_raw_object_and_queues_repair(
     assert track.source_sha256 == source_sha
 
 
+@patch(
+    "app.services.search_index_notify.schedule_reindex_track",
+    new_callable=AsyncMock,
+)
+@patch(
+    f"{_MOD}.repair_telegram_import_transcode_task.kiq",
+    new_callable=AsyncMock,
+)
+@patch(f"{_MOD}.s3.upload_object", new_callable=AsyncMock)
+@patch(
+    f"{_MOD}.s3.download_object",
+    new_callable=AsyncMock,
+    return_value=b"raw-ogg",
+)
+async def test_urgent_apply_queues_high_priority_repair(
+    _mock_download: AsyncMock,
+    _mock_upload: AsyncMock,
+    mock_repair_kiq: AsyncMock,
+    _mock_reindex: AsyncMock,
+    db_session: AsyncSession,
+) -> None:
+    user = await _make_user(db_session, 6103)
+    track = await _make_telegram_track(
+        db_session,
+        user_id=user.id,
+    )
+
+    service = TelegramImportBackfillService(db_session)
+    report = await service.run(limit=10, dry_run=False, urgent=True)
+
+    assert report.enqueued == 1
+    kwargs = mock_repair_kiq.await_args.kwargs
+    assert kwargs["track_id"] == track.id
+    assert kwargs["priority"] == 0
+    assert kwargs["feature_version"] == "telegram-import-urgent-repair-v1"
+
+
 @patch(f"{_MOD}.s3.upload_object", new_callable=AsyncMock)
 @patch(
     f"{_MOD}.s3.download_object",

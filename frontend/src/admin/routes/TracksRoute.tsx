@@ -202,6 +202,8 @@ export function TracksRoute() {
   const [busyId, setBusyId] = useState<number | null>(null)
   const [bulkRepairBusy, setBulkRepairBusy] = useState(false)
   const [scCleanupBusy, setScCleanupBusy] = useState(false)
+  const [telegramNormalizeBusy, setTelegramNormalizeBusy] =
+    useState(false)
   const [playbackRepairRun, setPlaybackRepairRun] =
     useState<PlaybackRepairRunState | null>(null)
   const [statsPeriod, setStatsPeriod] = useState<
@@ -704,6 +706,33 @@ export function TracksRoute() {
       await showAlert((err as Error).message)
     } finally {
       setScCleanupBusy(false)
+    }
+  }
+
+  const handleNormalizeTelegramPlayback = async () => {
+    if (telegramNormalizeBusy) return
+    const ok = await showConfirm(
+      t('admin.tracks.confirmNormalizeTelegramPlayback'),
+    )
+    if (!ok) return
+    setTelegramNormalizeBusy(true)
+    try {
+      const result = await adminApi.normalizeTelegramPlayback({
+        limit: 5000,
+      })
+      await showAlert(
+        t('admin.tracks.normalizeTelegramPlaybackQueued', {
+          found: result.found,
+          queued: result.enqueued,
+          failed: result.failed,
+        }),
+      )
+      refresh()
+      qc.invalidateQueries({ queryKey: ['admin', 'tasks'] })
+    } catch (err) {
+      await showAlert((err as Error).message)
+    } finally {
+      setTelegramNormalizeBusy(false)
     }
   }
 
@@ -1592,6 +1621,13 @@ export function TracksRoute() {
           onClick={handleRepairAllPlaybackIssues}
         >
           {t('admin.tracks.repairAllIssuesBtn')}
+        </MotionPress>
+        <MotionPress
+          variant="ghost"
+          disabled={telegramNormalizeBusy}
+          onClick={handleNormalizeTelegramPlayback}
+        >
+          {t('admin.tracks.normalizeTelegramPlaybackBtn')}
         </MotionPress>
         <MotionPress
           variant="ghost"

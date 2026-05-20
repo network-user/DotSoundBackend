@@ -28,6 +28,8 @@ from app.schemas.admin_playback import (
     AdminSoundCloudEncryptedUnsupportedCleanupRequest,
     AdminSoundCloudEncryptedUnsupportedCleanupResponse,
     AdminSoundCloudPlaybackAuditRequest,
+    AdminTelegramPlaybackNormalizeRequest,
+    AdminTelegramPlaybackNormalizeResponse,
 )
 from app.schemas.track import TrackUpdateRequest
 from app.services.admin_lyrics_import_service import (
@@ -40,6 +42,9 @@ from app.services.admin_track_context_service import (
 )
 from app.services.admin_track_genre_mood_import_service import (
     AdminTrackGenreMoodImportService,
+)
+from app.services.telegram_import_backfill_service import (
+    TelegramImportBackfillService,
 )
 from app.services.transcoding import transcode_hls_only
 
@@ -438,6 +443,42 @@ async def admin_repair_tracks_playback(
         missing=result.missing,
     )
     return result
+
+
+@router.post(
+    "/tracks/playback-health/normalize-telegram",
+    response_model=AdminTelegramPlaybackNormalizeResponse,
+    summary="[Admin] Queue urgent playback normalization for Telegram tracks",
+)
+@limiter.limit("5/minute")
+async def admin_normalize_telegram_playback(
+    request: Request,
+    body: AdminTelegramPlaybackNormalizeRequest,
+    session: AsyncSession = Depends(get_db),
+    _admin: User = Depends(require_admin_session),
+) -> AdminTelegramPlaybackNormalizeResponse:
+    service = TelegramImportBackfillService(session)
+    report = await service.run(
+        limit=body.limit,
+        dry_run=body.dry_run,
+        urgent=True,
+    )
+    await session.commit()
+    logger.info(
+        "admin_telegram_playback_normalize_queued",
+        found=report.found,
+        enqueued=report.enqueued,
+        failed=report.failed,
+        dry_run=report.dry_run,
+    )
+    return AdminTelegramPlaybackNormalizeResponse(
+        **report.to_dict(),
+        detail=(
+            "telegram playback normalization queued"
+            if not report.dry_run
+            else "telegram playback normalization dry run"
+        ),
+    )
 
 
 @router.post(

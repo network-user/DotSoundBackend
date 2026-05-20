@@ -1,5 +1,18 @@
 # DotSound - TODO Tracker
 
+- [x] **Playback continuation, ASR sync queue, Telegram urgent normalize (2026-05-20)**
+  - Frontend player: natural `ended` now advances through prefetched
+    tracks and falls back to radio/adjacent queue instead of leaving playback
+    paused at the end of a track.
+  - Lyrics sync: redefining lyrics with `with_sync=true` clears stale timing
+    metadata before reusing existing text, so a fresh remote ASR/alignment job
+    is created instead of short-circuiting as already synced.
+  - Admin tracks: added urgent Telegram playback normalization endpoint and
+    button. It enqueues Telegram import transcodes with the highest compute
+    priority and a dedicated feature version.
+  - Tests: targeted service/API coverage for lyrics re-sync queueing,
+    urgent Telegram normalization endpoint, and compute priority override.
+
 - [x] **Perf Phase 3+4: modulePreload polyfill + trigram GIN indexes (2026-05-20)**
   - Части 3 и 4 из 5 плана мобильной оптимизации
     (`.claude/plans/merry-wishing-tide.md`).

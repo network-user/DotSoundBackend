@@ -1213,6 +1213,31 @@ export const adminApi = {
       method: 'POST',
       body: { track_ids: trackIds },
     }),
+  normalizeTelegramPlayback: (params?: {
+    limit?: number
+    dry_run?: boolean
+  }) =>
+    adminFetch<{
+      dry_run: boolean
+      found: number
+      enqueued: number
+      failed: number
+      items: Array<{
+        track_id: number
+        status: string
+        title: string
+        file_key: string
+        tmp_key: string | null
+        error: string | null
+      }>
+      detail: string
+    }>('/tracks/playback-health/normalize-telegram', {
+      method: 'POST',
+      body: {
+        limit: params?.limit,
+        dry_run: params?.dry_run,
+      },
+    }),
   auditSoundCloudPlayback: (params?: {
     search?: string
     limit?: number

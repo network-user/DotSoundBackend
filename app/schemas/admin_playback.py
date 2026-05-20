@@ -31,6 +31,31 @@ class AdminPlaybackRepairBulkResponse(BaseModel):
     detail: str = ""
 
 
+class AdminTelegramPlaybackNormalizeRequest(BaseModel):
+    limit: int = Field(default=500, ge=1, le=5000)
+    dry_run: bool = False
+
+
+class AdminTelegramPlaybackNormalizeItem(BaseModel):
+    track_id: int
+    status: str
+    title: str
+    file_key: str
+    tmp_key: str | None = None
+    error: str | None = None
+
+
+class AdminTelegramPlaybackNormalizeResponse(BaseModel):
+    dry_run: bool
+    found: int
+    enqueued: int
+    failed: int
+    items: list[AdminTelegramPlaybackNormalizeItem] = Field(
+        default_factory=list
+    )
+    detail: str = ""
+
+
 class AdminSoundCloudPlaybackAuditRequest(BaseModel):
     search: str | None = Field(default=None, max_length=128)
     limit: int = Field(default=500, ge=1, le=5000)

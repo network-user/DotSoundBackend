@@ -2,8 +2,10 @@ from unittest.mock import AsyncMock
 
 import pytest
 from fastapi import HTTPException
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.models.lyrics import TrackLyrics
 from app.models.lyrics_job import LyricsJob
 from app.repositories.track import TrackRepository
 from app.repositories.user import UserRepository
@@ -269,6 +271,171 @@ async def test_trigger_sync_for_existing_text_skips_catalog_tier(
     assert captured["with_sync"] is True
     assert captured["skip_tiers"] == ("catalog_only",)
     assert captured["skip_reason"] == "existing_text_needs_timing"
+
+
+async def test_trigger_sync_ignores_stale_lines_without_time_ms(
+    session: AsyncSession,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    uid = await _make_user(session)
+    tid = await _make_track(session, uid)
+    svc = LyricsService(session)
+    await svc.create_or_update(tid, uid, "Line 1\nLine 2")
+    existing = (
+        await session.execute(
+            select(TrackLyrics).where(TrackLyrics.track_id == tid)
+        )
+    ).scalar_one()
+    existing.synced_lines = [{"text": "Line 1"}]
+    await session.flush()
+
+    captured: dict[str, object] = {}
+
+    async def fake_start_cascade(
+        _session: AsyncSession,
+        *,
+        job: LyricsJob,
+        with_sync: bool,
+        bypass_cache: bool,
+        skip_tiers: tuple[str, ...] = (),
+        skip_reason: str | None = None,
+    ) -> str:
+        captured["with_sync"] = with_sync
+        captured["skip_tiers"] = skip_tiers
+        captured["skip_reason"] = skip_reason
+        job.profile = "gpu_full"
+        job.current_tier = "remote_whisper"
+        job.status = "queued"
+        return "remote_whisper"
+
+    monkeypatch.setattr(
+        compute_router,
+        "get_routing_mode",
+        AsyncMock(return_value="auto"),
+    )
+    monkeypatch.setattr(
+        lyrics_worker,
+        "set_cached_lyrics_result",
+        AsyncMock(),
+    )
+    monkeypatch.setattr(
+        lyrics_worker,
+        "set_lyrics_progress",
+        AsyncMock(),
+    )
+    monkeypatch.setattr(
+        lyrics_cascade,
+        "start_cascade",
+        fake_start_cascade,
+    )
+
+    task_id = await svc.trigger_auto_generation(
+        tid,
+        uid,
+        with_sync=True,
+    )
+
+    assert task_id
+    assert captured["with_sync"] is True
+    assert captured["skip_tiers"] == ("catalog_only",)
+    assert captured["skip_reason"] == "existing_text_needs_timing"
+
+
+async def test_redefine_sync_clears_existing_timing_and_queues_job(
+    session: AsyncSession,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    uid = await _make_user(session)
+    tid = await _make_track(session, uid)
+    svc = LyricsService(session)
+    await svc.create_or_update(tid, uid, "Line 1\nLine 2")
+    await svc.update_sync(
+        tid,
+        uid,
+        [{"time_ms": 0, "text": "Line 1"}],
+    )
+    existing = (
+        await session.execute(
+            select(TrackLyrics).where(TrackLyrics.track_id == tid)
+        )
+    ).scalar_one()
+    existing.sync_quality = "line"
+    existing.sync_profile = "gpu_full"
+    existing.sync_source_name = "old-aligner"
+    await session.flush()
+
+    captured: dict[str, object] = {}
+
+    async def fake_start_cascade(
+        _session: AsyncSession,
+        *,
+        job: LyricsJob,
+        with_sync: bool,
+        bypass_cache: bool,
+        skip_tiers: tuple[str, ...] = (),
+        skip_reason: str | None = None,
+    ) -> str:
+        captured["with_sync"] = with_sync
+        captured["bypass_cache"] = bypass_cache
+        captured["skip_tiers"] = skip_tiers
+        captured["skip_reason"] = skip_reason
+        job.profile = "gpu_full"
+        job.current_tier = "remote_whisper"
+        job.status = "queued"
+        return "remote_whisper"
+
+    monkeypatch.setattr(
+        compute_router,
+        "get_routing_mode",
+        AsyncMock(return_value="auto"),
+    )
+    monkeypatch.setattr(
+        lyrics_worker,
+        "invalidate_cached_lyrics_for_track",
+        AsyncMock(),
+    )
+    monkeypatch.setattr(
+        lyrics_worker,
+        "set_cached_lyrics_result",
+        AsyncMock(),
+    )
+    monkeypatch.setattr(
+        lyrics_worker,
+        "set_lyrics_progress",
+        AsyncMock(),
+    )
+    monkeypatch.setattr(
+        lyrics_cascade,
+        "start_cascade",
+        fake_start_cascade,
+    )
+
+    task_id = await svc.redefine_lyrics(
+        tid,
+        uid,
+        with_sync=True,
+    )
+
+    assert task_id
+    assert captured["with_sync"] is True
+    assert captured["skip_tiers"] == ("catalog_only",)
+    assert captured["skip_reason"] == "existing_text_needs_timing"
+    job = (
+        await session.execute(
+            select(LyricsJob).where(LyricsJob.track_id == tid)
+        )
+    ).scalar_one()
+    assert job.profile == "gpu_full"
+    reloaded = (
+        await session.execute(
+            select(TrackLyrics).where(TrackLyrics.track_id == tid)
+        )
+    ).scalar_one()
+    assert reloaded.plain_text == "Line 1\nLine 2"
+    assert reloaded.synced_lines is None
+    assert reloaded.sync_quality is None
+    assert reloaded.sync_profile is None
+    assert reloaded.sync_source_name is None
 
 
 async def test_upsert_and_list_translations(

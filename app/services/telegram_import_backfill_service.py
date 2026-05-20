@@ -25,6 +25,8 @@ logger: structlog.stdlib.BoundLogger = structlog.get_logger(__name__)
 
 _TELEGRAM = "telegram"
 _REPAIR_FEATURE_VERSION = "telegram-import-repair-v1"
+_URGENT_REPAIR_FEATURE_VERSION = "telegram-import-urgent-repair-v1"
+_URGENT_REPAIR_PRIORITY = 0
 
 
 @dataclass(frozen=True, slots=True)
@@ -159,6 +161,7 @@ class TelegramImportBackfillService:
         *,
         limit: int = 100,
         dry_run: bool = True,
+        urgent: bool = False,
     ) -> TelegramImportBackfillReport:
         candidates = await self.list_candidates(limit=limit)
         if dry_run:
@@ -183,7 +186,10 @@ class TelegramImportBackfillService:
         failed = 0
         for candidate in candidates:
             try:
-                item = await self._enqueue_candidate(candidate)
+                item = await self._enqueue_candidate(
+                    candidate,
+                    urgent=urgent,
+                )
             except Exception as exc:  # noqa: BLE001
                 failed += 1
                 logger.warning(
@@ -215,6 +221,8 @@ class TelegramImportBackfillService:
     async def _enqueue_candidate(
         self,
         candidate: TelegramImportBackfillCandidate,
+        *,
+        urgent: bool = False,
     ) -> TelegramImportBackfillItem:
         raw = await s3.download_object(candidate.file_key)
         ext = _ext_from_key(candidate.file_key)
@@ -226,12 +234,22 @@ class TelegramImportBackfillService:
         )
         tmp_key = f"tmp-transcode/{uuid.uuid4().hex}.{ext}"
         await s3.upload_object(tmp_key, raw, content_type)
-        await repair_telegram_import_transcode_task.kiq(
-            track_id=candidate.track_id,
-            raw_key=tmp_key,
-            original_filename=f"audio.{ext}",
-            source_sha256=source_sha256,
-        )
+        if urgent:
+            await repair_telegram_import_transcode_task.kiq(
+                track_id=candidate.track_id,
+                raw_key=tmp_key,
+                original_filename=f"audio.{ext}",
+                source_sha256=source_sha256,
+                priority=_URGENT_REPAIR_PRIORITY,
+                feature_version=_URGENT_REPAIR_FEATURE_VERSION,
+            )
+        else:
+            await repair_telegram_import_transcode_task.kiq(
+                track_id=candidate.track_id,
+                raw_key=tmp_key,
+                original_filename=f"audio.{ext}",
+                source_sha256=source_sha256,
+            )
         track = await self._session.get(Track, candidate.track_id)
         if track is not None and not track.source_sha256:
             track.source_sha256 = source_sha256
@@ -259,6 +277,8 @@ async def repair_telegram_import_transcode_task(
     raw_key: str,
     original_filename: str,
     source_sha256: str | None = None,
+    priority: int | None = None,
+    feature_version: str = _REPAIR_FEATURE_VERSION,
 ) -> None:
     async with AsyncSessionLocal() as session:
         await dispatch_compute_job(
@@ -272,7 +292,8 @@ async def repair_telegram_import_transcode_task(
                 "original_filename": original_filename,
                 "source_sha256": source_sha256,
             },
-            feature_version=_REPAIR_FEATURE_VERSION,
+            feature_version=feature_version,
+            priority=priority,
             local_handler=transcode_and_upload_local,
         )
         await session.commit()

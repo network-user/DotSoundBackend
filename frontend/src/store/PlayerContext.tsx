@@ -3698,10 +3698,12 @@ export function PlayerProvider({
     // analyser visualizers.
     const paused = audio.paused
     const previousVolume = audio.volume
-    try {
-      audio.pause()
-    } catch {
-      /* ignore */
+    if (!isInjectedAdvance) {
+      try {
+        audio.pause()
+      } catch {
+        /* ignore */
+      }
     }
     try {
       audio.volume = 0
@@ -3723,7 +3725,7 @@ export function PlayerProvider({
     } catch {
       /* ignore — some readyStates throw, the load() below resets */
     }
-    setIsPlaying(false)
+    setIsPlaying(isInjectedAdvance)
     setIsPlayingFromCache(false)
     setCurrentTime(0)
     setDuration(newTrack.duration_seconds ?? 0)
@@ -4478,10 +4480,7 @@ export function PlayerProvider({
       }
 
       const cache = prefetchCacheRef.current
-      const allowPrefetchAdvance =
-        !opts?.afterNaturalEnd || radioModeRef.current
       if (
-        allowPrefetchAdvance &&
         cache &&
         sessionTrackId != null &&
         cache.forTrackId === sessionTrackId &&
@@ -4493,24 +4492,83 @@ export function PlayerProvider({
         if (availableCacheTracks.length === 0) {
           prefetchCacheRef.current = null
         } else {
-        let next: Track
-        if (shuffleOnRef.current && availableCacheTracks.length > 1) {
-          const idx = Math.floor(Math.random() * availableCacheTracks.length)
-          next = availableCacheTracks[idx]
-          prefetchCacheRef.current = {
-            forTrackId: next.id,
-            tracks: availableCacheTracks.filter(
-              (_, i) => i !== idx,
-            ),
+          let next: Track
+          if (shuffleOnRef.current && availableCacheTracks.length > 1) {
+            const idx = Math.floor(
+              Math.random() * availableCacheTracks.length,
+            )
+            next = availableCacheTracks[idx]
+            prefetchCacheRef.current = {
+              forTrackId: next.id,
+              tracks: availableCacheTracks.filter(
+                (_, i) => i !== idx,
+              ),
+            }
+          } else {
+            next = availableCacheTracks[0]
+            prefetchCacheRef.current = {
+              forTrackId: next.id,
+              tracks: availableCacheTracks.slice(1),
+            }
           }
-        } else {
-          next = availableCacheTracks[0]
-          prefetchCacheRef.current = {
-            forTrackId: next.id,
-            tracks: availableCacheTracks.slice(1),
-          }
+          return await advance(next)
         }
-        return await advance(next)
+      }
+      if (sessionTrackId != null) {
+        const excludeIds = Array.from(
+          new Set([
+            sessionTrackId,
+            ...manualQueueRef.current.map((item) => item.id),
+          ]),
+        ).slice(-60)
+        try {
+          const radio = await api.getRadio(
+            sessionTrackId,
+            RADIO_BATCH_SIZE,
+            excludeIds,
+          )
+          const fresh = radio.tracks.filter(
+            (item) =>
+              item.id !== sessionTrackId &&
+              !unavailableTrackIdsRef.current.has(item.id),
+          )
+          if (fresh.length > 0) {
+            const next = fresh[0]
+            manualQueueRef.current = fresh.slice(1)
+            setQueue([...manualQueueRef.current])
+            if (radioModeRef.current) {
+              for (const item of fresh) {
+                radioPlayedIdsRef.current.add(item.id)
+              }
+            }
+            prefetchCacheRef.current = {
+              forTrackId: next.id,
+              tracks: fresh.slice(1),
+            }
+            return await advance(next)
+          }
+        } catch {
+          /* adjacent queue below keeps natural playback moving */
+        }
+        try {
+          const adjacent = await api.getTrackQueue(sessionTrackId, 5)
+          const fresh = adjacent.next_tracks.filter(
+            (item) =>
+              item.id !== sessionTrackId &&
+              !unavailableTrackIdsRef.current.has(item.id),
+          )
+          if (fresh.length > 0) {
+            const next = fresh[0]
+            manualQueueRef.current = fresh.slice(1)
+            setQueue([...manualQueueRef.current])
+            prefetchCacheRef.current = {
+              forTrackId: next.id,
+              tracks: fresh.slice(1),
+            }
+            return await advance(next)
+          }
+        } catch {
+          /* offline-cache fallback below is best effort */
         }
       }
       if (radioAutoSkipHaltedRef.current) return false

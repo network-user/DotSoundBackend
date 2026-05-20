@@ -16,6 +16,10 @@ from app.models.track import Track
 from app.models.track_playback_failure_event import (
     TrackPlaybackFailureEvent,
 )
+from app.services.telegram_import_backfill_service import (
+    TelegramImportBackfillItem,
+    TelegramImportBackfillReport,
+)
 from tests.conftest import (
     admin_bearer_for_user,
     auth_headers,
@@ -511,6 +515,70 @@ async def test_admin_cleanup_soundcloud_encrypted_unsupported_embeds(
     assert event.http_status == 422
     assert detail["code"] == "soundcloud_encrypted_hls_unsupported"
     assert detail["reason"] == "encrypted_hls_unsupported"
+
+
+async def test_admin_normalize_telegram_playback_endpoint(
+    client: AsyncClient,
+    db_session: AsyncSession,
+) -> None:
+    admin = await create_test_user(client, 130013)
+    headers = await admin_bearer_for_user(
+        client, db_session, user_id=admin["id"]
+    )
+    report = TelegramImportBackfillReport(
+        dry_run=False,
+        found=2,
+        enqueued=1,
+        failed=1,
+        items=[
+            TelegramImportBackfillItem(
+                track_id=11,
+                status="enqueued",
+                title="Telegram OK",
+                file_key="telegram/ok.ogg",
+                tmp_key="tmp-transcode/ok.ogg",
+            ),
+            TelegramImportBackfillItem(
+                track_id=12,
+                status="failed",
+                title="Telegram Failed",
+                file_key="telegram/fail.ogg",
+                error="download failed",
+            ),
+        ],
+    )
+
+    with patch(
+        "app.api.v1.admin.tracks.TelegramImportBackfillService"
+    ) as service_cls:
+        service = service_cls.return_value
+        service.run = AsyncMock(return_value=report)
+        r = await client.post(
+            "/api/v1/admin/tracks/playback-health/normalize-telegram",
+            headers=headers,
+            json={"limit": 123, "dry_run": False},
+        )
+
+    assert r.status_code == 200
+    service.run.assert_awaited_once_with(
+        limit=123,
+        dry_run=False,
+        urgent=True,
+    )
+    body = r.json()
+    assert body["dry_run"] is False
+    assert body["found"] == 2
+    assert body["enqueued"] == 1
+    assert body["failed"] == 1
+    assert body["detail"] == "telegram playback normalization queued"
+    assert body["items"][0] == {
+        "track_id": 11,
+        "status": "enqueued",
+        "title": "Telegram OK",
+        "file_key": "telegram/ok.ogg",
+        "tmp_key": "tmp-transcode/ok.ogg",
+        "error": None,
+    }
 
 
 async def test_admin_playback_repair_returns_progress_id(
