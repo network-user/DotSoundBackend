@@ -1,5 +1,24 @@
 # DotSound - TODO Tracker
 
+- [x] **Track card video processing UX (2026-05-21)**
+  - Track card video uploads now poll the track until async transcoding
+    produces `video_key`, then refresh the active track so the uploaded video
+    appears automatically without reopening the app.
+  - Upload, delete, processing, polling and playback failures now surface a
+    user-visible reason via the existing island notification plus inline edit
+    panel status. Backend transcode failures distinguish transcode errors from
+    internal worker errors through `video_processing_status`.
+  - Video deletion clears processing and thumbnail state together with
+    `video_key`.
+  - Legal check: reviewed `LEGAL.md` and top-level `docs/legal/*`; no legal
+    text change needed because the feature still uses existing UGC video
+    upload/storage semantics.
+  - Verification: `npm run build`; `poetry run pytest
+    tests/app/api/v1/tracks/test_user.py::test_upload_video_success
+    tests/app/api/v1/tracks/test_user.py::test_delete_video_success`;
+    `poetry run ruff check app/api/v1/tracks/user.py
+    app/services/video_transcoding.py tests/app/api/v1/tracks/test_user.py`.
+
 - [x] **ASR worker external audio materialization (2026-05-20)**
   - Internal ASR audio endpoint now handles external progressive audio in
     backend: downloads the CDN stream into a temporary `.audio` file, streams
@@ -9,9 +28,12 @@
     resolution.
   - `WORKER_THIRD_PARTY_AUDIO_ENABLED` example/default is enabled, while ASR
     proxy mode no longer depends on remote workers fetching third-party URLs.
+  - Worker auth diagnostics now write masked 404 causes into backend logs and
+    `worker_audit_log.meta.reason` (`unknown_or_inactive`, `revoked`, etc.),
+    while IP allowlist blocks log resolved/peer/forwarded IP context.
   - Verification: `poetry run pytest tests/app/api/v1/internal/test_audio_compute.py tests/app/services/test_lyrics_cascade.py tests/app/services/test_lyrics_service.py`;
-    `poetry run ruff check app/api/v1/internal/audio_compute.py app/api/v1/internal/compute_jobs.py app/config.py app/services/lyrics_cascade.py tests/app/api/v1/internal/test_audio_compute.py`;
-    `poetry run mypy app/api/v1/internal/audio_compute.py app/api/v1/internal/compute_jobs.py app/services/lyrics_cascade.py app/services/lyrics_service.py`.
+    `poetry run ruff check app/api/v1/internal/audio_compute.py app/api/v1/internal/compute_jobs.py app/api/v1/internal/worker_request.py app/middlewares/internal_api_allowlist.py app/config.py app/services/lyrics_cascade.py tests/app/api/v1/internal/test_audio_compute.py`;
+    `poetry run mypy app/api/v1/internal/audio_compute.py app/api/v1/internal/compute_jobs.py app/api/v1/internal/worker_request.py app/middlewares/internal_api_allowlist.py app/services/lyrics_cascade.py app/services/lyrics_service.py`.
 
 - [x] **Home UI refresh + premium mini player (2026-05-20)**
   - Frontend home: rebuilt the first screen around a premium mono

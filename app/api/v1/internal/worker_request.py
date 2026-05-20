@@ -49,18 +49,41 @@ async def verify_worker_hmac_request(
                 "X-Worker-Signature-Version"
             ),
         )
-    except cws.WorkerNotFoundError:
+    except cws.WorkerNotFoundError as exc:
+        reason = str(exc) or "worker_not_found"
+        logger.warning(
+            "worker_auth_not_found",
+            worker_id=request.headers.get("X-Worker-Id"),
+            ip=client_ip(request),
+            path=request.url.path,
+            method=request.method,
+            reason=reason,
+        )
         await cws._log_audit(
             session,
             worker_id=request.headers.get("X-Worker-Id"),
             ip=client_ip(request),
             action="auth_fail",
             status_code=404,
+            meta={
+                "reason": reason,
+                "path": request.url.path,
+                "method": request.method,
+            },
         )
         await session.commit()
         raise HTTPException(status_code=404) from None
     except cws.WorkerAuthError as exc:
         status_code = 429 if str(exc) == "suspended" else 401
+        logger.warning(
+            "worker_auth_failed",
+            worker_id=request.headers.get("X-Worker-Id"),
+            ip=client_ip(request),
+            path=request.url.path,
+            method=request.method,
+            reason=str(exc),
+            status_code=status_code,
+        )
         await cws._log_audit(
             session,
             worker_id=request.headers.get("X-Worker-Id"),

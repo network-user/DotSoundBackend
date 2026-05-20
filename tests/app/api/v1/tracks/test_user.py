@@ -414,6 +414,7 @@ async def test_regenerate_cover_not_found(
 
 async def test_upload_video_success(
     client: AsyncClient,
+    db_session: AsyncSession,
 ) -> None:
     user = await create_test_user(client, 60020)
     headers = await auth_headers(
@@ -421,6 +422,9 @@ async def test_upload_video_success(
     )
     track = await create_test_track(
         client, "VidOK", user["id"]
+    )
+    await _set_track_video_key(
+        db_session, track["id"], "videos/old.mp4"
     )
 
     video_data = b"\x00\x00\x00\x1cftypisom" + (
@@ -431,6 +435,10 @@ async def test_upload_video_success(
             "app.core.s3.upload_object",
             new_callable=AsyncMock,
         ),
+        patch(
+            "app.core.s3.delete_object",
+            new_callable=AsyncMock,
+        ) as mock_del,
         patch(
             "app.services.file_validator.validate_video",
             return_value="video/mp4",
@@ -455,6 +463,7 @@ async def test_upload_video_success(
     data = r.json()
     assert data["video_processing_status"] == "processing"
     assert data.get("video_key") is None
+    mock_del.assert_called_once_with("videos/old.mp4")
 
 
 async def test_delete_video_success(
@@ -512,6 +521,12 @@ async def test_delete_video_success(
         )
     assert r.status_code == 204
     mock_del.assert_called_once()
+    result = await db_session.execute(
+        select(Track).where(Track.id == track["id"])
+    )
+    saved = result.scalar_one()
+    assert saved.video_key is None
+    assert saved.video_processing_status is None
 
 
 async def test_update_track_title(

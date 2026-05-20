@@ -1,6 +1,11 @@
 import mimetypes
+import re
+from contextlib import suppress
 
 import structlog
+from dotsound_private_core.services.upload_policy import (
+    MAX_VIDEO_BYTES as _MAX_VIDEO_BYTES,
+)
 from fastapi import (
     APIRouter,
     BackgroundTasks,
@@ -376,10 +381,8 @@ async def upload_track_cover(
     await session.refresh(track)
 
     if old_cover_key:
-        try:
+        with suppress(Exception):
             await s3.delete_object(old_cover_key)
-        except Exception:
-            pass
 
     logger.info(
         "track_cover_uploaded",
@@ -417,10 +420,6 @@ _ALLOWED_VIDEO_MIMES = frozenset(
     {"video/mp4", "video/webm"}
 )
 
-from dotsound_private_core.services.upload_policy import (
-    MAX_VIDEO_BYTES as _MAX_VIDEO_BYTES,
-)
-
 
 @router.post(
     "/{track_id}/video",
@@ -447,21 +446,21 @@ async def upload_track_video(
 
     data = await video.read()
     if len(data) > _MAX_VIDEO_BYTES:
+        limit_mb = _MAX_VIDEO_BYTES // (1024 * 1024)
         raise HTTPException(
             status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
-            detail=f"Video exceeds {_MAX_VIDEO_BYTES // (1024 * 1024)} MB limit",
+            detail=f"Video exceeds {limit_mb} MB limit",
         )
 
     from app.services.file_validator import validate_video_async
     await validate_video_async(data, video.filename)
 
     if track.video_key:
-        try:
+        with suppress(Exception):
             await s3.delete_object(track.video_key)
-        except Exception:
-            pass
+        track.video_key = None
+        track.video_thumbnail_key = None
 
-    import re
     safe_name = re.sub(
         r"[^\w.\-]", "_", video.filename or "video"
     )[:100]
@@ -501,11 +500,11 @@ async def delete_track_video(
         track_id, current_user, session
     )
     if track.video_key:
-        try:
+        with suppress(Exception):
             await s3.delete_object(track.video_key)
-        except Exception:
-            pass
         track.video_key = None
+        track.video_processing_status = None
+        track.video_thumbnail_key = None
         await session.flush()
 
 
@@ -554,10 +553,8 @@ async def restore_external_cover(
     await session.refresh(track)
 
     if old_cover_key and old_cover_key != cover_key:
-        try:
+        with suppress(Exception):
             await s3.delete_object(old_cover_key)
-        except Exception:
-            pass
 
     logger.info(
         "track_cover_restored",

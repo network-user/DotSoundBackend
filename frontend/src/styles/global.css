@@ -3187,6 +3187,28 @@ body.ds-perf-lite .tcs-video-pulse {
   border-color: var(--accent);
   color: var(--accent);
 }
+.tcs-video-status {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  margin-top: 10px;
+  padding: 10px 12px;
+  border: 1px solid rgba(255, 255, 255, 0.10);
+  border-radius: var(--radius);
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--text-secondary);
+  font-size: 13px;
+  line-height: 1.35;
+}
+.tcs-video-status svg {
+  flex: 0 0 auto;
+  margin-top: 1px;
+}
+.tcs-video-status.is-error {
+  border-color: rgba(255, 107, 107, 0.36);
+  background: rgba(255, 107, 107, 0.10);
+  color: #ffb4b4;
+}
 .tcs-dimmed {
   opacity: 0.3;
   pointer-events: none;

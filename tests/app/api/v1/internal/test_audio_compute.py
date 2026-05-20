@@ -293,6 +293,45 @@ async def test_audio_download_proxy_bypasses_disabled_direct_external_gate(
 
 
 @patch(
+    f"{_ALL}.is_ip_in_cidrs",
+    return_value=True,
+)
+@patch(
+    f"{_WCS}.get_redis_client",
+    new_callable=_mock_redis,
+)
+async def test_unknown_worker_404_is_audited_with_reason(
+    _redis: object,
+    _allowlist: object,
+    client: AsyncClient,
+    db_session: AsyncSession,
+) -> None:
+    path = "/api/v1/internal/audio-compute/jobs/claim"
+    headers = {
+        "X-Worker-Id": "w_missing",
+        "X-Timestamp": str(int(time.time())),
+        "X-Nonce": secrets.token_hex(8),
+        "X-Worker-Signature": "0" * 64,
+    }
+
+    response = await client.post(path, headers=headers, content=b"")
+
+    assert response.status_code == 404
+    audit = (
+        await db_session.execute(
+            select(WorkerAuditLog).where(
+                WorkerAuditLog.worker_id == "w_missing",
+                WorkerAuditLog.action == "auth_fail",
+            )
+        )
+    ).scalar_one()
+    assert audit.status_code == 404
+    assert audit.meta is not None
+    assert audit.meta["reason"] == "unknown_or_inactive"
+    assert audit.meta["path"] == path
+
+
+@patch(
     f"{_APIM}.rl.check_and_consume",
     new_callable=AsyncMock,
 )

@@ -2,6 +2,7 @@ import asyncio
 import os
 import shutil
 import tempfile
+from contextlib import suppress
 
 import structlog
 from sqlalchemy import update
@@ -87,7 +88,7 @@ async def transcode_video(
                 stderr=stderr.decode()[:500],
             )
             await _update_video_status(
-                track_id, "error"
+                track_id, "error_transcode"
             )
             return
 
@@ -153,11 +154,9 @@ async def transcode_video(
     except Exception:
         logger.exception("video_transcoding_error")
         await _update_video_status(
-            track_id, "error"
+            track_id, "error_internal"
         )
     finally:
         shutil.rmtree(tmp_dir, ignore_errors=True)
-        try:
+        with suppress(Exception):
             await s3.delete_object(raw_key)
-        except Exception:
-            pass

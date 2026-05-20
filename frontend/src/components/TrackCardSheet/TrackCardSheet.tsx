@@ -8,7 +8,7 @@
 } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useNavigate } from 'react-router-dom'
-import { api } from '@/lib/api'
+import { api, getApiErrorMessage } from '@/lib/api'
 import {
   getInternalUserId,
   getIsAdmin,
@@ -249,6 +249,11 @@ export function TrackCardSheet({
   const [albumSearchLoading, setAlbumSearchLoading] = useState(false)
   const [videoReady, setVideoReady] =
     useState(false)
+  const [videoBusy, setVideoBusy] = useState(false)
+  const [videoStatusMessage, setVideoStatusMessage] =
+    useState<string | null>(null)
+  const [videoStatusKind, setVideoStatusKind] =
+    useState<'info' | 'error'>('info')
   const videoEnabled =
     localStorage.getItem('setting-video-enabled') !== 'false'
 
@@ -257,6 +262,8 @@ export function TrackCardSheet({
     useRef<HTMLInputElement>(null)
   const videoInputRef =
     useRef<HTMLInputElement>(null)
+  const videoPollRef = useRef<number | null>(null)
+  const videoPlaybackErrorShownRef = useRef(false)
   const [extrasOpen, setExtrasOpen] = useState(false)
   const [streamOverrideDraft, setStreamOverrideDraft] =
     useState('')
@@ -264,6 +271,145 @@ export function TrackCardSheet({
     (import.meta.env.DEV || isAdmin) &&
     track != null &&
     track.access_mode === 'third_party_stream'
+
+  const clearVideoPoll = useCallback(() => {
+    if (videoPollRef.current) {
+      clearTimeout(videoPollRef.current)
+      videoPollRef.current = null
+    }
+  }, [])
+
+  const getVideoFailureMessage = useCallback(
+    (statusValue?: string | null) => {
+      if (statusValue === 'error_transcode') {
+        return t('trackSheet.videoTranscodeFailed')
+      }
+      if (statusValue === 'error_internal') {
+        return t('trackSheet.videoProcessingInternal')
+      }
+      if (statusValue?.startsWith('error')) {
+        return t('trackSheet.videoProcessingFailed')
+      }
+      return null
+    },
+    [t],
+  )
+
+  const pollVideoProcessing = useCallback(
+    (trackId: number, attempt = 0) => {
+      clearVideoPoll()
+      const delayMs = attempt === 0 ? 1200 : 2200
+      videoPollRef.current = window.setTimeout(() => {
+        void (async () => {
+          try {
+            const fresh = await api.getTrack(trackId)
+            updateTrack(fresh)
+            const failureMessage =
+              getVideoFailureMessage(
+                fresh.video_processing_status,
+              )
+            if (fresh.video_key) {
+              setVideoBusy(false)
+              setVideoReady(false)
+              setVideoStatusKind('info')
+              setVideoStatusMessage(null)
+              showIsland({
+                kind: 'toast',
+                title: t('trackSheet.videoReady'),
+                durationMs: 3000,
+              })
+              return
+            }
+            if (failureMessage) {
+              setVideoBusy(false)
+              setVideoStatusKind('error')
+              setVideoStatusMessage(failureMessage)
+              showIsland({
+                kind: 'error',
+                title: failureMessage,
+                durationMs: 4500,
+              })
+              return
+            }
+            if (attempt < 45) {
+              setVideoBusy(true)
+              setVideoStatusKind('info')
+              setVideoStatusMessage(
+                t('trackSheet.videoProcessing'),
+              )
+              pollVideoProcessing(trackId, attempt + 1)
+              return
+            }
+            const timeoutMessage = t(
+              'trackSheet.videoProcessingTimeout',
+            )
+            setVideoBusy(false)
+            setVideoStatusKind('error')
+            setVideoStatusMessage(timeoutMessage)
+            showIsland({
+              kind: 'error',
+              title: timeoutMessage,
+              durationMs: 4500,
+            })
+          } catch (err) {
+            if (attempt < 45) {
+              pollVideoProcessing(trackId, attempt + 1)
+              return
+            }
+            const message = getApiErrorMessage(
+              err,
+              t('trackSheet.videoPollFailed'),
+            )
+            setVideoBusy(false)
+            setVideoStatusKind('error')
+            setVideoStatusMessage(message)
+            showIsland({
+              kind: 'error',
+              title: message,
+              durationMs: 4500,
+            })
+          }
+        })()
+      }, delayMs)
+    },
+    [
+      clearVideoPoll,
+      getVideoFailureMessage,
+      t,
+      updateTrack,
+    ],
+  )
+
+  const handleVideoCanPlay = useCallback(() => {
+    videoPlaybackErrorShownRef.current = false
+    setVideoReady(true)
+    setVideoStatusKind('info')
+    setVideoStatusMessage(null)
+  }, [])
+
+  const handleVideoPlaybackError = useCallback(() => {
+    setVideoReady(false)
+    if (videoPlaybackErrorShownRef.current) {
+      return
+    }
+    videoPlaybackErrorShownRef.current = true
+    const message = t('trackSheet.videoPlaybackFailed')
+    setVideoStatusKind('error')
+    setVideoStatusMessage(message)
+    showIsland({
+      kind: 'error',
+      title: message,
+      durationMs: 4500,
+    })
+  }, [t])
+
+  useEffect(
+    () => () => {
+      clearVideoPoll()
+    },
+    [clearVideoPoll],
+  )
+
   useEffect(() => {
     if (
       !isCardOpen ||
@@ -340,6 +486,11 @@ export function TrackCardSheet({
       setCoverKey(null)
       setCoverBusy(false)
       setVideoReady(false)
+      setVideoBusy(false)
+      setVideoStatusKind('info')
+      setVideoStatusMessage(null)
+      videoPlaybackErrorShownRef.current = false
+      clearVideoPoll()
       setTrackInfo(null)
       setTrackInfoRefreshing(false)
       if (trackInfoPollRef.current) {
@@ -357,6 +508,27 @@ export function TrackCardSheet({
     setShowEdit(false)
     setShowLyrics(false)
     setVideoReady(false)
+    videoPlaybackErrorShownRef.current = false
+    const currentVideoStatus =
+      track.video_processing_status ?? null
+    const currentVideoFailure =
+      getVideoFailureMessage(currentVideoStatus)
+    if (currentVideoStatus === 'processing' && !track.video_key) {
+      setVideoBusy(true)
+      setVideoStatusKind('info')
+      setVideoStatusMessage(
+        t('trackSheet.videoProcessing'),
+      )
+      pollVideoProcessing(track.id)
+    } else if (currentVideoFailure) {
+      setVideoBusy(false)
+      setVideoStatusKind('error')
+      setVideoStatusMessage(currentVideoFailure)
+    } else {
+      setVideoBusy(false)
+      setVideoStatusKind('info')
+      setVideoStatusMessage(null)
+    }
     setLoading(true)
     const requestId = activeTrackRequestRef.current + 1
     activeTrackRequestRef.current = requestId
@@ -434,7 +606,15 @@ export function TrackCardSheet({
         trackInfoPollRef.current = null
       }
     }
-  }, [isCardOpen, track?.id, showTrackInfo])
+  }, [
+    clearVideoPoll,
+    getVideoFailureMessage,
+    isCardOpen,
+    pollVideoProcessing,
+    showTrackInfo,
+    t,
+    track?.id,
+  ])
 
   useEffect(() => {
     const albumFromCard = card?.album
@@ -844,8 +1024,16 @@ export function TrackCardSheet({
     }, [track, updateTrack])
 
   const handleVideoUpload = useCallback(
-    () => videoInputRef.current?.click(),
-    [],
+    () => {
+      if (
+        videoBusy ||
+        track?.video_processing_status === 'processing'
+      ) {
+        return
+      }
+      videoInputRef.current?.click()
+    },
+    [track?.video_processing_status, videoBusy],
   )
 
   const handleVideoSelected = useCallback(
@@ -854,6 +1042,12 @@ export function TrackCardSheet({
     ) => {
       const file = e.target.files?.[0]
       if (!file || !track) return
+      clearVideoPoll()
+      setVideoBusy(true)
+      setVideoStatusKind('info')
+      setVideoStatusMessage(
+        t('trackSheet.videoProcessing'),
+      )
       try {
         const fd = new FormData()
         fd.append('video', file)
@@ -863,25 +1057,74 @@ export function TrackCardSheet({
         )
         updateTrack(updated)
         setVideoReady(false)
-      } catch {}
+        showIsland({
+          kind: 'toast',
+          title: t('trackSheet.videoUploadStarted'),
+          durationMs: 3000,
+        })
+        if (updated.video_key) {
+          setVideoBusy(false)
+          setVideoStatusKind('info')
+          setVideoStatusMessage(null)
+        } else {
+          pollVideoProcessing(track.id)
+        }
+      } catch (err) {
+        const message = getApiErrorMessage(
+          err,
+          t('trackSheet.videoUploadFailed'),
+        )
+        setVideoBusy(false)
+        setVideoStatusKind('error')
+        setVideoStatusMessage(message)
+        showIsland({
+          kind: 'error',
+          title: message,
+          durationMs: 4500,
+        })
+      }
       finally {
         e.target.value = ''
       }
     },
-    [track, updateTrack],
+    [
+      clearVideoPoll,
+      pollVideoProcessing,
+      t,
+      track,
+      updateTrack,
+    ],
   )
 
   const handleVideoDelete = useCallback(async () => {
     if (!track?.video_key) return
     try {
       await api.deleteTrackVideo(track.id)
+      clearVideoPoll()
       updateTrack({
         id: track.id,
         video_key: null,
+        video_processing_status: null,
+        video_thumbnail_key: null,
       })
       setVideoReady(false)
-    } catch {}
-  }, [track, updateTrack])
+      setVideoBusy(false)
+      setVideoStatusKind('info')
+      setVideoStatusMessage(null)
+    } catch (err) {
+      const message = getApiErrorMessage(
+        err,
+        t('trackSheet.videoDeleteFailed'),
+      )
+      setVideoStatusKind('error')
+      setVideoStatusMessage(message)
+      showIsland({
+        kind: 'error',
+        title: message,
+        durationMs: 4500,
+      })
+    }
+  }, [clearVideoPoll, t, track, updateTrack])
 
   const [offlineSaved, setOfflineSaved] = useState(false)
   const [offlineBusy, setOfflineBusy] = useState(false)
@@ -1070,6 +1313,20 @@ export function TrackCardSheet({
 
   const hasActiveVideo =
     !!videoSrc && videoEnabled
+  const videoProcessing =
+    videoBusy ||
+    track.video_processing_status === 'processing'
+  const mappedVideoFailure = getVideoFailureMessage(
+    track.video_processing_status,
+  )
+  const videoStatusText =
+    videoStatusMessage ??
+    (videoProcessing
+      ? t('trackSheet.videoProcessing')
+      : mappedVideoFailure)
+  const videoStatusIsError =
+    videoStatusKind === 'error' ||
+    mappedVideoFailure != null
   const visualMode =
     showLyrics || hasActiveVideo
   const perfLite =
@@ -1148,12 +1405,8 @@ export function TrackCardSheet({
               loop
               muted
               playsInline
-              onCanPlay={() =>
-                setVideoReady(true)
-              }
-              onError={() =>
-                setVideoReady(false)
-              }
+              onCanPlay={handleVideoCanPlay}
+              onError={handleVideoPlaybackError}
             />
             <div className="tcs-video-gradient" />
             {hasPipSupport() && (
@@ -2123,12 +2376,15 @@ export function TrackCardSheet({
               <button
                 className="tcs-edit-btn"
                 onClick={handleVideoUpload}
+                disabled={videoProcessing}
               >
                 <Icon
                   name="video"
                   size={18}
                 />
-                {t('trackSheet.video')}
+                {videoProcessing
+                  ? t('trackSheet.videoProcessingAction')
+                  : t('trackSheet.video')}
               </button>
               {track.video_key && (
                 <button
@@ -2143,6 +2399,21 @@ export function TrackCardSheet({
                 </button>
               )}
             </div>
+            {videoStatusText && (
+              <div
+                className={`tcs-video-status${videoStatusIsError ? ' is-error' : ''}`}
+              >
+                <Icon
+                  name={
+                    videoStatusIsError
+                      ? 'alert-triangle'
+                      : 'clock'
+                  }
+                  size={16}
+                />
+                <span>{videoStatusText}</span>
+              </div>
+            )}
           </div>
         )}
 

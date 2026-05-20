@@ -60,6 +60,11 @@ class InternalApiAllowlistMiddleware(BaseHTTPMiddleware):
                 peer_ip=peer_ip,
                 path=request.url.path,
                 method=request.method,
+                allowed_cidrs_count=len(cidrs),
+                trusted_proxy_cidrs_count=len(
+                    internal_api_trusted_proxy_cidrs()
+                ),
+                forwarded_for=request.headers.get("x-forwarded-for", ""),
             )
             return JSONResponse(
                 status_code=404,
