@@ -91,6 +91,12 @@ function hasPipSupport(): boolean {
   }
 }
 
+function isVideoProcessingStatus(
+  status?: string | null,
+): boolean {
+  return status?.startsWith('processing') ?? false
+}
+
 interface Props {
   onOpenArtist?: (name: string) => void
 }
@@ -513,7 +519,10 @@ export function TrackCardSheet({
       track.video_processing_status ?? null
     const currentVideoFailure =
       getVideoFailureMessage(currentVideoStatus)
-    if (currentVideoStatus === 'processing' && !track.video_key) {
+    if (
+      isVideoProcessingStatus(currentVideoStatus) &&
+      !track.video_key
+    ) {
       setVideoBusy(true)
       setVideoStatusKind('info')
       setVideoStatusMessage(
@@ -1027,7 +1036,9 @@ export function TrackCardSheet({
     () => {
       if (
         videoBusy ||
-        track?.video_processing_status === 'processing'
+        isVideoProcessingStatus(
+          track?.video_processing_status,
+        )
       ) {
         return
       }
@@ -1315,7 +1326,7 @@ export function TrackCardSheet({
     !!videoSrc && videoEnabled
   const videoProcessing =
     videoBusy ||
-    track.video_processing_status === 'processing'
+    isVideoProcessingStatus(track.video_processing_status)
   const mappedVideoFailure = getVideoFailureMessage(
     track.video_processing_status,
   )

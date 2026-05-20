@@ -446,7 +446,7 @@ async def test_upload_video_success(
         patch(
             "app.services.video_transcoding.transcode_video.kiq",
             new_callable=AsyncMock,
-        ),
+        ) as mock_kiq,
     ):
         r = await client.post(
             f"/api/v1/tracks/{track['id']}/video",
@@ -461,9 +461,13 @@ async def test_upload_video_success(
         )
     assert r.status_code == 200
     data = r.json()
-    assert data["video_processing_status"] == "processing"
+    assert data["video_processing_status"].startswith("processing:")
     assert data.get("video_key") is None
     mock_del.assert_called_once_with("videos/old.mp4")
+    assert (
+        mock_kiq.await_args.kwargs["expected_status"]
+        == data["video_processing_status"]
+    )
 
 
 async def test_delete_video_success(
@@ -506,7 +510,9 @@ async def test_delete_video_success(
                 )
             },
         )
-    assert r.json()["video_processing_status"] == "processing"
+    assert r.json()["video_processing_status"].startswith(
+        "processing:"
+    )
     await _set_track_video_key(
         db_session, track["id"], "videos/vid1.mp4"
     )

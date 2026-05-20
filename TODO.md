@@ -10,6 +10,9 @@
     internal worker errors through `video_processing_status`.
   - Video deletion clears processing and thumbnail state together with
     `video_key`.
+  - Follow-up: video transcode tasks now carry a short processing token, and
+    worker writes are guarded by that token so an older upload cannot overwrite
+    a newer video if jobs finish out of order.
   - Legal check: reviewed `LEGAL.md` and top-level `docs/legal/*`; no legal
     text change needed because the feature still uses existing UGC video
     upload/storage semantics.
@@ -17,7 +20,8 @@
     tests/app/api/v1/tracks/test_user.py::test_upload_video_success
     tests/app/api/v1/tracks/test_user.py::test_delete_video_success`;
     `poetry run ruff check app/api/v1/tracks/user.py
-    app/services/video_transcoding.py tests/app/api/v1/tracks/test_user.py`.
+    app/services/video_transcoding.py tests/app/api/v1/tracks/test_user.py`;
+    `poetry run pytest tests/app/services/test_video_transcoding.py`.
 
 - [x] **ASR worker external audio materialization (2026-05-20)**
   - Internal ASR audio endpoint now handles external progressive audio in

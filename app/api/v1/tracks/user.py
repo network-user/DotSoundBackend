@@ -1,5 +1,6 @@
 import mimetypes
 import re
+import secrets
 from contextlib import suppress
 
 import structlog
@@ -469,7 +470,8 @@ async def upload_track_video(
         key=raw_key, data=data, content_type=mime
     )
 
-    track.video_processing_status = "processing"
+    processing_status = f"processing:{secrets.token_hex(4)}"
+    track.video_processing_status = processing_status
     await session.flush()
 
     from app.services.video_transcoding import (
@@ -479,6 +481,7 @@ async def upload_track_video(
         track_id=track.id,
         raw_key=raw_key,
         original_filename=video.filename or "video.mp4",
+        expected_status=processing_status,
     )
 
     await session.refresh(track)
