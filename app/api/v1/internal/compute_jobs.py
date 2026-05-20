@@ -10,10 +10,11 @@ import structlog
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from fastapi.responses import JSONResponse, Response
 from sqlalchemy.ext.asyncio import AsyncSession
-from starlette.responses import RedirectResponse, StreamingResponse
+from starlette.responses import RedirectResponse
 
 from app.api.v1.internal.audio_compute import (
-    _stream_sc_cdn_to_worker,
+    _materialize_sc_cdn_to_tempfile,
+    _materialized_audio_response,
 )
 from app.api.v1.internal.worker_request import (
     client_ip,
@@ -597,14 +598,13 @@ async def download_job_audio(
             )
             await session.commit()
             raise HTTPException(status_code=404)
-        return StreamingResponse(
-            _stream_sc_cdn_to_worker(
-                sc_stream_url,
-                job_id=job_id,
-                chunk_idle_timeout=(settings.lyrics_audio_chunk_idle_seconds),
-            ),
-            media_type="application/octet-stream",
+        await session.commit()
+        tmp_path, _bytes = await _materialize_sc_cdn_to_tempfile(
+            sc_stream_url,
+            job_id=job_id,
+            chunk_idle_timeout=(settings.lyrics_audio_chunk_idle_seconds),
         )
+        return _materialized_audio_response(tmp_path, job_id=job_id)
 
     if not await cws.consume_ott_by_exp(exp, job.id, worker_id):
         await cws._log_audit(

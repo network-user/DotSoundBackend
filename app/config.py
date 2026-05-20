@@ -125,7 +125,9 @@ class AppSettings(BaseSettings):
     # the outer 600s httpx timeout fires.
     lyrics_audio_resolve_timeout_seconds: float = 45.0
     lyrics_audio_chunk_idle_seconds: float = 30.0
-    worker_third_party_audio_enabled: bool = False
+    # Gates non-proxied third-party URL handoff. ASR proxy mode
+    # materializes external audio in Backend before streaming to workers.
+    worker_third_party_audio_enabled: bool = True
     #: Used only for the internal ``/internal/audio-compute/audio`` proxy
     #: to ``cf-media.sndcdn.com``. The CDN often returns 403 to
     #: non-browser ``User-Agent``/missing ``Referer``.

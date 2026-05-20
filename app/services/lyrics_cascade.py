@@ -339,7 +339,12 @@ async def _advance_to_next_tier(
         )
     while True:
         attempts = _attempts(job)
-        next_tier = select_next_tier(attempts, cascade)
+        attempted_tiers = [
+            entry["tier"]
+            for entry in attempts
+            if isinstance(entry.get("tier"), str)
+        ]
+        next_tier = select_next_tier(attempted_tiers, cascade)
         if next_tier is None:
             job.status = "failed"
             job.finished_at = _now()

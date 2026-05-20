@@ -1,5 +1,18 @@
 # DotSound - TODO Tracker
 
+- [x] **ASR worker external audio materialization (2026-05-20)**
+  - Internal ASR audio endpoint now handles external progressive audio in
+    backend: downloads the CDN stream into a temporary `.audio` file, streams
+    local bytes to the worker, and deletes the temp file in `finally`.
+  - `proxy=1` ASR downloads no longer fail on the direct third-party audio
+    gate. The gate remains only for non-proxied direct external URL
+    resolution.
+  - `WORKER_THIRD_PARTY_AUDIO_ENABLED` example/default is enabled, while ASR
+    proxy mode no longer depends on remote workers fetching third-party URLs.
+  - Verification: `poetry run pytest tests/app/api/v1/internal/test_audio_compute.py tests/app/services/test_lyrics_cascade.py tests/app/services/test_lyrics_service.py`;
+    `poetry run ruff check app/api/v1/internal/audio_compute.py app/api/v1/internal/compute_jobs.py app/config.py app/services/lyrics_cascade.py tests/app/api/v1/internal/test_audio_compute.py`;
+    `poetry run mypy app/api/v1/internal/audio_compute.py app/api/v1/internal/compute_jobs.py app/services/lyrics_cascade.py app/services/lyrics_service.py`.
+
 - [x] **Home UI refresh + premium mini player (2026-05-20)**
   - Frontend home: rebuilt the first screen around a premium mono
     personal-radio hero with cover ambient, action signals and a ready-next

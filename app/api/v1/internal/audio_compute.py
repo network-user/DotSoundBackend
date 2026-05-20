@@ -11,6 +11,8 @@ from __future__ import annotations
 
 import asyncio
 import json
+import os
+import tempfile
 import time
 from collections.abc import AsyncIterator
 from datetime import UTC, datetime
@@ -21,9 +23,10 @@ import structlog
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from fastapi.responses import JSONResponse, Response
 from sqlalchemy.ext.asyncio import AsyncSession
+from starlette.background import BackgroundTask
 from starlette.responses import (
+    FileResponse,
     RedirectResponse,
-    StreamingResponse,
 )
 
 from app.api.v1.internal.worker_request import (
@@ -76,29 +79,38 @@ def _sc_cdn_proxy_headers() -> dict[str, str]:
     }
 
 
-async def _stream_sc_cdn_to_worker(
+async def _materialize_sc_cdn_to_tempfile(
     stream_url: str,
     *,
     job_id: str = "",
     chunk_idle_timeout: float = 30.0,
-) -> AsyncIterator[bytes]:
+) -> tuple[str, int]:
+    """Download third-party audio to a backend temp file."""
     cap = settings.lyrics_max_audio_mb * 1024 * 1024
     n = 0
     last_logged_at_bytes = 0
+    tmp_path: str | None = None
     sc_host = (
         stream_url.split("://", 1)[-1].split("/", 1)[0]
         if "://" in stream_url
         else "?"
     )
     started = datetime.now(UTC)
+    started_at = time.monotonic()
     out_proxy = get_outbound_proxy("soundcloud")
     logger.info(
         "audio_compute_sc_proxy_started",
         job_id=job_id,
         sc_host=sc_host,
         outbound_proxied=bool(out_proxy),
+        mode="materialize_then_stream",
     )
     try:
+        fd, tmp_path = tempfile.mkstemp(
+            prefix=f"asr_{job_id[:24]}_",
+            suffix=".audio",
+        )
+        os.close(fd)
         client_kwargs: dict[str, Any] = {
             "timeout": httpx.Timeout(
                 connect=30.0,
@@ -120,7 +132,6 @@ async def _stream_sc_cdn_to_worker(
             service="soundcloud",
             proxy_url=out_proxy,
         )
-        started_at = time.monotonic()
         async with (
             httpx.AsyncClient(**client_kwargs) as client,
             client.stream(
@@ -131,42 +142,47 @@ async def _stream_sc_cdn_to_worker(
         ):
             r.raise_for_status()
             iterator = r.aiter_bytes(_SC_PROXY_CHUNK)
-            while True:
-                try:
-                    chunk = await asyncio.wait_for(
-                        iterator.__anext__(),
-                        timeout=chunk_idle_timeout,
-                    )
-                except StopAsyncIteration:
-                    break
-                except TimeoutError:
-                    logger.warning(
-                        "audio_compute_sc_proxy_chunk_idle",
-                        job_id=job_id,
-                        bytes_streamed=n,
-                        idle_timeout_s=chunk_idle_timeout,
-                    )
-                    raise
-                if not chunk:
-                    continue
-                n += len(chunk)
-                if n > cap:
-                    raise ValueError("audio_too_large")
-                if n - last_logged_at_bytes >= _SC_PROXY_LOG_EVERY_BYTES:
-                    last_logged_at_bytes = n
-                    logger.info(
-                        "audio_compute_sc_proxy_chunk_progress",
-                        job_id=job_id,
-                        bytes_streamed=n,
-                    )
-                yield chunk
+            with open(tmp_path, "wb") as fh:
+                while True:
+                    try:
+                        chunk = await asyncio.wait_for(
+                            iterator.__anext__(),
+                            timeout=chunk_idle_timeout,
+                        )
+                    except StopAsyncIteration:
+                        break
+                    except TimeoutError:
+                        logger.warning(
+                            "audio_compute_sc_proxy_chunk_idle",
+                            job_id=job_id,
+                            bytes_streamed=n,
+                            idle_timeout_s=chunk_idle_timeout,
+                        )
+                        raise
+                    if not chunk:
+                        continue
+                    n += len(chunk)
+                    if n > cap:
+                        raise ValueError("audio_too_large")
+                    fh.write(chunk)
+                    if n - last_logged_at_bytes >= _SC_PROXY_LOG_EVERY_BYTES:
+                        last_logged_at_bytes = n
+                        logger.info(
+                            "audio_compute_sc_proxy_chunk_progress",
+                            job_id=job_id,
+                            bytes_streamed=n,
+                        )
         elapsed_ms = int((datetime.now(UTC) - started).total_seconds() * 1000)
         logger.info(
-            "audio_compute_sc_proxy_completed",
+            "audio_compute_sc_proxy_materialized",
             job_id=job_id,
             bytes=n,
             elapsed_ms=elapsed_ms,
         )
+        assert tmp_path is not None
+        ready_path = tmp_path
+        tmp_path = None
+        return ready_path, n
     except httpx.HTTPStatusError as exc:
         logger.warning(
             "audio_compute_sc_proxy_http_status",
@@ -198,6 +214,70 @@ async def _stream_sc_cdn_to_worker(
             err=type(exc).__name__,
         )
         raise
+    finally:
+        if tmp_path:
+            _delete_temp_audio_file(tmp_path, job_id=job_id)
+
+
+def _delete_temp_audio_file(path: str, *, job_id: str) -> None:
+    try:
+        os.unlink(path)
+        logger.info(
+            "audio_compute_sc_proxy_temp_deleted",
+            job_id=job_id,
+            path=path,
+        )
+    except OSError as exc:
+        logger.warning(
+            "audio_compute_sc_proxy_temp_delete_failed",
+            job_id=job_id,
+            path=path,
+            err=str(exc),
+        )
+
+
+def _materialized_audio_response(path: str, *, job_id: str) -> FileResponse:
+    return FileResponse(
+        path,
+        media_type="application/octet-stream",
+        background=BackgroundTask(
+            _delete_temp_audio_file,
+            path,
+            job_id=job_id,
+        ),
+    )
+
+
+async def _stream_sc_cdn_to_worker(
+    stream_url: str,
+    *,
+    job_id: str = "",
+    chunk_idle_timeout: float = 30.0,
+) -> AsyncIterator[bytes]:
+    """Compatibility helper for tests and old callers."""
+    tmp_path, n = await _materialize_sc_cdn_to_tempfile(
+        stream_url,
+        job_id=job_id,
+        chunk_idle_timeout=chunk_idle_timeout,
+    )
+    try:
+        started = datetime.now(UTC)
+        with open(tmp_path, "rb") as fh:
+            while True:
+                chunk = fh.read(_SC_PROXY_CHUNK)
+                if not chunk:
+                    break
+                yield chunk
+        logger.info(
+            "audio_compute_sc_proxy_completed",
+            job_id=job_id,
+            bytes=n,
+            elapsed_ms=int(
+                (datetime.now(UTC) - started).total_seconds() * 1000
+            ),
+        )
+    finally:
+        _delete_temp_audio_file(tmp_path, job_id=job_id)
 
 
 router = APIRouter(
@@ -766,17 +846,6 @@ async def download_audio(
             source="s3",
         )
     else:
-        if not settings.worker_third_party_audio_enabled:
-            logger.warning(
-                "audio_compute_third_party_audio_disabled",
-                job_id=job_id,
-                track_id=job.track_id,
-            )
-            await session.commit()
-            raise HTTPException(
-                status_code=403,
-                detail="worker_third_party_audio_disabled",
-            )
         track = await session.get(Track, job.track_id)
         sc_url = track.sc_url if track is not None else None
         if not sc_url:
@@ -787,6 +856,29 @@ async def download_audio(
             )
             await session.commit()
             raise HTTPException(status_code=404)
+        if not proxy and not settings.worker_third_party_audio_enabled:
+            logger.warning(
+                "audio_compute_third_party_audio_disabled",
+                job_id=job_id,
+                track_id=job.track_id,
+            )
+            await cws._log_audit(
+                session,
+                worker_id=worker_id,
+                ip=client_ip(request),
+                action="audio_third_party_disabled",
+                job_id=job.id,
+                status_code=403,
+                meta={
+                    "reason": "worker_third_party_audio_disabled",
+                    "track_id": int(job.track_id),
+                },
+            )
+            await session.commit()
+            raise HTTPException(
+                status_code=403,
+                detail="worker_third_party_audio_disabled",
+            )
         if not settings.sc_client_id:
             logger.warning(
                 "audio_download_sc_no_client_id",
@@ -885,16 +977,15 @@ async def download_audio(
         logger.info(
             "audio_compute_audio_response_dispatched",
             job_id=job_id,
-            response="sc_proxy_stream",
+            response="sc_materialized_file",
         )
-        return StreamingResponse(
-            _stream_sc_cdn_to_worker(
-                sc_url_pair[0],
-                job_id=job_id,
-                chunk_idle_timeout=(settings.lyrics_audio_chunk_idle_seconds),
-            ),
-            media_type="application/octet-stream",
+        await session.commit()
+        tmp_path, _bytes = await _materialize_sc_cdn_to_tempfile(
+            sc_url_pair[0],
+            job_id=job_id,
+            chunk_idle_timeout=(settings.lyrics_audio_chunk_idle_seconds),
         )
+        return _materialized_audio_response(tmp_path, job_id=job_id)
 
     if not await cws.consume_ott_by_exp(exp, job.id, worker_id):
         await cws._log_audit(
