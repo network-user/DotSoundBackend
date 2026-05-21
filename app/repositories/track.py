@@ -1223,3 +1223,40 @@ class TrackRepository(BaseRepository[Track]):
             .limit(limit)
         )
         return list(result.scalars().all())
+
+    async def list_covers_above_id(
+        self,
+        cursor: int,
+        limit: int,
+    ) -> list[tuple[int, str, datetime | None]]:
+        if limit <= 0:
+            return []
+        result = await self._session.execute(
+            select(Track.id, Track.cover_key, Track.updated_at)
+            .where(
+                Track.id > cursor,
+                Track.cover_key.isnot(None),
+                Track.cover_key != "",
+                Track.deleted_at.is_(None),
+            )
+            .order_by(Track.id.asc())
+            .limit(limit)
+        )
+        return [(int(r[0]), str(r[1]), r[2]) for r in result.all()]
+
+    async def swap_cover_key_if_unchanged(
+        self,
+        track_id: int,
+        old_cover_key: str,
+        new_cover_key: str,
+    ) -> bool:
+        result = await self._session.execute(
+            update(Track)
+            .where(
+                Track.id == track_id,
+                Track.cover_key == old_cover_key,
+                Track.deleted_at.is_(None),
+            )
+            .values(cover_key=new_cover_key)
+        )
+        return _result_rowcount(result) > 0

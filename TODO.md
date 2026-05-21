@@ -1,5 +1,59 @@
 # DotSound - TODO Tracker
 
+- [x] **Storage footprint optimization, round 1 (2026-05-21)**
+  - Tightened cover encoding defaults to cut new-upload sizes by ~55%:
+    `image_cover_max_size` 800→640, `image_quality` 80→70,
+    `image_thumbnail_size` 320→240. Thumbnail quality stays at 60.
+  - Added an off-by-default Taskiq sweep that re-encodes legacy track
+    covers in place under the new defaults. UUID-swap (not overwrite),
+    Redis cursor for resumability, per-track Redis lock, conditional
+    UPDATE keyed on the prior `cover_key` so a concurrent
+    upload/hard-delete cannot be clobbered. Old keys go through a
+    6h-grace ZSET drained by a paired GC task. Operator entry point:
+    `scripts/regen_covers.py` with `DOTSOUND_ALLOW_COVER_REGEN=1` and
+    `COVER_REGEN_ENABLED=true`.
+  - Added a daily aggregation worker for `listen_events`. Raw rows
+    older than the configured retention (default 30 days, opaque
+    PrivateCore hook via `event_retention_adapter`) are folded into a
+    new `listen_events_daily` table keyed by `(day, user_id, track_id)`
+    and then deleted; aggregation/delete pair runs inside one
+    transaction per UTC day so partial runs are safe to retry.
+    `listener_stats_service.get_listener_stats` now unions raw + daily
+    so personal stats keep working when the requested window crosses
+    the retention edge.
+  - Cut observability retention: Prometheus 15d→7d
+    (`docker-compose.observability.yml`), Loki 168h→72h with an
+    explicit `compactor` block (Loki single-binary deletes nothing
+    without one), Tempo `block_retention` 168h→72h.
+  - Added Prometheus counters: `cover_regen_processed_total`,
+    `cover_regen_skipped_total{reason}`, `cover_regen_failed_total`,
+    `cover_regen_bytes_saved_total`,
+    `listen_events_aggregation_rows_deleted_total`,
+    `listen_events_aggregation_days_processed_total`.
+  - Alembic: hand-written `0117_listen_events_daily` (composite PK
+    `(day,user_id,track_id)` + secondary indexes) and
+    `0118_seed_event_aggregation_job` (daily cron at 03:15 UTC).
+  - PrivateCore adapters added as pass-through stubs:
+    `cover_regen_adapter.should_regen_cover` (default True),
+    `event_retention_adapter.listen_event_raw_retention_days`
+    (default 30). Both upgrade transparently when PrivateCore ships
+    the real policies.
+  - Tests: helper unit tests + CAS-skip regression for the cover sweep;
+    Postgres-gated integration test for aggregation idempotency
+    (`DOTSOUND_TEST_PG_URL` opt-in, sqlite suite stays green).
+  - Operator runbook (not committed yet): `docker builder prune --all
+    --force && docker image prune --all --force` on the host
+    (Phase 0, ~5GB reclaim), `alembic upgrade head` to apply
+    0117/0118, then `docker compose -f docker-compose.observability.yml
+    restart prometheus loki tempo` to apply the retention cuts.
+  - Verification: `poetry run ruff check` on all touched Python files;
+    `poetry run black` on new files; sqlite test suite unchanged;
+    `poetry run alembic heads` confirms 0118 is the single head.
+  - Legal check: covers/listen-events optimization only changes
+    transport-layer storage and retention; no claims about audio
+    storage, UGC vs external split, or third-party sources change.
+    `LEGAL.md` and `docs/legal/*` did not need updates.
+
 - [x] **Library UI shell and paginated playback helper (2026-05-21)**
   - Extracted the liked-library playback launch path into a shared
     `playFromPaginatedCollection` helper, so other paginated collections can

@@ -60,6 +60,13 @@ _PROM_TOR_RECOVERY_TRIGGERED = None
 
 _PROM_AUDIO_EGRESS_TTFB = None
 
+_PROM_COVER_REGEN_PROCESSED = None
+_PROM_COVER_REGEN_SKIPPED = None
+_PROM_COVER_REGEN_FAILED = None
+_PROM_COVER_REGEN_BYTES_SAVED = None
+_PROM_LISTEN_EVENTS_AGG_ROWS_DELETED = None
+_PROM_LISTEN_EVENTS_AGG_DAYS = None
+
 _PROM_REGISTRY: object | None = None
 
 
@@ -478,6 +485,44 @@ def setup_metrics(application: object) -> None:
             "kept for backwards compatibility with older clients."
         ),
         ["chosen_source", "surface"],
+        registry=registry,
+    )
+
+    global _PROM_COVER_REGEN_PROCESSED
+    global _PROM_COVER_REGEN_SKIPPED
+    global _PROM_COVER_REGEN_FAILED
+    global _PROM_COVER_REGEN_BYTES_SAVED
+    global _PROM_LISTEN_EVENTS_AGG_ROWS_DELETED
+    global _PROM_LISTEN_EVENTS_AGG_DAYS
+    _PROM_COVER_REGEN_PROCESSED = Counter(
+        "cover_regen_processed_total",
+        "Track covers successfully re-encoded by the regen sweep.",
+        registry=registry,
+    )
+    _PROM_COVER_REGEN_SKIPPED = Counter(
+        "cover_regen_skipped_total",
+        "Track covers skipped by the regen sweep, labelled by reason.",
+        ["reason"],
+        registry=registry,
+    )
+    _PROM_COVER_REGEN_FAILED = Counter(
+        "cover_regen_failed_total",
+        "Track covers that raised an unexpected error mid-regen.",
+        registry=registry,
+    )
+    _PROM_COVER_REGEN_BYTES_SAVED = Counter(
+        "cover_regen_bytes_saved_total",
+        "Cumulative bytes saved by the cover regen sweep.",
+        registry=registry,
+    )
+    _PROM_LISTEN_EVENTS_AGG_ROWS_DELETED = Counter(
+        "listen_events_aggregation_rows_deleted_total",
+        "Raw listen_events rows folded into daily buckets and removed.",
+        registry=registry,
+    )
+    _PROM_LISTEN_EVENTS_AGG_DAYS = Counter(
+        "listen_events_aggregation_days_processed_total",
+        "Distinct UTC days fully aggregated by the listen-events worker.",
         registry=registry,
     )
 
@@ -1030,3 +1075,35 @@ def audio_egress_ttfb_observed(
         egress=egress,
         outcome="ok" if ok else "fail",
     ).observe(seconds)
+
+
+def cover_regen_processed_observed(*, bytes_saved: int) -> None:
+    if _PROM_COVER_REGEN_PROCESSED is not None:
+        _PROM_COVER_REGEN_PROCESSED.inc()
+    if _PROM_COVER_REGEN_BYTES_SAVED is not None and bytes_saved > 0:
+        _PROM_COVER_REGEN_BYTES_SAVED.inc(bytes_saved)
+
+
+def cover_regen_skipped_observed(*, reason: str) -> None:
+    if _PROM_COVER_REGEN_SKIPPED is not None:
+        _PROM_COVER_REGEN_SKIPPED.labels(reason=reason).inc()
+
+
+def cover_regen_failed_observed() -> None:
+    if _PROM_COVER_REGEN_FAILED is not None:
+        _PROM_COVER_REGEN_FAILED.inc()
+
+
+def listen_events_aggregation_observed(
+    *, days_processed: int, rows_deleted: int
+) -> None:
+    if (
+        _PROM_LISTEN_EVENTS_AGG_DAYS is not None
+        and days_processed > 0
+    ):
+        _PROM_LISTEN_EVENTS_AGG_DAYS.inc(days_processed)
+    if (
+        _PROM_LISTEN_EVENTS_AGG_ROWS_DELETED is not None
+        and rows_deleted > 0
+    ):
+        _PROM_LISTEN_EVENTS_AGG_ROWS_DELETED.inc(rows_deleted)

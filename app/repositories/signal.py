@@ -1,4 +1,4 @@
-from datetime import datetime, timedelta
+from datetime import UTC, datetime, timedelta
 
 import structlog
 from sqlalchemy import and_, case, func, or_, select
@@ -6,9 +6,11 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.like import Like
 from app.models.listen_event import ListenEvent
+from app.models.listen_event_daily import ListenEventDaily
 from app.models.search_event import SearchEvent
 from app.models.track import Track
 from app.repositories.base import BaseRepository
+from app.services import event_retention_adapter
 
 logger = structlog.get_logger(__name__)
 
@@ -336,9 +338,18 @@ class ListenEventRepository(
         user_id: int,
         since: datetime | None,
     ) -> list[tuple[int, int, int | None]]:
-        """Return raw ``(track_id, duration_listened, total_duration)``
+        """Return ``(track_id, duration_listened, total_duration)``
         rows for personal-stats aggregation. Period filter ``since``
         is exclusive of older events.
+
+        Raw rows older than the configured retention window have been
+        folded into ``listen_events_daily`` buckets. When the requested
+        window reaches into that range we read aggregates and emit them
+        as one row per ``(track_id, day)`` carrying the summed
+        ``listen_seconds`` as ``duration_listened``; ``total_duration``
+        is left ``None`` so the credited-seconds helper falls back to
+        the listened value (already net of skip/incomplete events on
+        the aggregation path).
         """
         stmt = select(
             ListenEvent.track_id,
@@ -349,13 +360,44 @@ class ListenEventRepository(
             stmt = stmt.where(
                 ListenEvent.created_at >= since
             )
-        rows = (
+        raw_rows = (
             await self._session.execute(stmt)
         ).all()
-        return [
+        out: list[tuple[int, int, int | None]] = [
             (int(r[0]), int(r[1] or 0), r[2])
-            for r in rows
+            for r in raw_rows
         ]
+
+        if since is None:
+            return out
+
+        retention_days = (
+            event_retention_adapter.listen_event_raw_retention_days()
+        )
+        retention_cutoff = datetime.now(UTC) - timedelta(
+            days=retention_days
+        )
+        if since >= retention_cutoff:
+            return out
+
+        agg_stmt = (
+            select(
+                ListenEventDaily.track_id,
+                func.sum(
+                    ListenEventDaily.listen_seconds
+                ).label("listen_seconds"),
+            )
+            .where(ListenEventDaily.user_id == user_id)
+            .where(ListenEventDaily.day >= since.date())
+            .where(ListenEventDaily.day < retention_cutoff.date())
+            .group_by(ListenEventDaily.track_id)
+        )
+        agg_rows = (
+            await self._session.execute(agg_stmt)
+        ).all()
+        for r in agg_rows:
+            out.append((int(r[0]), int(r[1] or 0), None))
+        return out
 
 
 class SearchEventRepository(

@@ -48,6 +48,7 @@ from app.models.import_job import ImportJob
 from app.models.import_job_item import ImportJobItem
 from app.models.like import Like
 from app.models.listen_event import ListenEvent
+from app.models.listen_event_daily import ListenEventDaily
 from app.models.login_history import LoginHistory
 from app.models.lyrics import TrackLyrics
 from app.models.lyrics_job import LyricsJob
@@ -128,6 +129,7 @@ __all__ = [
     "ImportJobItem",
     "Like",
     "ListenEvent",
+    "ListenEventDaily",
     "LoginHistory",
     "LyricsJob",
     "Message",

@@ -92,10 +92,15 @@ class AppSettings(BaseSettings):
     ws_heartbeat_interval: int = 30
     image_chat_max_size: int = 1280
     image_avatar_max_size: int = 400
-    image_cover_max_size: int = 800
-    image_quality: int = 80
-    image_thumbnail_size: int = 320
+    image_cover_max_size: int = 640
+    image_quality: int = 70
+    image_thumbnail_size: int = 240
     image_strip_metadata: bool = True
+    cover_regen_enabled: bool = False
+    cover_regen_batch_size: int = 200
+    cover_regen_interval_seconds: float = 60.0
+    cover_regen_grace_seconds: int = 6 * 3600
+    cover_regen_lock_ttl_seconds: int = 60
     voice_bitrate: str = "64k"
     voice_max_duration: int = 300
 
