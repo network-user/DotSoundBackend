@@ -1,5 +1,16 @@
 # DotSound - TODO Tracker
 
+- [x] **Playback loading animation on track switch (2026-05-21)**
+  - Added a dedicated frontend `isPlaybackLoading` state for the gap
+    between `playTrack` start and the first browser `playing` signal.
+  - Mini player, desktop player, track list card overlay and full track
+    card play buttons now show a spinner while the next track is loading,
+    so automatic switches no longer look like a pause/play flicker.
+  - Legal check: reviewed `LEGAL.md` and `docs/legal/*` playback
+    references. No legal text change needed because this only changes
+    client-side loading indication and does not alter source modes,
+    storage, caching, or third-party stream handling.
+
 - [x] **Shuffle queue + favorite artists library/profile tab (2026-05-21)**
   - Frontend player shuffle now changes the real upcoming queue when
     enabled, shuffles context queues started while shuffle is active,

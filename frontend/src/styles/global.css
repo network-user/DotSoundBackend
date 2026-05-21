@@ -1518,6 +1518,33 @@ body.ds-perf-lite .play-btn.play-btn--playing {
   .play-btn:active { transform: none; }
 }
 .play-btn svg { fill: currentColor; stroke: none; }
+.play-btn.play-btn--loading {
+  cursor: progress;
+}
+.player-loading-spinner {
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  border: 2px solid color-mix(in srgb, currentColor 24%, transparent);
+  border-top-color: currentColor;
+  display: inline-block;
+  flex-shrink: 0;
+  animation: playerLoadingSpin 0.72s linear infinite;
+}
+.player-loading-spinner--mini {
+  width: 16px;
+  height: 16px;
+}
+@keyframes playerLoadingSpin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .player-loading-spinner {
+    animation: none;
+  }
+}
 .play-btn:active {
   transform: scale(0.90);
   background: rgba(255, 255, 255, 0.86);

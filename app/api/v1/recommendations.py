@@ -35,6 +35,7 @@ from app.schemas.recommendation import (
     DiscoverGenreCard,
     DiscoverResponse,
     ForgottenTreasuresPlaylistResponse,
+    FreshnessLookupResponse,
     GenreMixesResponse,
     GenreMixItemResponse,
     GenreMixOverrideRequest,
@@ -77,9 +78,7 @@ async def _home_section_response(
             tracks_out = [
                 (
                     t.model_copy(
-                        update={
-                            "resume_position_seconds": positions.get(t.id)
-                        }
+                        update={"resume_position_seconds": positions.get(t.id)}
                     )
                     if positions.get(t.id) is not None
                     else t
@@ -307,7 +306,7 @@ async def get_radio(
         except ValueError:
             exclude = []
     svc = RecommendationService(db)
-    tracks = await svc.get_radio(
+    tracks, freshness = await svc.get_radio_with_freshness(
         seed_track_id=seed_track_id,
         queue_size=queue_size,
         user_id=user.id,
@@ -317,7 +316,33 @@ async def get_radio(
         seed_type="track",
         seed_id=str(seed_track_id),
         tracks=await dedupe_and_build_track_list(db, tracks),
+        freshness=freshness,
     )
+
+
+@router.get(
+    "/freshness",
+    response_model=FreshnessLookupResponse,
+)
+async def get_freshness(
+    track_ids: str = Query(default=""),
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> FreshnessLookupResponse:
+    ids: list[int] = []
+    if track_ids:
+        try:
+            ids = [int(x) for x in track_ids.split(",") if x.strip()][:100]
+        except ValueError:
+            ids = []
+    if not ids:
+        return FreshnessLookupResponse(freshness={})
+    svc = RecommendationService(db)
+    freshness = await svc.compute_freshness_for_tracks(
+        user_id=user.id,
+        track_ids=ids,
+    )
+    return FreshnessLookupResponse(freshness=freshness)
 
 
 @router.get(

@@ -20,6 +20,7 @@ import { MorphIcon } from '@/components/ui/MorphIcon'
 import { MotionPress } from '@/components/ui/MotionPress'
 import { showIsland } from '@/lib/island'
 import { api } from '@/lib/api'
+import { getRadioFreshness } from '@/lib/radioFreshness'
 import { coverProxySrcSet, coverProxyUrl } from '@/lib/coverProxy'
 import { extractCoverPalette } from '@/lib/coverPalette'
 import { isPerfLiteActive } from '@/lib/glassPerformance'
@@ -48,6 +49,33 @@ function coverUrl(
 }
 
 const SWIPE_DISTANCE_THRESHOLD_PX = 56
+
+function RadioFreshnessBadge({ trackId }: { trackId: number }) {
+  const { t } = useTranslation()
+  const label = getRadioFreshness(trackId)
+  if (!label || label === 'seed') return null
+  const iconName =
+    label === 'new'
+      ? 'sparkle'
+      : label === 'rediscovery'
+        ? 'bookmark'
+        : 'check'
+  const titleKey =
+    label === 'new'
+      ? 'redesign.home.freshnessNew'
+      : label === 'rediscovery'
+        ? 'redesign.home.freshnessRediscovery'
+        : 'redesign.home.freshnessFamiliar'
+  return (
+    <span
+      className={`rh-radio-freshness rh-radio-freshness--${label}`}
+      title={t(titleKey)}
+      aria-label={t(titleKey)}
+    >
+      <Icon name={iconName} size={12} />
+    </span>
+  )
+}
 const SWIPE_VELOCITY_THRESHOLD = 0.55 // px per ms
 const DRAG_MAX_OFFSET_PX = 140
 const TAP_MAX_OFFSET_PX = 6
@@ -590,6 +618,7 @@ export function RadioView() {
           <div className="rh-radio-next-card__body">
             <span className="rh-radio-next-card__label">
               {t('redesign.home.radioNextTrack')}
+              <RadioFreshnessBadge trackId={nextTrack.id} />
             </span>
             <span className="rh-radio-next-card__title">
               {nextTrack.title}

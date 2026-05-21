@@ -44,6 +44,10 @@
   box-shadow: 0 0 0 1px color-mix(in srgb, var(--accent) 35%, transparent);
 }
 
+.re-tc-cover-wrap.is-loading {
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--accent) 28%, transparent);
+}
+
 .re-tc-cover-overlay {
   position: absolute;
   inset: 0;
@@ -57,6 +61,11 @@
   backdrop-filter: blur(2px);
   -webkit-backdrop-filter: blur(2px);
   transition: opacity 160ms ease;
+}
+
+.re-tc-cover-overlay .player-loading-spinner {
+  width: 20px;
+  height: 20px;
 }
 
 .re-tc-cover-wrap.is-current .re-tc-cover-overlay {

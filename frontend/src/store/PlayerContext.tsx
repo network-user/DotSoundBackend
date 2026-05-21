@@ -270,6 +270,7 @@ function _saveEqState(
 interface PlayerContextValue {
   track: Track | null
   isPlaying: boolean
+  isPlaybackLoading: boolean
   currentTime: number
   duration: number
   volume: number
@@ -363,10 +364,12 @@ interface PlayerStateValue {
   currentTime: number
   duration: number
   isPlaying: boolean
+  isPlaybackLoading: boolean
 }
 
 interface PlayerPlaybackValue {
   isPlaying: boolean
+  isPlaybackLoading: boolean
   duration: number
 }
 
@@ -1212,6 +1215,8 @@ export function PlayerProvider({
     () => _loadState().track,
   )
   const [isPlaying, setIsPlaying] = useState(false)
+  const [isPlaybackLoading, setIsPlaybackLoading] =
+    useState(false)
   const [currentTime, setCurrentTime] = useState(0)
   const currentTimeRef = useRef(0)
   useEffect(() => {
@@ -1286,6 +1291,8 @@ export function PlayerProvider({
   const radioRefillInFlightRef = useRef<Promise<void> | null>(null)
   const playTrackSlideInjectRef = useRef<1 | -1 | null>(null)
   const playNextInFlightRef = useRef(false)
+  const playbackLoadingTrackIdRef = useRef<number | null>(null)
+  const playbackLoadingTimeoutRef = useRef<number | null>(null)
   const mediaSessionSwitchHoldUntilRef = useRef(0)
   // Tracks whether the pseudo-crossfade early ``playNext`` has
   // already been fired for the *currently-loaded* trackId. Reset
@@ -1343,6 +1350,50 @@ export function PlayerProvider({
   const listenStartTimeRef = useRef(0)
   const restoredRef = useRef(false)
   const playerTimeUiLastRef = useRef(0)
+
+  const clearPlaybackLoadingTimer = useCallback(() => {
+    const timerId = playbackLoadingTimeoutRef.current
+    if (timerId === null) return
+    window.clearTimeout(timerId)
+    playbackLoadingTimeoutRef.current = null
+  }, [])
+
+  const finishPlaybackLoading = useCallback(
+    (trackId?: number | null) => {
+      const loadingTrackId = playbackLoadingTrackIdRef.current
+      if (
+        trackId != null &&
+        loadingTrackId != null &&
+        loadingTrackId !== trackId
+      ) {
+        return
+      }
+      playbackLoadingTrackIdRef.current = null
+      clearPlaybackLoadingTimer()
+      setIsPlaybackLoading(false)
+    },
+    [clearPlaybackLoadingTimer],
+  )
+
+  const beginPlaybackLoading = useCallback(
+    (trackId: number) => {
+      playbackLoadingTrackIdRef.current = trackId
+      clearPlaybackLoadingTimer()
+      setIsPlaybackLoading(true)
+      playbackLoadingTimeoutRef.current = window.setTimeout(
+        () => finishPlaybackLoading(trackId),
+        MEDIA_SESSION_SWITCH_HOLD_MS,
+      )
+    },
+    [clearPlaybackLoadingTimer, finishPlaybackLoading],
+  )
+
+  useEffect(
+    () => () => {
+      clearPlaybackLoadingTimer()
+    },
+    [clearPlaybackLoadingTimer],
+  )
 
   const beginMediaSessionSwitchHold = (
     audio: HTMLAudioElement,
@@ -2160,8 +2211,9 @@ export function PlayerProvider({
         /* ignore */
       }
     }
+    finishPlaybackLoading()
     setIsPlaying(false)
-  }, [])
+  }, [finishPlaybackLoading])
 
   // Component-scoped helper used by both onError and playTrack. Returns
   // true if the cascade advanced, false if the safety limit kicked in.
@@ -2973,7 +3025,17 @@ export function PlayerProvider({
       listenStartTimeRef.current =
         audio.currentTime
     }
+    const onPlaying = () => {
+      finishPlaybackLoading(lastTrackIdRef.current)
+    }
     const onPause = () => {
+      if (
+        track &&
+        playbackLoadingTrackIdRef.current === track.id &&
+        !isMediaSessionSwitchHeld()
+      ) {
+        finishPlaybackLoading(track.id)
+      }
       setIsPlaying(false)
       setCurrentTime(audio.currentTime)
       playerTimeUiLastRef.current = performance.now()
@@ -2992,6 +3054,7 @@ export function PlayerProvider({
       sendListenSignal()
     }
     const onEnded = () => {
+      finishPlaybackLoading(track?.id ?? lastTrackIdRef.current)
       // Gapless transition already popped the queue and started the
       // next track. The old element fires ended during the fade-out
       // tail — ignore it to prevent a double-advance.
@@ -3036,9 +3099,10 @@ export function PlayerProvider({
       // now and let the audio element buffer in the background".
       doNext()
     }
-      const onError = () => {
+    const onError = () => {
       const a = audioRef.current
       if (!a || !track) return
+      finishPlaybackLoading(lastTrackIdRef.current)
       const code = a.error?.code
       if (code === MediaError.MEDIA_ERR_ABORTED) return
       if (!a.paused && a.currentTime > 0) return
@@ -3253,6 +3317,7 @@ export function PlayerProvider({
     }
 
     audio.addEventListener('play', onPlay)
+    audio.addEventListener('playing', onPlaying)
     audio.addEventListener('pause', onPause)
     audio.addEventListener('ended', onEnded)
     audio.addEventListener('timeupdate', onTime)
@@ -3273,6 +3338,7 @@ export function PlayerProvider({
 
     return () => {
       audio.removeEventListener('play', onPlay)
+      audio.removeEventListener('playing', onPlaying)
       audio.removeEventListener('pause', onPause)
       audio.removeEventListener('ended', onEnded)
       audio.removeEventListener('timeupdate', onTime)
@@ -3290,6 +3356,7 @@ export function PlayerProvider({
     isSoundCloudUnavailableTrack,
     markTrackUnavailableInSession,
     showPlaybackErrorOnce,
+    finishPlaybackLoading,
   ])
 
   useEffect(() => {
@@ -3585,6 +3652,7 @@ export function PlayerProvider({
       })
       return
     }
+    beginPlaybackLoading(newTrack.id)
     beginMediaSessionSwitchHold(audio, newTrack)
     crossfadeFiredForRef.current = null
     playSwitchStartedAtRef.current = {
@@ -3820,6 +3888,7 @@ export function PlayerProvider({
     ) {
       const message = i18n.t('redesign.playerErrors.playback')
       streamLoadFailedTrackIdRef.current = newTrack.id
+      finishPlaybackLoading(newTrack.id)
       showPlaybackErrorOnce(newTrack.id, message)
       await skipUnavailableTrack(newTrack.id, {
         errorReason: newTrack.access_mode,
@@ -4151,7 +4220,10 @@ export function PlayerProvider({
         }, 1500)
       }
     } catch (e) {
-      if (isBenignPlayError(e)) return
+      if (isBenignPlayError(e)) {
+        finishPlaybackLoading(newTrack.id)
+        return
+      }
       console.error('playTrack error', e)
       streamLoadFailedTrackIdRef.current =
         newTrack.id
@@ -4166,10 +4238,13 @@ export function PlayerProvider({
       if (!scUnavailable) {
         showPlaybackErrorOnce(newTrack.id, message)
       }
-      await skipUnavailableTrack(
+      const skipped = await skipUnavailableTrack(
         newTrack.id,
         telemetry,
       )
+      if (!skipped) {
+        finishPlaybackLoading(newTrack.id)
+      }
     }
   }
 
@@ -5186,7 +5261,10 @@ export function PlayerProvider({
             durationMs: 4000,
           }),
       })
-    } else a.pause()
+    } else {
+      finishPlaybackLoading(track.id)
+      a.pause()
+    }
   }
 
   const flushPlayerTimeUi = useCallback(
@@ -5275,6 +5353,7 @@ export function PlayerProvider({
     setTrack(null)
     lastTrackIdRef.current = null
     setTrackChangeSlide({ bump: 0, dir: 0 })
+    finishPlaybackLoading()
     setIsPlaying(false)
     setCurrentTime(0)
     setDuration(0)
@@ -5464,13 +5543,18 @@ export function PlayerProvider({
   )
 
   const stateValue = useMemo<PlayerStateValue>(
-    () => ({ currentTime, duration, isPlaying }),
-    [currentTime, duration, isPlaying],
+    () => ({
+      currentTime,
+      duration,
+      isPlaying,
+      isPlaybackLoading,
+    }),
+    [currentTime, duration, isPlaying, isPlaybackLoading],
   )
 
   const playbackValue = useMemo<PlayerPlaybackValue>(
-    () => ({ isPlaying, duration }),
-    [isPlaying, duration],
+    () => ({ isPlaying, isPlaybackLoading, duration }),
+    [isPlaying, isPlaybackLoading, duration],
   )
 
   const timeValue = useMemo<PlayerTimeValue>(

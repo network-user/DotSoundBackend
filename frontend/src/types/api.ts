@@ -741,10 +741,13 @@ export interface SmartSkipResponse {
   enabled: boolean
 }
 
+export type RadioFreshness = 'new' | 'familiar' | 'rediscovery' | 'seed'
+
 export interface RadioResponse {
   seed_type: string
   seed_id: string
   tracks: Track[]
+  freshness?: Record<number, RadioFreshness>
 }
 
 export interface LinkedPlaylistItem {

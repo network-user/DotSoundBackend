@@ -37,6 +37,11 @@ class RadioQueueResponse(BaseModel):
     seed_type: str
     seed_id: str
     tracks: list[TrackResponse]
+    freshness: dict[int, str] = {}
+
+
+class FreshnessLookupResponse(BaseModel):
+    freshness: dict[int, str] = {}
 
 
 class DailyPlaylistResponse(BaseModel):

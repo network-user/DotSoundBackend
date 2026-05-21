@@ -16,6 +16,8 @@ import { MorphIcon } from '@/components/ui/MorphIcon'
 import { MotionPress } from '@/components/ui/MotionPress'
 import { showIsland } from '@/lib/island'
 import { api, getApiErrorMessage } from '@/lib/api'
+import { getRadioFreshness } from '@/lib/radioFreshness'
+import type { RadioFreshness } from '@/types/api'
 import { getInternalUserId } from '@/lib/telegram'
 import { useBrandLabel } from '@/lib/brand'
 import { m, VARIANTS_FADE_UP } from '@/lib/motion'
@@ -114,6 +116,62 @@ async function resolveHomeRadioSeedTrack(
 
 function SkeletonBlock({ className }: { className: string }) {
   return <div className={`skeleton ${className}`} />
+}
+
+function HeroFreshnessSignal({
+  trackId,
+  newLabel,
+  familiarLabel,
+  rediscoveryLabel,
+}: {
+  trackId: number
+  newLabel: string
+  familiarLabel: string
+  rediscoveryLabel: string
+}) {
+  const [label, setLabel] = useState<RadioFreshness | null>(() =>
+    getRadioFreshness(trackId),
+  )
+  useEffect(() => {
+    const cached = getRadioFreshness(trackId)
+    if (cached) {
+      setLabel(cached)
+      return
+    }
+    let active = true
+    void api
+      .getFreshness([trackId])
+      .then((res) => {
+        if (!active) return
+        const value = res.freshness[trackId] ?? null
+        setLabel(value as RadioFreshness | null)
+      })
+      .catch(() => {
+        if (active) setLabel(null)
+      })
+    return () => {
+      active = false
+    }
+  }, [trackId])
+  if (!label || label === 'seed') return null
+  const iconName =
+    label === 'new'
+      ? 'sparkle'
+      : label === 'rediscovery'
+        ? 'bookmark'
+        : 'check'
+  const text =
+    label === 'new'
+      ? newLabel
+      : label === 'rediscovery'
+        ? rediscoveryLabel
+        : familiarLabel
+  return (
+    <span>
+      <Icon name={iconName} size={14} />
+      {text}
+    </span>
+  )
 }
 
 interface HomeTrackTileProps {
@@ -925,6 +983,17 @@ export function HomeView({ onOpenArtist }: HomeViewProps) {
     ? coverProxySrcSet(featuredTrack.cover_key)
     : undefined
 
+  const TOP_SLOT_PRIORITY = [
+    'continue',
+    'personalized',
+    'user_choice',
+    'popular',
+  ] as const
+  const topSlotSection = TOP_SLOT_PRIORITY.map((key) =>
+    sectionMap.get(key),
+  ).find((s) => s && s.tracks.length > 0)
+  const topSlotKey = topSlotSection?.section_type ?? null
+
   const genreTrackCount = (n: number) =>
     t('artist.catalog_release_card_tracks_other', {
       count: n,
@@ -1061,10 +1130,16 @@ export function HomeView({ onOpenArtist }: HomeViewProps) {
                       <Icon name="radio" size={14} />
                       {t('redesign.home.heroSignalRadio')}
                     </span>
-                    <span>
-                      <Icon name="sparkle" size={14} />
-                      {t('redesign.home.heroSignalDiscovery')}
-                    </span>
+                    <HeroFreshnessSignal
+                      trackId={featuredTrack.id}
+                      newLabel={t('redesign.home.freshnessNew')}
+                      familiarLabel={t(
+                        'redesign.home.freshnessFamiliar',
+                      )}
+                      rediscoveryLabel={t(
+                        'redesign.home.freshnessRediscovery',
+                      )}
+                    />
                   </div>
                   <div className="rh-home-hero__actions">
                     <MotionPress
@@ -1154,22 +1229,15 @@ export function HomeView({ onOpenArtist }: HomeViewProps) {
             </div>
           </div>
         ) : (
-          sectionMap.get('continue') && (() => {
-            const continueSection = sectionMap.get('continue')!
-            const continueTitle = resolveSectionTitle(
-              continueSection,
-              t,
-            )
-            return (
-              <HomeTrackSnapSection
-                title={continueTitle}
-                tracks={continueSection.tracks}
-                onPlay={handlePlay}
-                moreLabel={t('redesign.home.more')}
-                snapAria={continueTitle}
-              />
-            )
-          })()
+          topSlotSection && (
+            <HomeTrackSnapSection
+              title={resolveSectionTitle(topSlotSection, t)}
+              tracks={topSlotSection.tracks}
+              onPlay={handlePlay}
+              moreLabel={t('redesign.home.more')}
+              snapAria={resolveSectionTitle(topSlotSection, t)}
+            />
+          )
         )}
 
         <section className="rh-home-discovery-band">
@@ -1344,7 +1412,9 @@ export function HomeView({ onOpenArtist }: HomeViewProps) {
         </section>
 
         {sections &&
-          HOME_TRACK_SECTIONS.map(({ key, morePath }) => (
+          HOME_TRACK_SECTIONS.filter(
+            ({ key }) => key !== topSlotKey,
+          ).map(({ key, morePath }) => (
             <HomeLazyTrackSection
               key={key}
               sectionKey={key}

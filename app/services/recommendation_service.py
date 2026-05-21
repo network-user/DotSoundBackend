@@ -1678,6 +1678,66 @@ class RecommendationService:
             "tracks": tracks,
         }
 
+    async def get_radio_with_freshness(
+        self,
+        seed_track_id: int,
+        queue_size: int = 20,
+        user_id: int | None = None,
+        exclude_ids: list[int] | None = None,
+    ) -> tuple[list[Track], dict[int, str]]:
+        tracks = await self.get_radio(
+            seed_track_id=seed_track_id,
+            queue_size=queue_size,
+            user_id=user_id,
+            exclude_ids=exclude_ids,
+        )
+        if not tracks:
+            return tracks, {}
+        if user_id is None:
+            return tracks, {t.id: "familiar" for t in tracks}
+        freshness = await self.compute_freshness_for_tracks(
+            user_id=user_id,
+            track_ids=[t.id for t in tracks],
+            seed_track_id=seed_track_id,
+        )
+        return tracks, freshness
+
+    async def compute_freshness_for_tracks(
+        self,
+        *,
+        user_id: int,
+        track_ids: list[int],
+        seed_track_id: int | None = None,
+    ) -> dict[int, str]:
+        if not track_ids:
+            return {}
+        listened = await self._rec_repo.get_listened_track_ids(user_id)
+        familiar_ids = [tid for tid in track_ids if tid in listened]
+        last_played = (
+            await self._rec_repo.get_last_played_at_for_tracks(
+                user_id, familiar_ids
+            )
+            if familiar_ids
+            else {}
+        )
+        radio_tuning = await self._load_radio_tuning(user_id=user_id)
+        rediscovery_cutoff = datetime.now(UTC) - timedelta(
+            days=radio_tuning.rediscovery_days
+        )
+        freshness: dict[int, str] = {}
+        for tid in track_ids:
+            if seed_track_id is not None and tid == seed_track_id:
+                freshness[tid] = "seed"
+            elif tid in listened:
+                last_seen = last_played.get(tid)
+                if last_seen is not None and last_seen <= rediscovery_cutoff:
+                    freshness[tid] = "rediscovery"
+                else:
+                    freshness[tid] = "familiar"
+            else:
+                freshness[tid] = "new"
+        return freshness
+
     async def get_radio(
         self,
         seed_track_id: int,

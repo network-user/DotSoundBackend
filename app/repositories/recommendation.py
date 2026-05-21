@@ -434,6 +434,30 @@ class RecommendationRepository:
         )
         return set(result.scalars().all())
 
+    async def get_last_played_at_for_tracks(
+        self,
+        user_id: int,
+        track_ids: list[int],
+    ) -> dict[int, datetime]:
+        if not track_ids:
+            return {}
+        result = await self._session.execute(
+            select(
+                ListenEvent.track_id,
+                func.max(ListenEvent.created_at).label("last_played"),
+            )
+            .where(
+                ListenEvent.user_id == user_id,
+                ListenEvent.track_id.in_(track_ids),
+            )
+            .group_by(ListenEvent.track_id)
+        )
+        return {
+            int(tid): (ts if ts.tzinfo else ts.replace(tzinfo=UTC))
+            for tid, ts in result.all()
+            if ts is not None
+        }
+
     async def get_incomplete_listens(
         self,
         user_id: int,

@@ -155,6 +155,7 @@ export function TrackCardSheet({
     currentTime,
     duration,
     isPlaying,
+    isPlaybackLoading,
   } = usePlayerState()
   const {
     track,
@@ -1372,6 +1373,7 @@ export function TrackCardSheet({
     ? (smoothCurrentTime / duration) * 100
     : 0
   const displayPct = Math.max(0, Math.min(100, pct))
+  const playButtonLoading = isPlaybackLoading
 
   useEffect(() => {
     setSmoothCurrentTime(currentTime)
@@ -2066,8 +2068,13 @@ export function TrackCardSheet({
               type="button"
               variant="primary"
               className={`play-btn re-tcs-play${
-                isPlaying ? ' play-btn--playing' : ''
+                isPlaying && !playButtonLoading
+                  ? ' play-btn--playing'
+                  : ''
+              }${
+                playButtonLoading ? ' play-btn--loading' : ''
               }`}
+              aria-busy={playButtonLoading}
               ariaLabel={
                 isPlaying
                   ? t('redesign.player.pauseAria')
@@ -2076,11 +2083,18 @@ export function TrackCardSheet({
               haptic="medium"
               onClick={togglePlay}
             >
-              <MorphIcon
-                name={isPlaying ? 'pause' : 'play'}
-                size={20}
-                filled
-              />
+              {playButtonLoading ? (
+                <span
+                  className="player-loading-spinner"
+                  aria-hidden="true"
+                />
+              ) : (
+                <MorphIcon
+                  name={isPlaying ? 'pause' : 'play'}
+                  size={20}
+                  filled
+                />
+              )}
             </MotionPress>
             <MotionPress
               type="button"

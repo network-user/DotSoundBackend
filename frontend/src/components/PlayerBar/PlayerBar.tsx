@@ -56,7 +56,11 @@ export function PlayerBar() {
   const navigate = useNavigate()
   const { t } = useTranslation()
   const reduce = useReducedMotion()
-  const { duration, isPlaying } = usePlayerPlayback()
+  const {
+    duration,
+    isPlaying,
+    isPlaybackLoading,
+  } = usePlayerPlayback()
   const {
     track,
     volume,
@@ -247,6 +251,7 @@ export function PlayerBar() {
   const trackBpm = (track as unknown as { bpm?: number }).bpm
   const tapBpm =
     typeof trackBpm === 'number' ? trackBpm : 120
+  const playButtonLoading = isPlaybackLoading
   const volumePct = Math.round(volume * 100)
   const volumeIcon =
     volume <= 0.01
@@ -491,9 +496,14 @@ export function PlayerBar() {
               ref={playRef}
               variant="icon"
               className={`play-btn${
-                isPlaying ? ' play-btn--playing' : ''
+                isPlaying && !playButtonLoading
+                  ? ' play-btn--playing'
+                  : ''
+              }${
+                playButtonLoading ? ' play-btn--loading' : ''
               }`}
               onClick={handlePlay}
+              aria-busy={playButtonLoading}
               ariaLabel={
                 isPlaying ? 'Пауза' : 'Воспроизвести'
               }
@@ -501,13 +511,20 @@ export function PlayerBar() {
             >
               <BeatPulse
                 bpm={tapBpm}
-                active={isPlaying}
+                active={isPlaying && !playButtonLoading}
               >
-                <MorphIcon
-                  name={isPlaying ? 'pause' : 'play'}
-                  filled
-                  size={18}
-                />
+                {playButtonLoading ? (
+                  <span
+                    className="player-loading-spinner"
+                    aria-hidden="true"
+                  />
+                ) : (
+                  <MorphIcon
+                    name={isPlaying ? 'pause' : 'play'}
+                    filled
+                    size={18}
+                  />
+                )}
               </BeatPulse>
             </MotionPress>
             <MotionPress

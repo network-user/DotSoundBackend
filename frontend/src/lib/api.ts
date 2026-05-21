@@ -4,6 +4,7 @@ import {
   setIsAdmin,
 } from '@/lib/telegram'
 import { getAdminApiPath } from '@/lib/adminPath'
+import { rememberRadioFreshness } from '@/lib/radioFreshness'
 import type {
   AppNotification,
   ArtistCatalogReleaseDetail,
@@ -2864,7 +2865,22 @@ export const api = {
     )
   },
 
-  getRadio(
+  async getFreshness(
+    trackIds: number[],
+  ): Promise<{
+    freshness: Record<number, 'new' | 'familiar' | 'rediscovery' | 'seed'>
+  }> {
+    if (!trackIds.length) return { freshness: {} }
+    const qs = new URLSearchParams()
+    qs.set('track_ids', trackIds.slice(0, 100).join(','))
+    const res = await request<{
+      freshness: Record<number, 'new' | 'familiar' | 'rediscovery' | 'seed'>
+    }>(`/api/v1/recommendations/freshness?${qs}`)
+    rememberRadioFreshness(res.freshness)
+    return res
+  },
+
+  async getRadio(
     seedTrackId: number,
     queueSize?: number,
     excludeIds?: number[],
@@ -2875,7 +2891,11 @@ export const api = {
     if (excludeIds && excludeIds.length > 0) {
       qs.set('exclude_ids', excludeIds.join(','))
     }
-    return request(`/api/v1/recommendations/radio?${qs}`)
+    const res = await request<RadioResponse>(
+      `/api/v1/recommendations/radio?${qs}`,
+    )
+    rememberRadioFreshness(res.freshness)
+    return res
   },
 
   getHeroPromotions(limit = 3): Promise<PromotionListResponse> {

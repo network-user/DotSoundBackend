@@ -61,7 +61,8 @@ function TrackCardInner({
   const { t } = useTranslation()
   const { isLiked, toggleLike } = useLikes()
   const { track: currentTrack } = usePlayerMeta()
-  const { isPlaying } = usePlayerPlayback()
+  const { isPlaying, isPlaybackLoading } =
+    usePlayerPlayback()
   const { playTrack, addToQueue, togglePlay } = usePlayerActions()
   const desktopFine = useDesktopFinePointer()
   const goArtistByName = useNavigateToArtistByName()
@@ -84,7 +85,10 @@ function TrackCardInner({
 
   const isCurrentTrack =
     currentTrack?.id === track.id
-  const isTrackPlaying = isCurrentTrack && isPlaying
+  const isTrackLoading =
+    isCurrentTrack && isPlaybackLoading
+  const isTrackPlaying =
+    isCurrentTrack && isPlaying && !isTrackLoading
   const liked = isLiked(track.id)
   const internalId = getInternalUserId()
   const isOwner =
@@ -250,6 +254,14 @@ function TrackCardInner({
     variant === 'expanded'
       ? 'track-card-main-row re-tc-main re-tc-main--expanded'
       : 'track-card-main-row re-tc-main'
+  const coverWrapClass = [
+    're-tc-cover-wrap',
+    isTrackPlaying ? 'is-playing' : '',
+    isCurrentTrack ? 'is-current' : '',
+    isTrackLoading ? 'is-loading' : '',
+  ]
+    .filter(Boolean)
+    .join(' ')
 
   return (
     <LongPressMenu items={menuItems}>
@@ -261,7 +273,7 @@ function TrackCardInner({
       >
         <div className={rowClass}>
           <div
-            className={`re-tc-cover-wrap${isTrackPlaying ? ' is-playing' : ''}${isCurrentTrack ? ' is-current' : ''}`}
+            className={coverWrapClass}
           >
             {coverSrc ? (
               <BeatPulse
@@ -287,10 +299,14 @@ function TrackCardInner({
                 className="re-tc-cover-overlay"
                 aria-hidden="true"
               >
-                <Icon
-                  name={isPlaying ? 'pause' : 'play'}
-                  size={20}
-                />
+                {isTrackLoading ? (
+                  <span className="player-loading-spinner" />
+                ) : (
+                  <Icon
+                    name={isPlaying ? 'pause' : 'play'}
+                    size={20}
+                  />
+                )}
               </div>
             )}
           </div>

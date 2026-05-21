@@ -84,7 +84,11 @@ export function MiniPlayerBar() {
   const { t } = useTranslation()
   const navigate = useNavigate()
   const reduce = useReducedMotion()
-  const { isPlaying, duration } = usePlayerPlayback()
+  const {
+    isPlaying,
+    isPlaybackLoading,
+    duration,
+  } = usePlayerPlayback()
   const {
     track,
     trackChangeSlide,
@@ -225,6 +229,7 @@ export function MiniPlayerBar() {
   const bpm = (track as unknown as { bpm?: number }).bpm
   const tapBpm = typeof bpm === 'number' ? bpm : 120
   const animKey = `${track.id}-${trackChangeSlide.bump}`
+  const playButtonLoading = isPlaybackLoading
   const shellStyle = {
     '--mp-cover-image': coverSrc ? `url("${coverSrc}")` : 'none',
     '--mp-tone-a': palette?.tones[0] ?? 'rgba(255,255,255,0.18)',
@@ -456,23 +461,35 @@ export function MiniPlayerBar() {
 
           <button
             className={`mp-btn mp-btn--play${
-              isPlaying ? ' mp-btn--playing' : ''
+              isPlaying && !playButtonLoading
+                ? ' mp-btn--playing'
+                : ''
+            }${
+              playButtonLoading ? ' mp-btn--loading' : ''
             }`}
             onClick={() => {
               haptic('light')
               togglePlay()
             }}
+            aria-busy={playButtonLoading}
             aria-label={
               isPlaying ? 'Пауза' : 'Воспроизвести'
             }
           >
-            <BeatPulse bpm={tapBpm} active={isPlaying}>
-              <MorphIcon
-                name={isPlaying ? 'pause' : 'play'}
-                filled
-                size={18}
+            {playButtonLoading ? (
+              <span
+                className="player-loading-spinner player-loading-spinner--mini"
+                aria-hidden="true"
               />
-            </BeatPulse>
+            ) : (
+              <BeatPulse bpm={tapBpm} active={isPlaying}>
+                <MorphIcon
+                  name={isPlaying ? 'pause' : 'play'}
+                  filled
+                  size={18}
+                />
+              </BeatPulse>
+            )}
           </button>
 
           <button
