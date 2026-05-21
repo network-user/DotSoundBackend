@@ -165,6 +165,7 @@
     "stageProcessing": "Processing audio...",
     "stageSaving": "Saving...",
     "notFound": "Lyrics not detected",
+    "startsIn": "Starts in",
     "showSync": "Line highlighting",
     "karaokeMode": "Karaoke",
     "syncOffset": "Offset",

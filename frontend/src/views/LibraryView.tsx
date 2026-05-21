@@ -9,6 +9,10 @@ import { HistoryList } from '@/components/Profile/HistoryList'
 import { Icon } from '@/components/Icon/Icon'
 import { MotionPress } from '@/components/ui/MotionPress'
 import { hapticSelection } from '@/lib/telegram'
+import {
+  usePlayerActions,
+  usePlayerMeta,
+} from '@/store/PlayerContext'
 
 const SHORTCUTS = [
   {
@@ -49,12 +53,21 @@ const STORAGE_KEY = 'library-tab'
 const TABS: Array<{
   id: Tab
   labelKey: string
+  icon: string
 }> = [
-  { id: 'liked', labelKey: 'library.tabLiked' },
-  { id: 'playlists', labelKey: 'library.tabPlaylists' },
-  { id: 'artists', labelKey: 'library.tabArtists' },
-  { id: 'imported', labelKey: 'library.tabImported' },
-  { id: 'history', labelKey: 'library.tabHistory' },
+  { id: 'liked', labelKey: 'library.tabLiked', icon: 'heart' },
+  { id: 'playlists', labelKey: 'library.tabPlaylists', icon: 'list' },
+  {
+    id: 'artists',
+    labelKey: 'library.tabArtists',
+    icon: 'users-following',
+  },
+  {
+    id: 'imported',
+    labelKey: 'library.tabImported',
+    icon: 'download',
+  },
+  { id: 'history', labelKey: 'library.tabHistory', icon: 'clock' },
 ]
 
 function isTab(s: string | null): s is Tab {
@@ -82,6 +95,12 @@ function tabFromStorageDefault(): Tab {
 export function LibraryView() {
   const { t } = useTranslation()
   const navigate = useNavigate()
+  const { openQueue } = usePlayerActions()
+  const {
+    queue,
+    shuffleOn,
+    track: currentTrack,
+  } = usePlayerMeta()
   const [searchParams, setSearchParams] =
     useSearchParams()
   const didSync = useRef(false)
@@ -93,11 +112,11 @@ export function LibraryView() {
       didSync.current = true
       return
     }
-    const t =
+    const storedTab =
       urlTab === null
         ? tabFromStorageDefault()
         : 'liked'
-    setSearchParams({ tab: t }, { replace: true })
+    setSearchParams({ tab: storedTab }, { replace: true })
     didSync.current = true
   }, [setSearchParams, urlTab])
 
@@ -126,9 +145,43 @@ export function LibraryView() {
       className="view active"
     >
       <div className="rd-lib-header">
-        <h1 className="rd-lib-header__title">
-          {t('nav.library')}
-        </h1>
+        <div className="rd-lib-header__main">
+          <h1 className="rd-lib-header__title">
+            {t('nav.library')}
+          </h1>
+        </div>
+        <MotionPress
+          type="button"
+          variant="subtle"
+          haptic="selection"
+          className="rd-lib-now"
+          aria-label={t('redesign.player.openQueueAria')}
+          onClick={openQueue}
+        >
+          <span className="rd-lib-now__icon" aria-hidden>
+            <Icon
+              name={shuffleOn ? 'shuffle' : 'queue'}
+              size={18}
+            />
+          </span>
+          <span className="rd-lib-now__body">
+            <span className="rd-lib-now__mode">
+              {t(
+                shuffleOn
+                  ? 'redesign.player.modeShuffle'
+                  : 'redesign.player.modeSequential',
+              )}
+            </span>
+            <span className="rd-lib-now__title">
+              {currentTrack?.title ??
+                t('redesign.player.queueEmpty')}
+            </span>
+          </span>
+          <span className="rd-lib-now__count">
+            <span>{t('redesign.player.queueUpNext')}</span>
+            <strong>{queue.length}</strong>
+          </span>
+        </MotionPress>
       </div>
 
       <div className="rd-lib-shortcuts">
@@ -138,6 +191,7 @@ export function LibraryView() {
             variant="subtle"
             haptic="selection"
             className="rd-lib-shortcut"
+            aria-label={t(s.labelKey)}
             onClick={() => navigate(s.route)}
           >
             <div className="rd-lib-shortcut__icon" aria-hidden>
@@ -150,7 +204,11 @@ export function LibraryView() {
         ))}
       </div>
 
-      <div className="library-tabs rd-lib-tabs">
+      <div
+        className="library-tabs rd-lib-tabs"
+        role="tablist"
+        aria-label={t('nav.library')}
+      >
         {TABS.map((row) => {
           const active = tab === row.id
           return (
@@ -159,11 +217,16 @@ export function LibraryView() {
               type="button"
               variant="ghost"
               haptic="selection"
+              role="tab"
+              aria-selected={active}
               data-active={active ? 'true' : 'false'}
               className="rd-lib-tab library-tab"
               onClick={() => handleTab(row.id)}
             >
-              {t(row.labelKey)}
+              <Icon name={row.icon} size={16} />
+              <span className="rd-lib-tab__label">
+                {t(row.labelKey)}
+              </span>
             </MotionPress>
           )
         })}

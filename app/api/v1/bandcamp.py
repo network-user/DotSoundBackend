@@ -11,6 +11,7 @@ from app.models.user import User
 from app.schemas.track import BCSearchResult, TrackResponse
 from app.services.bandcamp_service import BandcampService
 from app.services.track_response_build import build_track_response
+from app.services.track_service import TrackService
 
 router = APIRouter(prefix="/bandcamp", tags=["bandcamp"])
 logger: structlog.stdlib.BoundLogger = structlog.get_logger(__name__)
@@ -76,6 +77,11 @@ async def import_bandcamp_track(
         bc_data=bc_data,
         uploader_id=current_user.id,
         is_public=data.is_public,
+    )
+    await TrackService(session).add_to_library(
+        user_id=current_user.id,
+        track_id=track.id,
+        source="bandcamp",
     )
     logger.info(
         "bc_import_endpoint",

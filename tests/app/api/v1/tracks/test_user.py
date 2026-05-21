@@ -263,6 +263,82 @@ async def test_delete_track(
     assert r.status_code == 204
 
 
+async def test_delete_external_import_only_unlinks_user_library(
+    client: AsyncClient,
+    db_session: AsyncSession,
+) -> None:
+    owner = await create_test_user(client, 60014)
+    other = await create_test_user(client, 60015)
+    owner_headers = await auth_headers(client, owner["id"])
+    track = Track(
+        title="Imported External",
+        artist="Artist",
+        uploaded_by_id=owner["id"],
+        is_active=True,
+        is_public=True,
+        source="soundcloud",
+        catalog_type="external_reference",
+        access_mode="third_party_stream",
+        source_platform="soundcloud",
+        imported_from="soundcloud",
+        sc_url="https://soundcloud.com/test/imported-external",
+        source_url="https://soundcloud.com/test/imported-external",
+    )
+    db_session.add(track)
+    await db_session.flush()
+    from app.repositories.user_track_library import (
+        UserTrackLibraryRepository,
+    )
+
+    library = UserTrackLibraryRepository(db_session)
+    await library.add(owner["id"], track.id, source="soundcloud")
+    await library.add(other["id"], track.id, source="soundcloud")
+    await db_session.commit()
+
+    r = await client.delete(
+        f"/api/v1/tracks/{track.id}",
+        headers=owner_headers,
+    )
+
+    assert r.status_code == 204
+    await db_session.refresh(track)
+    assert track.is_active is True
+    assert track.deleted_at is None
+    assert track.uploaded_by_id is None
+    assert await library.has(owner["id"], track.id) is False
+    assert await library.has(other["id"], track.id) is True
+
+
+async def test_external_import_edit_context_denied_to_importer(
+    client: AsyncClient,
+    db_session: AsyncSession,
+) -> None:
+    owner = await create_test_user(client, 60016)
+    headers = await auth_headers(client, owner["id"])
+    track = Track(
+        title="External Edit",
+        artist="Artist",
+        uploaded_by_id=owner["id"],
+        is_active=True,
+        is_public=True,
+        source="soundcloud",
+        catalog_type="external_reference",
+        access_mode="third_party_stream",
+        source_platform="soundcloud",
+        imported_from="soundcloud",
+        sc_url="https://soundcloud.com/test/external-edit",
+    )
+    db_session.add(track)
+    await db_session.commit()
+
+    r = await client.get(
+        f"/api/v1/tracks/{track.id}/edit-context",
+        headers=headers,
+    )
+
+    assert r.status_code == 403
+
+
 async def test_delete_track_not_found(
     client: AsyncClient,
 ) -> None:

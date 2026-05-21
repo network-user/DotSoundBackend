@@ -16,7 +16,6 @@ from app.repositories.comment import (
 )
 from app.repositories.track import TrackRepository
 from app.repositories.user import UserRepository
-from app.services.playback_variant_service import PlaybackVariantService
 from app.services.comment_notifications import (
     comment_like_copy,
     comment_reply_copy,
@@ -25,6 +24,7 @@ from app.services.comment_notifications import (
 from app.services.notification_service import (
     NotificationService,
 )
+from app.services.playback_variant_service import PlaybackVariantService
 
 logger: structlog.stdlib.BoundLogger = structlog.get_logger(__name__)
 
@@ -39,11 +39,11 @@ class CommentService:
     @staticmethod
     def _author_label(user: User | None) -> str:
         if not user:
-            from dotsound_private_core.services.account_deletion_policy import (
-                ANONYMIZED_DISPLAY_NAME,
+            from dotsound_private_core.services import (
+                account_deletion_policy,
             )
 
-            return ANONYMIZED_DISPLAY_NAME
+            return account_deletion_policy.ANONYMIZED_DISPLAY_NAME
         dn = (user.display_name or "").strip()
         if dn:
             return dn
@@ -95,7 +95,7 @@ class CommentService:
         users: dict[int, User],
     ) -> dict[str, Any]:
         likes, dislikes = await self._repo.get_vote_counts(c.id)
-        au = users.get(c.user_id)
+        au = users.get(c.user_id) if c.user_id is not None else None
         return {
             "id": c.id,
             "track_id": c.track_id,
@@ -267,7 +267,7 @@ class CommentService:
         )
         author = await self._user_repo.get_by_id(user_id)
         author_label = self._author_label(author)
-        result = {
+        result: dict[str, Any] = {
             "id": c.id,
             "track_id": storage.id,
             "user_id": user_id,
@@ -345,7 +345,8 @@ class CommentService:
 
         by_parent: dict[int, list[TrackComment]] = {}
         for node in all_flat:
-            by_parent.setdefault(node.parent_id, []).append(node)
+            if node.parent_id is not None:
+                by_parent.setdefault(node.parent_id, []).append(node)
         for pid in by_parent:
             by_parent[pid].sort(
                 key=lambda x: x.created_at,
@@ -385,7 +386,11 @@ class CommentService:
                 detail="Comment not found",
             )
         track = await self._session.get(Track, c.track_id)
-        is_owner = track and track.uploaded_by_id == user_id
+        is_owner = (
+            track is not None
+            and track.uploaded_by_id == user_id
+            and track.catalog_type == "ugc"
+        )
         if c.user_id != user_id and not is_owner:
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
@@ -501,7 +506,11 @@ class CommentService:
 
     async def _ensure_track_owner(self, track_id: int, user_id: int) -> None:
         track = await self._session.get(Track, track_id)
-        if not track or track.uploaded_by_id != user_id:
+        if (
+            not track
+            or track.uploaded_by_id != user_id
+            or track.catalog_type != "ugc"
+        ):
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail="Only track owner can do this",

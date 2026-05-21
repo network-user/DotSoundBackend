@@ -75,6 +75,21 @@ const TCS_DRAG_CLOSE_THRESHOLD = 100
 
 const SPEED_OPTIONS = [0.75, 1, 1.25, 1.5]
 const VIDEO_UPLOAD_MIMES = new Set(['video/mp4', 'video/webm'])
+const LYRICS_VISIBLE_KEY = 'setting-track-card-lyrics-visible'
+
+function readLyricsVisiblePreference(): boolean {
+  try {
+    return localStorage.getItem(LYRICS_VISIBLE_KEY) === '1'
+  } catch {
+    return false
+  }
+}
+
+function writeLyricsVisiblePreference(value: boolean): void {
+  try {
+    localStorage.setItem(LYRICS_VISIBLE_KEY, value ? '1' : '0')
+  } catch {}
+}
 
 function hasPipSupport(): boolean {
   try {
@@ -216,7 +231,7 @@ export function TrackCardSheet({
   const [card, setCard] =
     useState<TrackCardResponse | null>(null)
   const [showLyrics, setShowLyrics] =
-    useState(false)
+    useState(readLyricsVisiblePreference)
   const [showTrackInfo, setShowTrackInfo] =
     useState(false)
   const [editingLyrics, setEditingLyrics] =
@@ -539,7 +554,7 @@ export function TrackCardSheet({
     setCoverVer((v) => v + 1)
     setCoverFailed(false)
     setShowEdit(false)
-    setShowLyrics(false)
+    setShowLyrics(readLyricsVisiblePreference())
     setVideoReady(false)
     videoPlaybackErrorShownRef.current = false
     const currentVideoStatus =
@@ -578,7 +593,6 @@ export function TrackCardSheet({
           return
         }
         setCard(c)
-        setShowLyrics(Boolean(c.has_lyrics))
         if (c.cover_url) {
           try {
             const u = new URL(c.cover_url, window.location.origin)
@@ -830,7 +844,8 @@ export function TrackCardSheet({
     const internalId = getInternalUserId()
     const canOwnerEdit = Boolean(
       internalId !== null &&
-      track?.uploaded_by_id === internalId,
+      track?.uploaded_by_id === internalId &&
+      track?.catalog_type === 'ugc',
     )
     if (
       !albumId ||
@@ -864,7 +879,15 @@ export function TrackCardSheet({
     } finally {
       setAlbumEditBusy(false)
     }
-  }, [relatedAlbumInfo?.id, track?.album_id, isAdmin, debugMode, track?.uploaded_by_id, t])
+  }, [
+    relatedAlbumInfo?.id,
+    track?.album_id,
+    isAdmin,
+    debugMode,
+    track?.uploaded_by_id,
+    track?.catalog_type,
+    t,
+  ])
 
   const refreshAlbumEditor = useCallback(async () => {
     if (!albumEditData) return
@@ -1442,7 +1465,8 @@ export function TrackCardSheet({
   const internalId = getInternalUserId()
   const isOwner =
     internalId !== null &&
-    track.uploaded_by_id === internalId
+    track.uploaded_by_id === internalId &&
+    track.catalog_type === 'ugc'
   const canEditUi =
     isAdmin || debugMode || import.meta.env.DEV
   const liked = isLiked(track.id)
@@ -1492,8 +1516,13 @@ export function TrackCardSheet({
   const videoRemoveOrCancelLabel = videoProcessing
     ? t('trackSheet.cancelVideoUpload')
     : t('trackSheet.removeVideo')
+  const canShowLyricsPanel =
+    Boolean(card?.has_lyrics ?? track.has_lyrics) ||
+    isOwner ||
+    canEditUi
+  const showLyricsPanel = showLyrics && canShowLyricsPanel
   const visualMode =
-    showLyrics || hasActiveVideo
+    showLyricsPanel || hasActiveVideo
   const perfLite =
     isCoarsePointer ||
     (typeof document !== 'undefined' &&
@@ -1589,7 +1618,10 @@ export function TrackCardSheet({
               loop
               muted
               playsInline
+              preload="auto"
+              poster={coverSrc ?? undefined}
               onCanPlay={handleVideoCanPlay}
+              onLoadedData={handleVideoCanPlay}
               onError={handleVideoPlaybackError}
             />
             <div className="tcs-video-gradient" />
@@ -1636,12 +1668,15 @@ export function TrackCardSheet({
               size={32}
               className="tcs-video-pulse"
             />
+            <span className="tcs-video-standby-label">
+              {t('trackSheet.videoLoading')}
+            </span>
           </div>
         )}
 
         {hasActiveVideo &&
           videoReady &&
-          !showLyrics && (
+          !showLyricsPanel && (
             <div
               className="tcs-video-spacer"
               {...(desktopFineNav ? {} : tcsNavSwipe)}
@@ -1649,7 +1684,7 @@ export function TrackCardSheet({
             />
           )}
 
-        {!hasActiveVideo && !showLyrics && (
+        {!hasActiveVideo && !showLyricsPanel && (
           <div
             className="tcs-cover-wrap re-tcs-wrap"
             {...(desktopFineNav ? {} : tcsNavSwipe)}
@@ -1778,7 +1813,7 @@ export function TrackCardSheet({
           </div>
         )}
 
-        {showLyrics &&
+        {showLyricsPanel &&
           !editingLyrics &&
           !hasActiveVideo && (
             <div
@@ -1793,7 +1828,6 @@ export function TrackCardSheet({
                 <button
                   className="tcs-lyrics-expand icon-btn"
                   onClick={() => {
-                    setShowLyrics(false)
                     openLyrics()
                   }}
                   aria-label={t('trackSheet.lyricsExpand', 'Открыть текст')}
@@ -1816,7 +1850,7 @@ export function TrackCardSheet({
             </div>
           )}
 
-        {showLyrics &&
+        {showLyricsPanel &&
           !editingLyrics &&
           hasActiveVideo && (
             <div
@@ -1831,7 +1865,6 @@ export function TrackCardSheet({
                 <button
                   className="tcs-lyrics-expand icon-btn"
                   onClick={() => {
-                    setShowLyrics(false)
                     openLyrics()
                   }}
                   aria-label={t('trackSheet.lyricsExpand', 'Открыть текст')}
@@ -2168,12 +2201,15 @@ export function TrackCardSheet({
             <MotionPress
               type="button"
               variant="ghost"
-              className={`tcs-action-btn${showLyrics ? ' active' : ''}`}
+              className={`tcs-action-btn${showLyricsPanel ? ' active' : ''}`}
               haptic="light"
               onClick={() => {
-                setShowLyrics((v) => !v)
+                const next = !showLyrics
+                setShowLyrics(next)
+                writeLyricsVisiblePreference(next)
                 setEditingLyrics(false)
               }}
+              aria-pressed={showLyricsPanel}
             >
               <Icon name="text" size={20} />
               <span className="tcs-action-label">
@@ -2921,7 +2957,11 @@ export function TrackCardSheet({
           <div className="tcs-comments-section">
             <CommentSection
               trackId={track.id}
-              trackOwnerId={track.uploaded_by_id}
+              trackOwnerId={
+                track.catalog_type === 'ugc'
+                  ? track.uploaded_by_id
+                  : null
+              }
             />
           </div>
         )}

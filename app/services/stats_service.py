@@ -126,6 +126,7 @@ class StatsService:
             select(func.count(), func.coalesce(func.sum(Track.play_count), 0))
             .where(
                 Track.uploaded_by_id == resolved_id,
+                Track.catalog_type == "ugc",
                 Track.is_active.is_(True),
             )
         )
@@ -135,6 +136,7 @@ class StatsService:
             select(Track)
             .where(
                 Track.uploaded_by_id == resolved_id,
+                Track.catalog_type == "ugc",
                 Track.is_active.is_(True),
             )
             .order_by(Track.play_count.desc())

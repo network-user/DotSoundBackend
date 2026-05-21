@@ -108,10 +108,7 @@ def _yt_search_sync(query: str, limit: int) -> list[dict]:
             continue
         title = (e.get("title") or "Unknown").strip()
         artist = e.get("uploader") or e.get("channel") or e.get("uploader_id")
-        if artist:
-            artist = str(artist)
-        else:
-            artist = None
+        artist = str(artist) if artist else None
         dur: int | None = e.get("duration")
         if dur is not None:
             dur = int(dur)
@@ -245,7 +242,11 @@ def _yt_extract_info(
             info_auto = ydl.extract_info(url, download=False)
         if info_auto is None:
             raise ValueError("yt-dlp returned no info")
-        logger.info("yt_format_fallback_to_auto", url=url, requested_format=fmt)
+        logger.info(
+            "yt_format_fallback_to_auto",
+            url=url,
+            requested_format=fmt,
+        )
         return info_auto  # type: ignore[return-value]
     except Exception as auto_exc:
         if last_exc is not None:
@@ -348,7 +349,8 @@ class YouTubeService:
                 status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
                 detail=(
                     "YouTube integration is temporarily disabled. "
-                    "Proxy support is required for reliable operation at scale. "
+                    "Proxy support is required for reliable operation "
+                    "at scale. "
                     "Set YOUTUBE_ENABLED=true once a proxy pool is configured."
                 ),
             )
@@ -522,7 +524,7 @@ class YouTubeService:
             "source_name": "YouTube",
             "file_key": None,
             "cover_key": cover_key,
-            "uploaded_by_id": uploader_id,
+            "uploaded_by_id": None,
             "is_public": is_public,
         }
 

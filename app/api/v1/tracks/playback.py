@@ -233,6 +233,7 @@ def _check_access(track: object, current_user: User | None = None) -> None:
     if (
         current_user
         and getattr(track, "uploaded_by_id", None) == current_user.id
+        and getattr(track, "catalog_type", None) == "ugc"
     ):
         return
     raise HTTPException(
@@ -630,6 +631,22 @@ def _audio_cache_control(file_key: str) -> str:
     if file_key.startswith("blobs/"):
         return "public, max-age=31536000, immutable"
     return "public, max-age=300"
+
+
+def _video_cache_control(file_key: str) -> str:
+    if file_key.startswith("video-blobs/"):
+        return "public, max-age=31536000, immutable"
+    return "public, max-age=3600"
+
+
+def _video_media_type(
+    file_key: str, content_type: str | None
+) -> str:
+    if content_type and content_type.startswith("video/"):
+        return content_type
+    if file_key.endswith(".webm"):
+        return "video/webm"
+    return "video/mp4"
 
 
 def _format_http_date(value: datetime | None) -> str | None:
@@ -1482,7 +1499,7 @@ async def video_proxy(
     track_id: int,
     session: AsyncSession = Depends(get_db),
     current_user: User | None = Depends(get_optional_user),
-) -> Response:
+) -> Response | StreamingResponse:
     service = TrackService(session)
     track = await service.get_track(
         track_id,
@@ -1494,20 +1511,53 @@ async def video_proxy(
             detail="Video not found",
         )
     _check_access(track, current_user)
+    video_key = track.video_key
+    assert video_key is not None
     try:
-        data = await s3.download_object(track.video_key)
-    except Exception:
+        meta, body_iter = await s3.open_object_range(
+            video_key,
+            request.headers.get("range"),
+        )
+    except ClientError as exc:
+        code = exc.response["Error"]["Code"]
+        if code == "InvalidRange":
+            raise HTTPException(
+                status_code=status.HTTP_416_REQUESTED_RANGE_NOT_SATISFIABLE,
+                detail="Invalid video range",
+            ) from exc
+        if code in ("NoSuchKey", "404", "NotFound"):
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Video file not found",
+            ) from exc
         raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Video file not found",
-        ) from None
-    ct = "video/mp4"
-    if track.video_key.endswith(".webm"):
-        ct = "video/webm"
-    return Response(
-        content=data,
-        media_type=ct,
-        headers={"Cache-Control": "public, max-age=3600"},
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail="Storage error",
+        ) from exc
+
+    last_modified_http = _format_http_date(meta.last_modified)
+    headers: dict[str, str] = {
+        "Accept-Ranges": meta.accept_ranges or "bytes",
+        "Cache-Control": _video_cache_control(video_key),
+        "Content-Length": str(meta.content_length),
+    }
+    if meta.content_range:
+        headers["Content-Range"] = meta.content_range
+    if meta.etag:
+        headers["ETag"] = f'"{meta.etag}"'
+    if last_modified_http:
+        headers["Last-Modified"] = last_modified_http
+
+    http_status = (
+        status.HTTP_206_PARTIAL_CONTENT
+        if meta.content_range
+        else status.HTTP_200_OK
+    )
+    return StreamingResponse(
+        body_iter,
+        status_code=http_status,
+        media_type=_video_media_type(video_key, meta.content_type),
+        headers=headers,
     )
 
 

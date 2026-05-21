@@ -1,5 +1,115 @@
 # DotSound - TODO Tracker
 
+- [x] **Library UI shell and paginated playback helper (2026-05-21)**
+  - Extracted the liked-library playback launch path into a shared
+    `playFromPaginatedCollection` helper, so other paginated collections can
+    request a full playback context without duplicating fallback logic.
+  - Reworked the Library shell with a compact now-playing/queue status,
+    denser quick actions, icon-backed tabs, sticky tab navigation and
+    responsive text constraints for narrow mobile screens.
+  - Verification: `npm run build`.
+
+- [x] **Track card lyrics and video refresh (2026-05-21)**
+  - Track-card lyrics are hidden by default. The `Text` button now stores a
+    global local preference and carries that visible/hidden state across
+    other tracks until the user presses it again.
+  - Reworked in-card and fullscreen lyrics UI: modern control pills,
+    synchronized lead-in countdown, active-line progress, smoother active
+    line movement, word highlighting polish, and reduced-motion fallback.
+  - Track-card videos now load through backend Range streaming (`206 Partial
+    Content`) instead of buffering the whole S3 object, which fixes browser
+    video probes in mobile/WebView clients. Client video loading states now
+    use preload/poster, clearer standby UI, and refreshed video scrims.
+  - Legal check: reviewed `LEGAL.md` and `docs/legal/*` playback/storage
+    references. No legal text change needed because this keeps the same UGC
+    video storage/playback model and only changes delivery/UI behavior.
+  - Verification: `poetry run pytest
+    tests/app/api/v1/tracks/test_playback.py::test_video_proxy_success
+    tests/app/api/v1/tracks/test_playback.py::test_video_proxy_supports_range_requests`;
+    `poetry run ruff check app/api/v1/tracks/playback.py
+    tests/app/api/v1/tracks/test_playback.py`; `poetry run mypy
+    app/api/v1/tracks/playback.py`; `npm run build`.
+
+- [x] **External import delete safety and admin restore (2026-05-21)**
+  - User delete now globally soft-deletes only owned UGC tracks. Search/import
+    tracks with `catalog_type="external_reference"` are detached from the
+    user's library instead of being deleted for everyone.
+  - Direct SoundCloud, YouTube and Bandcamp imports now create
+    `user_track_library` links; imported/library queries use that link instead
+    of treating `uploaded_by_id` on external rows as ownership.
+  - Added Alembic revision `0116` to backfill legacy external owner markers
+    into `user_track_library` and clear `tracks.uploaded_by_id` for
+    `external_reference` rows.
+  - New SoundCloud, YouTube and Bandcamp canonical external rows are now
+    ownerless from creation; the importing user is represented only by the
+    library link.
+  - Owner edit/delete UI is hidden for non-UGC external references, including
+    track cards, sheets, profile lists, now-playing, and lyrics chrome.
+  - User restore/trash and comment moderation ownership checks now require
+    UGC ownership, so a legacy external owner marker does not grant global
+    control over shared external track state.
+  - Audited remaining backend owner/access checks based on `uploaded_by_id`:
+    album membership, author stats, card access, processing status, playback
+    suppression bypass, lyrics ownership, user stats, like counts and upload
+    dedupe now require UGC where they grant owner-level behavior.
+  - Admin Tracks deleted scope now exposes deleted metadata in the API/table
+    and keeps the restore flow covered by tests.
+  - Legal check: reviewed `LEGAL.md` and `docs/legal/*` upload/import/playback
+    references. No legal text change needed because the fix enforces the
+    existing UGC vs external-reference separation.
+  - Verification: targeted `poetry run pytest` for 17 delete/import/admin
+    restore/backfill-audit scenarios; `poetry run ruff check` on changed
+    Python files; focused `poetry run mypy` on owner-check modules;
+    `npm run build`.
+
+- [x] **Playback order mode indicators (2026-05-21)**
+  - Added a shared frontend playback mode indicator for the bottom mini
+    player, full now-playing screen and the currently playing track card,
+    showing whether playback is in sequential or shuffle order.
+  - Player overflow menus now expose explicit `In order` / `Shuffle` choices
+    with active highlighting and check marks instead of a single ambiguous
+    shuffle toggle.
+  - Queue sheet and the embedded now-playing queue now expose the same
+    explicit playback-order segmented control, so the active order is visible
+    where the next tracks are managed.
+  - Repeat labels and shuffle/repeat aria labels moved to RU/EN i18n keys.
+  - Added animated mode transitions with reduced-motion fallback. The existing
+    `player-shuffle` localStorage state remains the global persisted playback
+    order for tracks, playlists, albums, mixes and queues.
+  - Legal check: reviewed `LEGAL.md` and `docs/legal/*` playback references.
+    No legal text change needed because this only changes client-side playback
+    order UI/state and does not alter source modes, storage, caching, or
+    third-party stream handling.
+  - Verification: `npm run build`.
+
+- [x] **Liked library global queue and sorting (2026-05-21)**
+  - Liked-tracks API now applies `newest`, `oldest`, and `artist`
+    sorting in SQL before pagination, so page 1 is sorted against the
+    full liked library rather than the loaded 20-track slice.
+  - Added a liked playback queue endpoint that builds a bounded queue from
+    the full liked set. Shuffle playback from `LikedView` now starts with
+    a wider server-provided context instead of shuffling only visible rows.
+  - `TrackList`/`TrackCard` now allow a view-specific play handler, keeping
+    the generic list behavior unchanged while `LikedView` can fetch an
+    optimized playback context on demand.
+  - Legal check: reviewed `LEGAL.md` and `docs/legal/*` playback/source
+    references. No legal text change needed because this only changes queue
+    ordering and does not alter source modes, storage, caching, or external
+    stream handling.
+  - Verification: `poetry run pytest tests/app/api/v1/test_likes.py`;
+    `poetry run ruff check app/api/v1/likes.py app/repositories/like.py
+    app/services/like_service.py tests/app/api/v1/test_likes.py`;
+    `poetry run mypy app/api/v1/likes.py app/repositories/like.py
+    app/services/like_service.py`; `npm run build`.
+
+- [x] **Bottom navigation dock redesign (2026-05-21)**
+  - Swapped Library and Search in the bottom navigation order for both
+    mobile and desktop layouts: Home -> Library -> Search -> Profile.
+  - Rebuilt the bottom panel as a centered monochrome dock with a moving
+    active pill, icon/label motion, tap ring feedback, safe-area spacing,
+    narrow-phone and landscape compact states, and reduced-motion fallback.
+  - Verification: `npm run build`.
+
 - [x] **Playback loading animation on track switch (2026-05-21)**
   - Added a dedicated frontend `isPlaybackLoading` state for the gap
     between `playTrack` start and the first browser `playing` signal.
@@ -4491,7 +4601,7 @@
 
 ---
 
-*Последнее обновление: 2026-05-20 (Track deep-link SPA fallback).*
+*Последнее обновление: 2026-05-21 (External import ownership backfill and audit).*
 
 ## Session Updates (2026-05-06)
 

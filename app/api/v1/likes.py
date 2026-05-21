@@ -17,8 +17,12 @@ from app.schemas.like import (
     LikeToggleResponse,
     UserLikesResponse,
 )
+from app.schemas.track import TrackQueueResponse
 from app.services.like_service import LikeService
-from app.services.track_response_build import build_track_response
+from app.services.track_response_build import (
+    build_track_response,
+    build_track_responses,
+)
 
 router = APIRouter(prefix="/likes", tags=["likes"])
 logger: structlog.stdlib.BoundLogger = structlog.get_logger(__name__)
@@ -85,6 +89,64 @@ async def toggle_like_public(
 _VALID_SOURCE_FILTERS = frozenset(
     {"platform", "soundcloud", "other"}
 )
+_VALID_SORT_ORDERS = frozenset({"newest", "oldest", "artist"})
+
+
+def _source_filter_or_none(source: str | None) -> str | None:
+    return source if source in _VALID_SOURCE_FILTERS else None
+
+
+def _sort_order_or_default(sort: str | None) -> str:
+    return sort if sort in _VALID_SORT_ORDERS else "newest"
+
+
+def _parse_exclude_ids(raw: str | None) -> set[int]:
+    if not raw:
+        return set()
+    result: set[int] = set()
+    for part in raw.split(","):
+        if len(result) >= 300:
+            break
+        try:
+            value = int(part)
+        except ValueError:
+            continue
+        if value > 0:
+            result.add(value)
+    return result
+
+
+@router.get(
+    "/{user_id}/queue",
+    response_model=TrackQueueResponse,
+    summary="Get a liked-track playback queue",
+)
+@limiter.limit("120/minute")
+async def get_user_likes_queue(
+    request: Request,
+    user_id: int,
+    current_track_id: int = Query(..., ge=1),
+    size: int = Query(80, ge=1, le=100),
+    source: str | None = Query(None),
+    sort: str = Query("newest"),
+    shuffle: bool = Query(False),
+    exclude_ids: str | None = Query(None),
+    session: AsyncSession = Depends(get_db),
+) -> TrackQueueResponse:
+    structlog.contextvars.bind_contextvars(user_id=user_id)
+    service = LikeService(session)
+    tracks = await service.list_liked_queue(
+        user_id=user_id,
+        current_track_id=current_track_id,
+        size=size,
+        source_filter=_source_filter_or_none(source),
+        sort_order=_sort_order_or_default(sort),
+        shuffle=shuffle,
+        exclude_ids=_parse_exclude_ids(exclude_ids),
+    )
+    return TrackQueueResponse(
+        next_tracks=await build_track_responses(session, tracks),
+    )
 
 
 @router.get(
@@ -99,18 +161,17 @@ async def get_user_likes(
     page: int = Query(1, ge=1),
     size: int = Query(20, ge=1, le=200),
     source: str | None = Query(None),
+    sort: str = Query("newest"),
     session: AsyncSession = Depends(get_db),
 ) -> UserLikesResponse:
     structlog.contextvars.bind_contextvars(user_id=user_id)
-    source_filter = (
-        source if source in _VALID_SOURCE_FILTERS else None
-    )
     service = LikeService(session)
     rows, total = await service.list_liked(
         user_id=user_id,
         page=page,
         size=size,
-        source_filter=source_filter,
+        source_filter=_source_filter_or_none(source),
+        sort_order=_sort_order_or_default(sort),
     )
     items = []
     for track, liked_at in rows:

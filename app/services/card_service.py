@@ -26,7 +26,11 @@ class CardService:
         track = await self._track_repo.get_by_id(track_id)
         if not track or not track.is_active:
             return None
-        is_owner = requester_id and track.uploaded_by_id == requester_id
+        is_owner = (
+            requester_id
+            and track.uploaded_by_id == requester_id
+            and track.catalog_type == "ugc"
+        )
         if not track.is_public and not is_owner:
             return None
         if is_track_playback_suppressed(track) and not is_owner:

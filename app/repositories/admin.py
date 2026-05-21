@@ -158,6 +158,7 @@ class AdminRepository:
             own: ColumnElement[bool] = (
                 Track.is_active.is_(True)
                 & (Track.uploaded_by_id == for_playlist_owner_id)
+                & (Track.catalog_type == "ugc")
                 & tr._exclude_hidden_sources()
                 & tr._playback_listing_allowed()
             )

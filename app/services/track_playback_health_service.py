@@ -34,7 +34,11 @@ def playback_suppressed_blocks_streaming(
         return False
     uid = getattr(viewer, "id", None) if viewer else None
     owner_id = getattr(track, "uploaded_by_id", None)
-    return not (uid is not None and owner_id == uid)
+    return not (
+        uid is not None
+        and owner_id == uid
+        and track.catalog_type == "ugc"
+    )
 
 
 class TrackPlaybackHealthService:

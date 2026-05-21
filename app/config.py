@@ -585,7 +585,8 @@ class AppSettings(BaseSettings):
     snippet_ffmpeg_enabled: bool = True
     snippet_external_catalog_allowed: bool = False
 
-    #: ``uploaded_by_id`` for tracks imported during artist catalog sync.
+    #: User context for catalog sync cover uploads and attribution logs.
+    #: External track rows themselves remain ownerless canonical references.
     catalog_uploader_id: int = 1
 
     # Compute-worker pull API protection. Comma-separated list of

@@ -217,6 +217,51 @@ async def test_delete_by_owner(
     assert result.deleted_reason == "owner"
 
 
+async def test_delete_by_owner_refuses_external_reference(
+    session: AsyncSession,
+) -> None:
+    user = await _make_user(session, telegram_id=41)
+    repo = TrackRepository(session)
+    track = await repo.create(
+        title="External",
+        artist="A",
+        uploaded_by_id=user.id,
+        source="soundcloud",
+        source_platform="soundcloud",
+        imported_from="soundcloud",
+        catalog_type="external_reference",
+        access_mode="third_party_stream",
+    )
+
+    result = await repo.delete_by_owner(track.id, user.id)
+
+    assert result is None
+    await session.refresh(track)
+    assert track.is_active is True
+    assert track.deleted_at is None
+
+
+async def test_get_access_info_allows_public_ownerless_external(
+    session: AsyncSession,
+) -> None:
+    repo = TrackRepository(session)
+    track = await repo.create(
+        title="Public External",
+        artist="A",
+        source="soundcloud",
+        source_platform="soundcloud",
+        imported_from="soundcloud",
+        catalog_type="external_reference",
+        access_mode="third_party_stream",
+        uploaded_by_id=None,
+        is_public=True,
+    )
+
+    access = await repo.get_access_info(track.id)
+
+    assert access == (True, None)
+
+
 async def test_delete_by_owner_idempotent(
     session: AsyncSession,
 ) -> None:
@@ -270,6 +315,67 @@ async def test_restore_by_owner_refuses_admin_deleted(
     assert out is None
 
 
+async def test_restore_by_owner_refuses_external_reference(
+    session: AsyncSession,
+) -> None:
+    user = await _make_user(session, telegram_id=4500)
+    repo = TrackRepository(session)
+    track = await repo.create(
+        title="External deleted",
+        artist="A",
+        uploaded_by_id=user.id,
+        source="soundcloud",
+        source_platform="soundcloud",
+        imported_from="soundcloud",
+        catalog_type="external_reference",
+        access_mode="third_party_stream",
+    )
+    await repo.admin_soft_delete(
+        track.id, by_user_id=user.id, reason="owner"
+    )
+
+    out = await repo.restore_by_owner(track.id, user.id)
+
+    assert out is None
+    await session.refresh(track)
+    assert track.deleted_at is not None
+
+
+async def test_list_imported_by_user_uses_library_link(
+    session: AsyncSession,
+) -> None:
+    owner = await _make_user(session, telegram_id=4501)
+    importer = await _make_user(session, telegram_id=4502)
+    repo = TrackRepository(session)
+    track = await repo.create(
+        title="Linked Import",
+        artist="A",
+        uploaded_by_id=owner.id,
+        source="soundcloud",
+        source_platform="soundcloud",
+        imported_from="soundcloud",
+        catalog_type="external_reference",
+        access_mode="third_party_stream",
+    )
+    from app.repositories.user_track_library import (
+        UserTrackLibraryRepository,
+    )
+
+    library = UserTrackLibraryRepository(session)
+    await library.add(importer.id, track.id, source="yandex_music")
+
+    rows, total = await repo.list_imported_by_user(importer.id)
+    filtered, filtered_total = await repo.list_imported_by_user(
+        importer.id,
+        source_filter="yandex_music",
+    )
+
+    assert total == 1
+    assert [t.id for t in rows] == [track.id]
+    assert filtered_total == 1
+    assert [t.id for t in filtered] == [track.id]
+
+
 async def test_list_user_trash_only_owners_owner_reason(
     session: AsyncSession,
 ) -> None:
@@ -286,15 +392,29 @@ async def test_list_user_trash_only_owners_owner_reason(
         artist="A",
         uploaded_by_id=user.id,
     )
+    external = await repo.create(
+        title="ExternalHidden",
+        artist="A",
+        uploaded_by_id=user.id,
+        source="soundcloud",
+        source_platform="soundcloud",
+        imported_from="soundcloud",
+        catalog_type="external_reference",
+        access_mode="third_party_stream",
+    )
     await repo.delete_by_owner(own.id, user.id)
     await repo.admin_soft_delete(
         admin_hidden.id, by_user_id=admin.id, reason="admin"
+    )
+    await repo.admin_soft_delete(
+        external.id, by_user_id=user.id, reason="owner"
     )
     rows, total = await repo.list_user_trash(user.id)
     ids = {t.id for t in rows}
     assert total == 1
     assert own.id in ids
     assert admin_hidden.id not in ids
+    assert external.id not in ids
 
 
 async def test_list_hard_delete_candidates_only_deleted(

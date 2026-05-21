@@ -24,6 +24,10 @@ import { SpectrumMicroBars } from '@/components/ui/SpectrumMicroBars'
 import { AddToPlaylistSheet } from '@/components/AddToPlaylistSheet/AddToPlaylistSheet'
 import { useSwipeX } from '@/hooks/useSwipeX'
 import {
+  PlaybackModeIndicator,
+  playbackModeLabel,
+} from './PlaybackModeIndicator'
+import {
   coverProxySizes,
   coverProxySrcSet,
   coverProxyUrl,
@@ -246,6 +250,17 @@ export function MiniPlayerBar() {
     await toggleLike(track.id, track)
   }
 
+  const selectPlaybackMode = (nextShuffleOn: boolean) => {
+    if (shuffleOn !== nextShuffleOn) {
+      toggleShuffle()
+    }
+    setOverflowOpen(false)
+    haptic('light')
+  }
+
+  const sequentialLabel = playbackModeLabel(false, t)
+  const shuffleLabel = playbackModeLabel(true, t)
+
   return (
     <>
       <div
@@ -419,6 +434,10 @@ export function MiniPlayerBar() {
                 <p className="mp-artist">
                   {track.artist ?? '—'}
                 </p>
+                <PlaybackModeIndicator
+                  shuffleOn={shuffleOn}
+                  variant="mini"
+                />
               </m.div>
             </AnimatePresence>
           </div>
@@ -588,21 +607,47 @@ export function MiniPlayerBar() {
                   {t('redesign.playerBar.eqMenu')}
                 </button>
                 <button
-                  className={`mp-menu-item${
+                  className={`mp-menu-item mp-menu-item--mode${
+                    !shuffleOn
+                      ? ' mp-menu-item--active'
+                      : ''
+                  }`}
+                  role="menuitem"
+                  onClick={() => {
+                    selectPlaybackMode(false)
+                  }}
+                  aria-pressed={!shuffleOn}
+                >
+                  <Icon name="list" size={14} />
+                  <span>{sequentialLabel}</span>
+                  {!shuffleOn && (
+                    <Icon
+                      name="check"
+                      size={14}
+                      className="mp-menu-item__check"
+                    />
+                  )}
+                </button>
+                <button
+                  className={`mp-menu-item mp-menu-item--mode${
                     shuffleOn
                       ? ' mp-menu-item--active'
                       : ''
                   }`}
                   role="menuitem"
                   onClick={() => {
-                    toggleShuffle()
-                    setOverflowOpen(false)
-                    haptic('light')
+                    selectPlaybackMode(true)
                   }}
+                  aria-pressed={shuffleOn}
                 >
                   <Icon name="shuffle" size={14} />
-                  {t(
-                    'redesign.playerBar.shuffleMenu',
+                  <span>{shuffleLabel}</span>
+                  {shuffleOn && (
+                    <Icon
+                      name="check"
+                      size={14}
+                      className="mp-menu-item__check"
+                    />
                   )}
                 </button>
                 <button
@@ -627,10 +672,10 @@ export function MiniPlayerBar() {
                     size={14}
                   />
                   {repeatMode === 'none'
-                    ? 'Повтор выкл.'
+                    ? t('redesign.player.repeatNone')
                     : repeatMode === 'one'
-                      ? 'Повтор трека'
-                      : 'Повтор всех'}
+                      ? t('redesign.player.repeatOne')
+                      : t('redesign.player.repeatAll')}
                 </button>
                 <button
                   className="mp-menu-item mp-menu-item--danger"

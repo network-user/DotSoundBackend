@@ -1,9 +1,11 @@
 from datetime import datetime
+from typing import Any
 
 import structlog
-from sqlalchemy import and_, delete, func, select
+from sqlalchemy import and_, delete, func, or_, select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.sql import Select
 from sqlalchemy.sql.elements import ColumnElement
 
 from app.models.like import Like
@@ -98,6 +100,7 @@ class LikeRepository:
         offset: int = 0,
         limit: int = 20,
         source_filter: str | None = None,
+        sort_order: str = "newest",
     ) -> tuple[list[tuple[Track, datetime]], int]:
         base_where = self._build_source_filter(
             source_filter,
@@ -119,10 +122,12 @@ class LikeRepository:
         total = count_result.scalar_one()
 
         tracks_result = await self._session.execute(
-            select(Track, Like.created_at)
-            .join(Like, Like.track_id == Track.id)
-            .where(base_where)
-            .order_by(Like.created_at.desc())
+            self._apply_sort(
+                select(Track, Like.created_at)
+                .join(Like, Like.track_id == Track.id)
+                .where(base_where),
+                sort_order,
+            )
             .offset(offset)
             .limit(limit)
         )
@@ -133,6 +138,63 @@ class LikeRepository:
             total=total,
         )
         return [(row[0], row[1]) for row in rows], total
+
+    async def list_liked_queue(
+        self,
+        user_id: int,
+        current_track_id: int,
+        limit: int,
+        source_filter: str | None = None,
+        sort_order: str = "newest",
+        shuffle: bool = False,
+        exclude_ids: set[int] | None = None,
+    ) -> list[tuple[Track, datetime]]:
+        base_where = self._build_source_filter(
+            source_filter,
+            and_(
+                Like.user_id == user_id,
+                Track.is_active.is_(True),
+                Track.is_public.is_(True),
+                self._exclude_hidden_sources(),
+                TrackRepository._playback_listing_allowed(),
+            ),
+        )
+        excluded = set(exclude_ids or set())
+        excluded.add(current_track_id)
+        stmt = (
+            select(Track, Like.created_at)
+            .join(Like, Like.track_id == Track.id)
+            .where(base_where)
+        )
+        if excluded:
+            stmt = stmt.where(~Track.id.in_(excluded))
+
+        if shuffle:
+            result = await self._session.execute(
+                stmt.order_by(func.random()).limit(limit)
+            )
+            return [(row[0], row[1]) for row in result.all()]
+
+        current_result = await self._session.execute(
+            select(Track, Like.created_at)
+            .join(Like, Like.track_id == Track.id)
+            .where(base_where, Track.id == current_track_id)
+            .limit(1)
+        )
+        current = current_result.first()
+        if current is not None:
+            stmt = stmt.where(
+                self._after_current_clause(
+                    sort_order,
+                    current[0],
+                    current[1],
+                )
+            )
+
+        result = await self._session.execute(
+            self._apply_sort(stmt, sort_order).limit(limit)
+        )
+        return [(row[0], row[1]) for row in result.all()]
 
     @staticmethod
     def _build_source_filter(
@@ -151,12 +213,67 @@ class LikeRepository:
             )
         return base_clause
 
+    @staticmethod
+    def _apply_sort(
+        stmt: Select[Any],
+        sort_order: str,
+    ) -> Select[Any]:
+        if sort_order == "oldest":
+            return stmt.order_by(Like.created_at.asc(), Track.id.asc())
+        if sort_order == "artist":
+            return stmt.order_by(
+                func.lower(func.coalesce(Track.artist, "")).asc(),
+                func.lower(Track.title).asc(),
+                Track.id.asc(),
+            )
+        return stmt.order_by(Like.created_at.desc(), Track.id.desc())
+
+    @staticmethod
+    def _after_current_clause(
+        sort_order: str,
+        track: Track,
+        liked_at: datetime,
+    ) -> ColumnElement[bool]:
+        if sort_order == "oldest":
+            return or_(
+                Like.created_at > liked_at,
+                and_(
+                    Like.created_at == liked_at,
+                    Track.id > track.id,
+                ),
+            )
+        if sort_order == "artist":
+            artist = (track.artist or "").lower()
+            title = track.title.lower()
+            row_artist = func.lower(func.coalesce(Track.artist, ""))
+            row_title = func.lower(Track.title)
+            return or_(
+                row_artist > artist,
+                and_(row_artist == artist, row_title > title),
+                and_(
+                    row_artist == artist,
+                    row_title == title,
+                    Track.id > track.id,
+                ),
+            )
+        return or_(
+            Like.created_at < liked_at,
+            and_(
+                Like.created_at == liked_at,
+                Track.id < track.id,
+            ),
+        )
+
     async def count_likes_for_user_tracks(self, user_id: int) -> int:
         result = await self._session.execute(
             select(func.count())
             .select_from(Like)
             .join(Track, Track.id == Like.track_id)
-            .where(Track.uploaded_by_id == user_id, Track.is_active.is_(True))
+            .where(
+                Track.uploaded_by_id == user_id,
+                Track.catalog_type == "ugc",
+                Track.is_active.is_(True),
+            )
             .where(self._exclude_hidden_sources())
         )
         return result.scalar_one()

@@ -1,7 +1,6 @@
 import {
   useCallback,
   useEffect,
-  useMemo,
   useRef,
   useState,
 } from 'react'
@@ -11,9 +10,14 @@ import { TrackList } from '@/components/TrackList/TrackList'
 import { MotionPress } from '@/components/ui/MotionPress'
 import { useAutoLoadMore } from '@/hooks/useAutoLoadMore'
 import { api } from '@/lib/api'
+import { playFromPaginatedCollection } from '@/lib/paginatedPlayback'
 import { getUserId } from '@/lib/telegram'
 import { usePrefetchTracks } from '@/store/PrefetchContext'
-import type { LikedTrack } from '@/types/api'
+import {
+  usePlayerActions,
+  usePlayerMeta,
+} from '@/store/PlayerContext'
+import type { LikedTrack, Track } from '@/types/api'
 
 interface LikedViewProps {
   embedded?: boolean
@@ -24,6 +28,7 @@ type SourceFilter = 'all' | 'platform' | 'soundcloud' | 'other'
 type LikedSort = 'newest' | 'oldest' | 'artist'
 
 const PAGE_SIZE = 20
+const PLAYBACK_QUEUE_SIZE = 80
 
 const SOURCE_FILTERS: { key: SourceFilter; labelKey: string }[] = [
   { key: 'all', labelKey: 'redesign.library.sourceAll' },
@@ -41,6 +46,8 @@ const SORT_OPTIONS: { key: LikedSort; labelKey: string }[] = [
 export function LikedView({ embedded = false }: LikedViewProps) {
   const { t } = useTranslation()
   const navigate = useNavigate()
+  const { playTrack } = usePlayerActions()
+  const { shuffleOn } = usePlayerMeta()
   const [tracks, setTracks] = useState<LikedTrack[] | null>(null)
   const [hasMore, setHasMore] = useState(false)
   const [loading, setLoading] = useState(false)
@@ -51,7 +58,12 @@ export function LikedView({ embedded = false }: LikedViewProps) {
   const pageRef = useRef(1)
 
   const fetchPage = useCallback(
-    async (page: number, filter: SourceFilter, reset: boolean) => {
+    async (
+      page: number,
+      filter: SourceFilter,
+      sort: LikedSort,
+      reset: boolean,
+    ) => {
       const uid = getUserId()
       if (!uid) {
         setTracks([])
@@ -65,6 +77,7 @@ export function LikedView({ embedded = false }: LikedViewProps) {
           page,
           PAGE_SIZE,
           filter !== 'all' ? filter : undefined,
+          sort,
         )
         setTracks((prev) =>
           reset || !prev
@@ -84,44 +97,53 @@ export function LikedView({ embedded = false }: LikedViewProps) {
 
   useEffect(() => {
     pageRef.current = 1
-    fetchPage(1, sourceFilter, true)
-  }, [sourceFilter, fetchPage])
+    fetchPage(1, sourceFilter, sortOrder, true)
+  }, [sourceFilter, sortOrder, fetchPage])
 
-  const displayedTracks = useMemo(() => {
-    if (!tracks || tracks.length === 0) return tracks
-    const copy = [...tracks]
-    if (sortOrder === 'oldest') {
-      copy.sort((a, b) => {
-        const da = a.liked_at
-          ? new Date(a.liked_at).getTime()
-          : 0
-        const db = b.liked_at
-          ? new Date(b.liked_at).getTime()
-          : 0
-        return da - db
+  const displayedTracks = tracks
+
+  const handlePlayTrack = useCallback(
+    (track: Track) => {
+      void playFromPaginatedCollection({
+        track,
+        loadedTracks: displayedTracks,
+        playTrack,
+        loadQueue: async (selected) => {
+          const uid = getUserId()
+          if (!uid) return []
+          const data = await api.getLikedPlaybackQueue(
+            uid,
+            selected.id,
+            PLAYBACK_QUEUE_SIZE,
+            sourceFilter !== 'all' ? sourceFilter : undefined,
+            sortOrder,
+            shuffleOn,
+            [selected.id],
+          )
+          return data.next_tracks
+        },
       })
-    } else if (sortOrder === 'artist') {
-      copy.sort((a, b) => {
-        const aa = (a.artist ?? '').localeCompare(
-          b.artist ?? '',
-          undefined,
-          { sensitivity: 'base' },
-        )
-        if (aa !== 0) return aa
-        return a.title.localeCompare(b.title, undefined, {
-          sensitivity: 'base',
-        })
-      })
-    }
-    return copy
-  }, [tracks, sortOrder])
+    },
+    [
+      displayedTracks,
+      playTrack,
+      shuffleOn,
+      sortOrder,
+      sourceFilter,
+    ],
+  )
 
   usePrefetchTracks(displayedTracks ?? null, 'library')
 
   const loadMore = useCallback(async () => {
     if (loading || !hasMore) return
-    fetchPage(pageRef.current + 1, sourceFilter, false)
-  }, [loading, hasMore, sourceFilter, fetchPage])
+    fetchPage(
+      pageRef.current + 1,
+      sourceFilter,
+      sortOrder,
+      false,
+    )
+  }, [loading, hasMore, sourceFilter, sortOrder, fetchPage])
 
   const sentinelRef = useAutoLoadMore({
     enabled: hasMore,
@@ -197,7 +219,9 @@ export function LikedView({ embedded = false }: LikedViewProps) {
       </div>
       <TrackList
         tracks={displayedTracks}
+        flavor="liked"
         emptyMessage={t('redesign.library.likedEmpty')}
+        onPlayTrack={handlePlayTrack}
         emptyCta={
           embedded
             ? {

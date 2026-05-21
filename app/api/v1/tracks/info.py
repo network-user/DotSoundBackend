@@ -29,7 +29,10 @@ _EMPTY_RESPONSE = TrackInfoResponse(
 @router.get(
     "/{track_id}/info",
     response_model=TrackInfoResponse,
-    summary="Get AI-generated info about a track (triggers fetch if stale/missing).",
+    summary=(
+        "Get AI-generated info about a track "
+        "(triggers fetch if stale/missing)."
+    ),
 )
 async def get_track_info(
     track_id: int,

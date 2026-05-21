@@ -15,6 +15,7 @@ export interface MorphIconProps {
 interface MorphPair {
   outline: string
   filled: string
+  mode?: 'fill' | 'line'
 }
 
 const PAIRS: Record<string, MorphPair> = {
@@ -50,17 +51,38 @@ const PAIRS: Record<string, MorphPair> = {
     filled:
       'M3 11l9-8 9 8v9a2 2 0 01-2 2h-3v-7H8v7H5a2 2 0 01-2-2v-9z',
   },
+  'nav-home': {
+    outline:
+      'M4.5 10.8L12 4l7.5 6.8v7.6a2.1 2.1 0 01-2.1 2.1h-3.1v-5.7H9.7v5.7H6.6a2.1 2.1 0 01-2.1-2.1v-7.6z',
+    filled:
+      'M4.5 10.8L12 4l7.5 6.8v7.6a2.1 2.1 0 01-2.1 2.1h-3.1v-5.7H9.7v5.7H6.6a2.1 2.1 0 01-2.1-2.1v-7.6z',
+    mode: 'line',
+  },
   search: {
     outline:
       'M21 21l-5.4-5.4M16 10.5A5.5 5.5 0 115 10.5a5.5 5.5 0 0111 0z',
     filled:
       'M21 21l-5.4-5.4M16 10.5A5.5 5.5 0 115 10.5a5.5 5.5 0 0111 0z',
   },
+  'nav-search': {
+    outline:
+      'M10.8 5.1a5.7 5.7 0 100 11.4 5.7 5.7 0 000-11.4zM15.1 15.1L20 20',
+    filled:
+      'M10.8 5.1a5.7 5.7 0 100 11.4 5.7 5.7 0 000-11.4zM15.1 15.1L20 20',
+    mode: 'line',
+  },
   library: {
     outline:
       'M4 4h3v16H4zM10 4h3v16h-3zM16 5l3-1 3 17-3 1-3-17z',
     filled:
       'M4 4h3v16H4zM10 4h3v16h-3zM16 5l3-1 3 17-3 1-3-17z',
+  },
+  'nav-library': {
+    outline:
+      'M5.1 5.1h3.2v13.8H5.1V5.1zM10.4 5.1h3.2v13.8h-3.2V5.1zM16.1 6l2.8-.8 3 13.2-2.8.8L16.1 6z',
+    filled:
+      'M5.1 5.1h3.2v13.8H5.1V5.1zM10.4 5.1h3.2v13.8h-3.2V5.1zM16.1 6l2.8-.8 3 13.2-2.8.8L16.1 6z',
+    mode: 'line',
   },
   chats: {
     outline:
@@ -73,6 +95,13 @@ const PAIRS: Record<string, MorphPair> = {
       'M12 12a4 4 0 100-8 4 4 0 000 8zm-7 9a7 7 0 0114 0H5z',
     filled:
       'M12 12a4 4 0 100-8 4 4 0 000 8zm-7 9a7 7 0 0114 0H5z',
+  },
+  'nav-profile': {
+    outline:
+      'M12 5.1a3.85 3.85 0 100 7.7 3.85 3.85 0 000-7.7zM5.5 20.2c.65-3.2 3.1-5.1 6.5-5.1s5.85 1.9 6.5 5.1',
+    filled:
+      'M12 5.1a3.85 3.85 0 100 7.7 3.85 3.85 0 000-7.7zM5.5 20.2c.65-3.2 3.1-5.1 6.5-5.1s5.85 1.9 6.5 5.1',
+    mode: 'line',
   },
   radio: {
     outline:
@@ -126,25 +155,30 @@ export function MorphIcon({
   }
 
   const target = filled ? pair.filled : pair.outline
+  const lineMode = pair.mode === 'line'
 
   return (
     <m.svg
       width={size}
       height={size}
       viewBox="0 0 24 24"
+      aria-hidden="true"
+      focusable="false"
       strokeLinecap="round"
       strokeLinejoin="round"
       className={className}
       style={{ fill: 'currentColor', stroke: 'currentColor' }}
       animate={{
-        fillOpacity: filled ? 1 : 0,
-        strokeOpacity: filled ? 0 : 1,
-        strokeWidth: filled ? 0 : 2,
+        fillOpacity: lineMode ? 0 : filled ? 1 : 0,
+        strokeOpacity: lineMode ? 1 : filled ? 0 : 1,
+        strokeWidth: lineMode ? (filled ? 2.35 : 2) : filled ? 0 : 2,
       }}
       transition={reduce ? { duration: 0 } : TWEEN_FAST}
     >
       <m.path
         key={name}
+        fillRule="evenodd"
+        vectorEffect="non-scaling-stroke"
         animate={{ d: target }}
         initial={false}
         transition={

@@ -2,6 +2,7 @@ from unittest.mock import AsyncMock, patch
 
 import pytest
 from httpx import AsyncClient
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from tests.conftest import (
     auth_headers,
@@ -60,6 +61,7 @@ async def test_soundcloud_import_requires_auth(
 
 async def test_soundcloud_import_uses_current_user(
     client: AsyncClient,
+    db_session: AsyncSession,
 ) -> None:
     owner = await create_test_user(
         client, 800003, first_name="Importer"
@@ -117,7 +119,7 @@ async def test_soundcloud_import_uses_current_user(
     assert response.status_code == 201
     assert (
         response.json()["uploaded_by_id"]
-        == owner["id"]
+        is None
     )
     assert (
         response.json()["catalog_type"]
@@ -132,3 +134,10 @@ async def test_soundcloud_import_uses_current_user(
         == "soundcloud"
     )
     assert response.json()["source_url"] == sc_url
+
+    from app.repositories.user_track_library import (
+        UserTrackLibraryRepository,
+    )
+
+    library = UserTrackLibraryRepository(db_session)
+    assert await library.has(owner["id"], response.json()["id"]) is True

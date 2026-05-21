@@ -225,7 +225,9 @@ class AlbumService:
                 status_code=status.HTTP_404_NOT_FOUND, detail="Track not found"
             )
         resolved = await self._resolve_user_id(user_id)
-        if not allow_admin and track.uploaded_by_id != resolved:
+        if not allow_admin and (
+            track.uploaded_by_id != resolved or track.catalog_type != "ugc"
+        ):
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail="Can only add own tracks to album",

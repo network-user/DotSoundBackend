@@ -1130,7 +1130,7 @@ async def test_import_or_get_track_dedup_via_unique_index(
     second = await svc.import_or_get_track(sc_data, uploader_id=2)
 
     assert first.id == second.id
-    assert first.uploaded_by_id == 1
+    assert first.uploaded_by_id is None
 
 
 def test_normalize_soundcloud_permalink_slug() -> None:

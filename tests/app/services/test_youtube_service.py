@@ -1,4 +1,8 @@
+import pytest
+from sqlalchemy.ext.asyncio import AsyncSession
+
 from app.services.youtube_service import (
+    YouTubeService,
     _yt_is_bot_gate_error,
     _yt_pick_stream_url,
 )
@@ -35,3 +39,24 @@ def test_yt_is_bot_gate_error_true() -> None:
 def test_yt_is_bot_gate_error_false() -> None:
     exc = RuntimeError("Requested format is not available")
     assert _yt_is_bot_gate_error(exc) is False
+
+
+@pytest.mark.anyio
+async def test_import_or_get_track_creates_ownerless_external_reference(
+    db_session: AsyncSession,
+) -> None:
+    svc = YouTubeService(db_session)
+
+    track = await svc.import_or_get_track(
+        {
+            "id": "abcdefghijk",
+            "title": "YT Song",
+            "uploader": "Artist",
+            "duration": 120,
+            "webpage_url": "https://www.youtube.com/watch?v=abcdefghijk",
+        },
+        uploader_id=123,
+    )
+
+    assert track.catalog_type == "external_reference"
+    assert track.uploaded_by_id is None

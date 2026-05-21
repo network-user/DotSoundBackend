@@ -92,6 +92,25 @@ async def test_get_card_private_owner_sees(
     assert card is not None
 
 
+async def test_get_card_private_external_importer_not_owner(
+    session: AsyncSession,
+) -> None:
+    owner = await _make_user(session, 2203)
+    track = await _make_track(session, owner, is_public=False)
+    track.catalog_type = "external_reference"
+    track.access_mode = "third_party_stream"
+    track.source = "soundcloud"
+    track.source_platform = "soundcloud"
+    track.imported_from = "soundcloud"
+    track.file_key = None
+    await session.flush()
+
+    svc = CardService(session)
+    card = await svc.get_card(track.id, requester_id=owner.id)
+
+    assert card is None
+
+
 async def test_get_card_with_cover(
     session: AsyncSession,
 ) -> None:

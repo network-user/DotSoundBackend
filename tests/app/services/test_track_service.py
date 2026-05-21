@@ -145,6 +145,39 @@ async def test_list_by_user(
     assert total == 1
 
 
+async def test_delete_by_owner_unlinks_external_import(
+    session: AsyncSession,
+) -> None:
+    uid = await _make_user(session, telegram_id=501)
+    repo = TrackRepository(session)
+    track = await repo.create(
+        title="External",
+        artist="A",
+        uploaded_by_id=uid,
+        source="soundcloud",
+        source_platform="soundcloud",
+        imported_from="soundcloud",
+        catalog_type="external_reference",
+        access_mode="third_party_stream",
+    )
+    from app.repositories.user_track_library import (
+        UserTrackLibraryRepository,
+    )
+
+    library = UserTrackLibraryRepository(session)
+    await library.add(uid, track.id, source="soundcloud")
+
+    svc = TrackService(session)
+    result = await svc.delete_by_owner(track.id, uid)
+
+    assert result is not None
+    await session.refresh(track)
+    assert track.is_active is True
+    assert track.deleted_at is None
+    assert track.uploaded_by_id is None
+    assert await library.has(uid, track.id) is False
+
+
 async def test_get_genres(
     session: AsyncSession,
 ) -> None:

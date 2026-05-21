@@ -10,6 +10,7 @@ from app.models.user import User
 from app.schemas.track import SCSearchResult, TrackResponse
 from app.services.soundcloud_service import SoundCloudService
 from app.services.track_response_build import build_track_response
+from app.services.track_service import TrackService
 
 router = APIRouter(prefix="/soundcloud", tags=["soundcloud"])
 logger: structlog.stdlib.BoundLogger = structlog.get_logger(__name__)
@@ -88,6 +89,12 @@ async def import_soundcloud_track(
         uploader_id=current_user.id,
         is_public=data.is_public,
     )
+    await TrackService(session).add_to_library(
+        user_id=current_user.id,
+        track_id=track.id,
+        source="soundcloud",
+    )
+    await session.commit()
     if track.artist:
         from app.services.artist_service import ArtistService
 

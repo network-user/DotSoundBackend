@@ -12,6 +12,8 @@ from app.schemas.user import UserResponse
 class AdminTrackResponse(TrackResponse):
     uploaded_by_id: int | None = None
     is_active: bool = True
+    deleted_at: datetime | None = None
+    deleted_by_id: int | None = None
     deleted_reason: str | None = None
     lyrics_catalog_miss_at: datetime | None = None
     has_synced_timecodes: bool = False

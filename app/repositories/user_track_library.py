@@ -2,6 +2,7 @@ import structlog
 from sqlalchemy import and_, delete, func, or_, select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.sql.elements import ColumnElement
 
 from app.models.like import Like
 from app.models.track import Track
@@ -11,12 +12,16 @@ from app.repositories.track import TrackRepository
 logger: structlog.stdlib.BoundLogger = structlog.get_logger(__name__)
 
 
+def _result_rowcount(result: object) -> int:
+    return int(getattr(result, "rowcount", 0) or 0)
+
+
 class UserTrackLibraryRepository:
     def __init__(self, session: AsyncSession) -> None:
         self._session = session
 
     @staticmethod
-    def _exclude_hidden_sources():  # noqa: ANN205
+    def _exclude_hidden_sources() -> ColumnElement[bool]:
         hidden = ("youtube",)
         source_platform = func.lower(
             func.coalesce(Track.source_platform, "")
@@ -29,17 +34,30 @@ class UserTrackLibraryRepository:
         )
 
     @staticmethod
-    def _current_user_link_condition(user_id: int):  # noqa: ANN205
+    def _current_user_link_condition(user_id: int) -> ColumnElement[bool]:
         return and_(
             UserTrackLibrary.track_id == Track.id,
             UserTrackLibrary.user_id == user_id,
         )
 
     @staticmethod
-    def _visible_to_library_owner(user_id: int):  # noqa: ANN205
+    def _visible_to_library_owner(user_id: int) -> ColumnElement[bool]:
         return or_(
             UserTrackLibrary.user_id == user_id,
-            Track.uploaded_by_id == user_id,
+            and_(
+                Track.uploaded_by_id == user_id,
+                Track.catalog_type == "ugc",
+            ),
+        )
+
+    @staticmethod
+    def _library_import_condition() -> ColumnElement[bool]:
+        return or_(
+            Track.imported_from.isnot(None),
+            and_(
+                UserTrackLibrary.source.isnot(None),
+                UserTrackLibrary.source != "upload",
+            ),
         )
 
     async def add(
@@ -61,7 +79,7 @@ class UserTrackLibraryRepository:
             .on_conflict_do_nothing(index_elements=["user_id", "track_id"])
         )
         result = await self._session.execute(stmt)
-        added = bool(result.rowcount)
+        added = _result_rowcount(result) > 0
         if added:
             logger.debug(
                 "db_library_added",
@@ -78,7 +96,7 @@ class UserTrackLibraryRepository:
                 UserTrackLibrary.track_id == track_id,
             )
         )
-        removed = bool(result.rowcount)
+        removed = _result_rowcount(result) > 0
         logger.debug(
             "db_library_removed",
             user_id=user_id,
@@ -166,10 +184,15 @@ class UserTrackLibraryRepository:
             .where(base)
         )
         imported_ids = (
-            select(Track.id).where(
+            select(Track.id)
+            .join(
+                UserTrackLibrary,
+                UserTrackLibrary.track_id == Track.id,
+            )
+            .where(
                 base,
-                Track.uploaded_by_id == user_id,
-                Track.imported_from.isnot(None),
+                UserTrackLibrary.user_id == user_id,
+                self._library_import_condition(),
             )
         )
         all_ids_subq = liked_ids.union(imported_ids).subquery()

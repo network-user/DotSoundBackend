@@ -188,6 +188,38 @@ async def test_delete_comment_by_author(
 
 
 @patch(f"{_WS}.broadcast_to_online", new_callable=AsyncMock)
+async def test_external_importer_cannot_moderate_comments(
+    mock_ws: AsyncMock,
+    session: AsyncSession,
+) -> None:
+    owner = await _make_user(session, 1701)
+    author = await _make_user(session, 1702)
+    track = await _make_track(session, owner)
+    track.catalog_type = "external_reference"
+    track.access_mode = "third_party_stream"
+    track.source = "soundcloud"
+    track.source_platform = "soundcloud"
+    track.imported_from = "soundcloud"
+    track.file_key = None
+    await session.flush()
+
+    svc = CommentService(session)
+    comment = await svc.add_comment(
+        track.id,
+        author.id,
+        "public comment",
+    )
+
+    with pytest.raises(HTTPException) as delete_exc:
+        await svc.delete_comment(comment["id"], owner.id)
+    with pytest.raises(HTTPException) as pin_exc:
+        await svc.pin_comment(comment["id"], owner.id)
+
+    assert delete_exc.value.status_code == 403
+    assert pin_exc.value.status_code == 403
+
+
+@patch(f"{_WS}.broadcast_to_online", new_callable=AsyncMock)
 async def test_delete_comment_not_found(
     mock_ws: AsyncMock,
     session: AsyncSession,

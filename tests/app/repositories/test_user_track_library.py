@@ -92,6 +92,29 @@ async def test_list_includes_owned_track_without_library_row(
     assert [t.id for t in tracks] == [track.id]
 
 
+async def test_list_excludes_external_owner_marker_without_library_row(
+    session: AsyncSession,
+) -> None:
+    user = await _make_user(session, telegram_id=718)
+    track_repo = TrackRepository(session)
+    track = await track_repo.create(
+        title="External",
+        artist="A",
+        uploaded_by_id=user.id,
+        source="soundcloud",
+        source_platform="soundcloud",
+        imported_from="soundcloud",
+        catalog_type="external_reference",
+        access_mode="third_party_stream",
+    )
+
+    repo = UserTrackLibraryRepository(session)
+    tracks, total = await repo.list_by_user(user.id)
+
+    assert total == 0
+    assert track.id not in [t.id for t in tracks]
+
+
 async def test_count_includes_owned_track_without_library_row(
     session: AsyncSession,
 ) -> None:
@@ -101,6 +124,21 @@ async def test_count_includes_owned_track_without_library_row(
     repo = UserTrackLibraryRepository(session)
 
     assert await repo.count_by_user(user.id) == 1
+
+
+async def test_list_liked_or_imported_uses_library_source_for_local_match(
+    session: AsyncSession,
+) -> None:
+    owner = await _make_user(session, telegram_id=719)
+    importer = await _make_user(session, telegram_id=720)
+    track = await _make_track(session, owner.id, title="Local")
+    repo = UserTrackLibraryRepository(session)
+    await repo.add(importer.id, track.id, source="yandex_music")
+
+    tracks, total = await repo.list_liked_or_imported(importer.id)
+
+    assert total == 1
+    assert [t.id for t in tracks] == [track.id]
 
 
 async def test_owned_track_not_duplicated_by_other_user_library(

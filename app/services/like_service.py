@@ -1,6 +1,6 @@
-import structlog
 from datetime import datetime
 
+import structlog
 from fastapi import HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -74,6 +74,7 @@ class LikeService:
     async def collapse_liked_rows(
         self,
         rows: list[tuple[Track, datetime]],
+        sort_order: str = "newest",
     ) -> list[tuple[Track, datetime]]:
         if not rows:
             return []
@@ -82,10 +83,17 @@ class LikeService:
         for tr, la in rows:
             g = frozenset(await pvs.resolve_variant_track_ids(tr))
             cur = by_group.get(g)
-            if cur is None or la > cur[1]:
+            if (
+                cur is None
+                or (sort_order == "newest" and la > cur[1])
+                or (sort_order == "oldest" and la < cur[1])
+            ):
                 by_group[g] = (tr, la)
         out = list(by_group.values())
-        out.sort(key=lambda x: x[1], reverse=True)
+        if sort_order == "newest":
+            out.sort(key=lambda x: x[1], reverse=True)
+        elif sort_order == "oldest":
+            out.sort(key=lambda x: x[1])
         return out
 
     async def list_liked(
@@ -94,6 +102,7 @@ class LikeService:
         page: int = 1,
         size: int = 20,
         source_filter: str | None = None,
+        sort_order: str = "newest",
     ) -> tuple[list[tuple[Track, datetime]], int]:
         user = await self._user_repo.get_by_id(user_id)
         if not user:
@@ -108,14 +117,43 @@ class LikeService:
             offset=offset,
             limit=size,
             source_filter=source_filter,
+            sort_order=sort_order,
         )
-        collapsed = await self.collapse_liked_rows(rows)
+        collapsed = await self.collapse_liked_rows(rows, sort_order)
         logger.info(
             "liked_tracks_listed",
             user_id=user.id,
             total=total,
         )
         return collapsed, total
+
+    async def list_liked_queue(
+        self,
+        user_id: int,
+        current_track_id: int,
+        size: int = 80,
+        source_filter: str | None = None,
+        sort_order: str = "newest",
+        shuffle: bool = False,
+        exclude_ids: set[int] | None = None,
+    ) -> list[Track]:
+        user = await self._user_repo.get_by_id(user_id)
+        if not user:
+            user = await self._user_repo.get_by_telegram_id(user_id)
+        if not user:
+            return []
+        rows = await self._repo.list_liked_queue(
+            user_id=user.id,
+            current_track_id=current_track_id,
+            limit=size,
+            source_filter=source_filter,
+            sort_order=sort_order,
+            shuffle=shuffle,
+            exclude_ids=exclude_ids,
+        )
+        collapse_order = "shuffle" if shuffle else sort_order
+        collapsed = await self.collapse_liked_rows(rows, collapse_order)
+        return [track for track, _liked_at in collapsed[:size]]
 
     async def is_liked(
         self, user_id: int, track_id: int

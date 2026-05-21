@@ -68,12 +68,12 @@ class LyricsService:
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail="User not found",
             )
-        if track.catalog_type == "external_reference":
+        if track.catalog_type != "ugc":
             if not user.is_admin:
                 raise HTTPException(
                     status_code=status.HTTP_403_FORBIDDEN,
                     detail=(
-                        "Lyrics for imported tracks can "
+                        "Lyrics for non-UGC tracks can "
                         "only be edited by admins"
                     ),
                 )
@@ -96,7 +96,11 @@ class LyricsService:
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail="Track not found",
             )
-        is_owner = requester_id and track.uploaded_by_id == requester_id
+        is_owner = (
+            requester_id
+            and track.uploaded_by_id == requester_id
+            and track.catalog_type == "ugc"
+        )
         if not track.is_public and not is_owner:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,

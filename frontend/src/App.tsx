@@ -272,39 +272,117 @@ function AnimatedRoutes({
 }) {
   const location = useLocation()
   const [displayed, setDisplayed] = useState(location)
-  const prevPathRef = useRef(location.pathname)
+  const prevLocationRef = useRef(location)
 
   useEffect(() => {
-    if (prevPathRef.current === location.pathname) return
+    const from = prevLocationRef.current
+    const fromKey = routeLocationKey(from)
+    const toKey = routeLocationKey(location)
 
-    const fromPath = prevPathRef.current
-    prevPathRef.current = location.pathname
+    if (fromKey === toKey) return
 
+    prevLocationRef.current = location
     const skipViewTransition =
-      fromPath === '/radio' || location.pathname === '/radio'
+      from.pathname === '/radio' || location.pathname === '/radio'
 
     const doc = document as Document & {
       startViewTransition?: (
         cb: () => void,
-      ) => unknown
+      ) => { finished?: Promise<unknown> }
     }
     if (
       skipViewTransition ||
+      shouldSkipRouteMotion() ||
       typeof doc.startViewTransition !== 'function'
     ) {
       setDisplayed(location)
       return
     }
-    doc.startViewTransition(() => {
+
+    const direction = getRouteTransitionDirection(
+      from.pathname,
+      location.pathname,
+    )
+    const root = document.documentElement
+    root.dataset.routeTransition = direction
+
+    const transition = doc.startViewTransition(() => {
       flushSync(() => {
         setDisplayed(location)
       })
     })
+    const cleanup = () => {
+      if (root.dataset.routeTransition === direction) {
+        delete root.dataset.routeTransition
+      }
+    }
+    if (transition.finished) {
+      void transition.finished.finally(cleanup)
+    } else {
+      window.setTimeout(cleanup, 360)
+    }
   }, [location])
 
   return (
-    <Routes location={displayed}>{children}</Routes>
+    <div className="rb-route-transition">
+      <Routes location={displayed}>{children}</Routes>
+    </div>
   )
+}
+
+function routeLocationKey(location: {
+  pathname: string
+  search: string
+  hash: string
+}) {
+  return `${location.pathname}${location.search}${location.hash}`
+}
+
+const ROUTE_ORDER = ['/', '/library', '/search', '/profile']
+
+function getRouteRank(pathname: string): number | null {
+  const index = ROUTE_ORDER.findIndex((path) => {
+    if (path === '/') return pathname === '/'
+    return pathname === path || pathname.startsWith(`${path}/`)
+  })
+  return index >= 0 ? index : null
+}
+
+function getRouteTransitionDirection(
+  fromPath: string,
+  toPath: string,
+): 'forward' | 'back' | 'neutral' {
+  const fromRank = getRouteRank(fromPath)
+  const toRank = getRouteRank(toPath)
+  if (
+    fromRank !== null &&
+    toRank !== null &&
+    fromRank !== toRank
+  ) {
+    return toRank > fromRank ? 'forward' : 'back'
+  }
+
+  const fromDepth = fromPath.split('/').filter(Boolean).length
+  const toDepth = toPath.split('/').filter(Boolean).length
+  if (toDepth > fromDepth) return 'forward'
+  if (toDepth < fromDepth) return 'back'
+  return 'neutral'
+}
+
+function shouldSkipRouteMotion() {
+  if (
+    typeof window === 'undefined' ||
+    typeof window.matchMedia !== 'function'
+  ) {
+    return false
+  }
+  try {
+    return window.matchMedia(
+      '(prefers-reduced-motion: reduce)',
+    ).matches
+  } catch {
+    return false
+  }
 }
 
 function useDeferredRender(

@@ -234,15 +234,81 @@ async def test_video_proxy_success(
     )
     await db_session.commit()
 
+    video_meta = SimpleNamespace(
+        content_length=len(video_bytes),
+        content_range=None,
+        content_type="video/mp4",
+        etag="vid123",
+        last_modified=None,
+        accept_ranges="bytes",
+    )
+
+    async def _video_body() -> AsyncIterator[bytes]:
+        yield video_bytes
+
     with patch(
-        "app.core.s3.download_object",
+        "app.core.s3.open_object_range",
         new_callable=AsyncMock,
-        return_value=video_bytes,
-    ):
+        return_value=(video_meta, _video_body()),
+    ) as mock_range:
         r = await client.get(f"/api/v1/tracks/{t['id']}/video")
     assert r.status_code == 200
+    mock_range.assert_awaited_once_with("videos/px1.mp4", None)
+    assert r.content == video_bytes
     assert r.headers["content-type"] == "video/mp4"
     assert r.headers["cache-control"] == "public, max-age=3600"
+    assert r.headers["accept-ranges"] == "bytes"
+    assert r.headers["etag"] == '"vid123"'
+
+
+async def test_video_proxy_supports_range_requests(
+    client: AsyncClient,
+    db_session: AsyncSession,
+) -> None:
+    user = await create_test_user(client, 50022)
+    t = await create_test_track(client, "VidRange", user["id"])
+    await db_session.execute(
+        update(Track)
+        .where(Track.id == t["id"])
+        .values(video_key="video-blobs/aa/range.mp4")
+    )
+    await db_session.commit()
+
+    video_chunk = b"ftyp"
+    video_meta = SimpleNamespace(
+        content_length=len(video_chunk),
+        content_range="bytes 0-3/104",
+        content_type="video/mp4",
+        etag=None,
+        last_modified=None,
+        accept_ranges="bytes",
+    )
+
+    async def _video_body() -> AsyncIterator[bytes]:
+        yield video_chunk
+
+    with patch(
+        "app.core.s3.open_object_range",
+        new_callable=AsyncMock,
+        return_value=(video_meta, _video_body()),
+    ) as mock_range:
+        r = await client.get(
+            f"/api/v1/tracks/{t['id']}/video",
+            headers={"Range": "bytes=0-3"},
+        )
+
+    assert r.status_code == 206
+    mock_range.assert_awaited_once_with(
+        "video-blobs/aa/range.mp4",
+        "bytes=0-3",
+    )
+    assert r.content == video_chunk
+    assert r.headers["content-range"] == "bytes 0-3/104"
+    assert r.headers["content-length"] == str(len(video_chunk))
+    assert (
+        r.headers["cache-control"]
+        == "public, max-age=31536000, immutable"
+    )
 
 
 async def test_video_proxy_not_found(

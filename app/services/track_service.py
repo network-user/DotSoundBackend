@@ -1,7 +1,6 @@
 import structlog
-from sqlalchemy.ext.asyncio import AsyncSession
-
 from dotsound_private_core import censor_text
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.track import Track
 from app.models.user import User
@@ -16,6 +15,7 @@ logger: structlog.stdlib.BoundLogger = structlog.get_logger(__name__)
 
 class TrackService:
     def __init__(self, session: AsyncSession) -> None:
+        self._session = session
         self._repo = TrackRepository(session)
         self._user_repo = UserRepository(session)
         self._library_repo = UserTrackLibraryRepository(session)
@@ -81,7 +81,9 @@ class TrackService:
             )
             return None
         if is_track_playback_suppressed(track) and (
-            viewer is None or track.uploaded_by_id != viewer.id
+            viewer is None
+            or track.uploaded_by_id != viewer.id
+            or track.catalog_type != "ugc"
         ):
             logger.info(
                 "track_hidden_playback_suppression",
@@ -345,16 +347,28 @@ class TrackService:
             await schedule_reindex_track(out.id)
         return out
 
+    async def add_to_library(
+        self,
+        *,
+        user_id: int,
+        track_id: int,
+        source: str | None,
+    ) -> bool:
+        return await self._library_repo.add(
+            user_id=user_id,
+            track_id=track_id,
+            source=source,
+        )
+
     async def update_track(
         self,
         track_id: int,
         user_id: int,
         **fields: object,
     ) -> Track | None:
-        if isinstance(fields.get("description"), str):
-            fields["description"] = censor_text(
-                fields["description"]
-            )
+        description = fields.get("description")
+        if isinstance(description, str):
+            fields["description"] = censor_text(description)
         out = await self._repo.update_track(
             track_id=track_id,
             user_id=user_id,
@@ -373,10 +387,9 @@ class TrackService:
         track_id: int,
         **fields: object,
     ) -> Track | None:
-        if isinstance(fields.get("description"), str):
-            fields["description"] = censor_text(
-                fields["description"]
-            )
+        description = fields.get("description")
+        if isinstance(description, str):
+            fields["description"] = censor_text(description)
         out = await self._repo.admin_update_track(
             track_id=track_id,
             **fields,
@@ -392,16 +405,40 @@ class TrackService:
     async def delete_by_owner(
         self, track_id: int, user_id: int
     ) -> Track | None:
-        out = await self._repo.delete_by_owner(
-            track_id=track_id, user_id=user_id
-        )
-        if out is not None:
+        track = await self._repo.get_by_id(track_id)
+        if track is None or track.deleted_at is not None:
+            return None
+        if track.uploaded_by_id == user_id and track.catalog_type == "ugc":
+            out = await self._repo.delete_by_owner(
+                track_id=track_id, user_id=user_id
+            )
+            if out is None:
+                return None
             from app.services.search_index_notify import (
                 schedule_delete_track,
             )
 
             await schedule_delete_track(track_id)
-        return out
+            return out
+
+        removed = await self._library_repo.remove(
+            user_id=user_id,
+            track_id=track_id,
+        )
+        detached_external_owner = False
+        if track.uploaded_by_id == user_id and track.catalog_type != "ugc":
+            track.uploaded_by_id = None
+            await self._session.flush()
+            detached_external_owner = True
+        if removed or detached_external_owner:
+            logger.info(
+                "track_library_unlinked",
+                track_id=track_id,
+                user_id=user_id,
+                catalog_type=track.catalog_type,
+            )
+            return track
+        return None
 
     async def restore_by_owner(
         self, track_id: int, user_id: int

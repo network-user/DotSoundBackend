@@ -901,6 +901,46 @@ async def test_admin_delete_track_not_found(
     assert r.status_code == 404
 
 
+async def test_admin_deleted_tracks_can_be_listed_and_restored(
+    client: AsyncClient,
+    db_session: AsyncSession,
+) -> None:
+    admin = await create_test_user(client, 130016)
+    headers = await admin_bearer_for_user(
+        client, db_session, user_id=admin["id"]
+    )
+    track = await _create_track(
+        db_session,
+        title="Restore Me",
+        uploader_id=admin["id"],
+    )
+
+    deleted = await client.delete(
+        f"/api/v1/admin/tracks/{track['id']}",
+        headers=headers,
+    )
+    assert deleted.status_code == 204
+
+    listed = await client.get(
+        "/api/v1/admin/tracks/deleted",
+        headers=headers,
+        params={"search": "Restore Me"},
+    )
+    assert listed.status_code == 200
+    rows = listed.json()["items"]
+    assert [row["id"] for row in rows] == [track["id"]]
+    assert rows[0]["deleted_at"] is not None
+    assert rows[0]["deleted_by_id"] == admin["id"]
+
+    restored = await client.post(
+        f"/api/v1/admin/tracks/{track['id']}/restore",
+        headers=headers,
+    )
+    assert restored.status_code == 200
+    assert restored.json()["is_active"] is True
+    assert restored.json()["deleted_at"] is None
+
+
 async def test_non_admin_rejected(
     client: AsyncClient,
 ) -> None:

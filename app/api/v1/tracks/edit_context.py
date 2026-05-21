@@ -44,7 +44,10 @@ async def get_edit_context(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Track not found",
         )
-    owns = track.uploaded_by_id == current_user.id
+    owns = (
+        track.uploaded_by_id == current_user.id
+        and track.catalog_type == "ugc"
+    )
     if not owns and not current_user.is_admin:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,

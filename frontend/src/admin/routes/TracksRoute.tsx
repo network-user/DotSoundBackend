@@ -33,6 +33,8 @@ interface TrackRow {
   is_active: boolean
   uploaded_by_id: number | null
   created_at: string
+  deleted_at?: string | null
+  deleted_by_id?: number | null
   access_mode?: string
   source_platform?: string | null
   sc_url?: string | null
@@ -1213,10 +1215,20 @@ export function TracksRoute() {
         ),
     },
     {
-      header: t('admin.tracks.colUploaded'),
+      header:
+        listView === 'deleted'
+          ? t('admin.tracks.colDeletedAt', 'Deleted')
+          : t('admin.tracks.colUploaded'),
       accessorKey: 'created_at',
-      cell: (i) =>
-        new Date(i.row.original.created_at).toLocaleDateString(),
+      cell: (i) => {
+        const value =
+          listView === 'deleted'
+            ? i.row.original.deleted_at
+            : i.row.original.created_at
+        return value
+          ? new Date(value).toLocaleDateString()
+          : '-'
+      },
     },
     {
       header: '',
@@ -1514,7 +1526,7 @@ export function TracksRoute() {
               value: 'sc_encrypted_unsupported',
               label: 'SC encrypted',
             },
-            { value: 'deleted', label: 'Deleted' },
+            { value: 'deleted', label: 'Deleted / restore' },
           ]}
         />
         {listView === 'playback_failures' && (

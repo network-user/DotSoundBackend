@@ -36,6 +36,7 @@ import {
   coverProxySrcSet,
   coverProxyUrl,
 } from '@/lib/coverProxy'
+import { PlaybackModeIndicator } from '@/components/PlayerBar/PlaybackModeIndicator'
 
 interface Props {
   track: Track
@@ -48,6 +49,7 @@ interface Props {
    * card is clicked. If omitted, only the single track is played.
    */
   contextTracks?: Track[] | null
+  onPlay?: (track: Track) => void
 }
 
 function TrackCardInner({
@@ -57,10 +59,11 @@ function TrackCardInner({
   onDeleted,
   onVisibilityChanged,
   contextTracks = null,
+  onPlay,
 }: Props) {
   const { t } = useTranslation()
   const { isLiked, toggleLike } = useLikes()
-  const { track: currentTrack } = usePlayerMeta()
+  const { track: currentTrack, shuffleOn } = usePlayerMeta()
   const { isPlaying, isPlaybackLoading } =
     usePlayerPlayback()
   const { playTrack, addToQueue, togglePlay } = usePlayerActions()
@@ -93,7 +96,8 @@ function TrackCardInner({
   const internalId = getInternalUserId()
   const isOwner =
     internalId !== null &&
-    track.uploaded_by_id === internalId
+    track.uploaded_by_id === internalId &&
+    track.catalog_type === 'ugc'
   const coverSrc = track.cover_key
     ? coverProxyUrl(track.cover_key, { width: 120 })
     : null
@@ -198,6 +202,10 @@ function TrackCardInner({
   const handleClick = () => {
     if (isCurrentTrack) {
       togglePlay()
+      return
+    }
+    if (onPlay) {
+      onPlay(track)
       return
     }
     if (contextTracks && contextTracks.length > 0) {
@@ -361,6 +369,12 @@ function TrackCardInner({
                 summarySuffix,
               )}
             </p>
+            {isCurrentTrack && (
+              <PlaybackModeIndicator
+                shuffleOn={shuffleOn}
+                variant="track-card"
+              />
+            )}
           </div>
           <div
             className="track-card-actions"

@@ -38,6 +38,7 @@ class DedupeService:
             select(Track)
             .where(
                 Track.uploaded_by_id == user_id,
+                Track.catalog_type == "ugc",
                 Track.audio_hash == audio_hash,
                 Track.is_active.is_(True),
             )
@@ -58,6 +59,7 @@ class DedupeService:
             select(Track)
             .where(
                 Track.uploaded_by_id == user_id,
+                Track.catalog_type == "ugc",
                 Track.source_sha256 == source_sha256,
                 Track.is_active.is_(True),
             )

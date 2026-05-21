@@ -2,6 +2,7 @@ import {
   useEffect,
   useRef,
   useState,
+  type CSSProperties,
 } from 'react'
 import { useTranslation } from 'react-i18next'
 import { api } from '@/lib/api'
@@ -15,6 +16,10 @@ import { Icon } from '@/components/Icon/Icon'
 import { MotionPress } from '@/components/ui/MotionPress'
 import type { LyricsResponse } from '@/types/api'
 import { LyricsEditor } from './LyricsEditor'
+
+function clampPct(value: number): number {
+  return Math.min(100, Math.max(0, value))
+}
 
 interface Props {
   trackId: number
@@ -174,7 +179,7 @@ export function LyricsPanel({
       !lyrics?.synced_lines?.length
     )
       return -1
-    let idx = 0
+    let idx = -1
     for (
       let i = 0;
       i < lyrics.synced_lines.length;
@@ -203,6 +208,26 @@ export function LyricsPanel({
     selectedTranslation?.translated_text ??
     lyrics?.plain_text ??
     ''
+  const firstLineLeadInMs =
+    showSync &&
+    lyrics?.synced_lines?.length &&
+    activeIdx < 0
+      ? Math.max(0, lyrics.synced_lines[0].time_ms - adjustedMs)
+      : null
+
+  const lineProgressPct = (lineIndex: number): number => {
+    const lines = lyrics?.synced_lines
+    if (!lines || lineIndex < 0) return 0
+    const current = lines[lineIndex]
+    const next = lines[lineIndex + 1]
+    const endMs =
+      next?.time_ms ??
+      (duration ? duration * 1000 : current.time_ms + 3500)
+    const spanMs = Math.max(1, endMs - current.time_ms)
+    return clampPct(
+      ((adjustedMs - current.time_ms) / spanMs) * 100,
+    )
+  }
 
   useEffect(() => {
     if (activeRef.current) {
@@ -950,33 +975,46 @@ export function LyricsPanel({
   return (
     <div className="lyrics-panel">
       <div className="lyrics-panel-header">
-        <span className="lyrics-panel-title">
-          {t('lyrics.title', 'Текст')}
-        </span>
-        {hasSyncData && (
-          <label className="lyrics-sync-toggle">
-            <input
-              type="checkbox"
-              checked={showSync}
-              onChange={(e) =>
-                setShowSync(e.target.checked)
-              }
-            />
-            <span>
-              {t(
-                'lyrics.showSync',
-                'Подсветка по строкам',
-              )}
+        <div className="lyrics-panel-heading">
+          <span className="lyrics-panel-title">
+            {t('lyrics.title', 'Lyrics')}
+          </span>
+          {hasSyncData && (
+            <span className="lyrics-sync-badge">
+              {lyrics.sync_quality === 'word'
+                ? t('lyrics.syncQualityWord', 'Word sync')
+                : t('lyrics.syncQualityLine', 'Line sync')}
             </span>
-          </label>
-        )}
-        {hasWordTimes && (
-          <label className="lyrics-sync-toggle">
-            <input
-              type="checkbox"
-              checked={karaokeActive}
-              onChange={(e) => {
-                const next = e.target.checked
+          )}
+        </div>
+        <div className="lyrics-panel-controls">
+          {hasSyncData && (
+            <MotionPress
+              type="button"
+              variant="ghost"
+              haptic="selection"
+              className={`lyrics-mode-btn${
+                showSync ? ' is-active' : ''
+              }`}
+              onClick={() => setShowSync((v) => !v)}
+              aria-pressed={showSync}
+            >
+              <Icon name="eq" size={14} />
+              <span>
+                {t('lyrics.showSync', 'Line highlighting')}
+              </span>
+            </MotionPress>
+          )}
+          {hasWordTimes && (
+            <MotionPress
+              type="button"
+              variant="ghost"
+              haptic="selection"
+              className={`lyrics-mode-btn${
+                karaokeActive ? ' is-active' : ''
+              }`}
+              onClick={() => {
+                const next = !karaoke
                 setKaraoke(next)
                 try {
                   localStorage.setItem(
@@ -985,38 +1023,66 @@ export function LyricsPanel({
                   )
                 } catch {}
               }}
-            />
-            <span>
-              {t('lyrics.karaokeMode', 'Караоке')}
-            </span>
-          </label>
-        )}
-        {translationItems.length > 0 && (
-          <select
-            className="form-input"
-            value={selectedLang}
-            onChange={(e) =>
-              setSelectedLang(e.target.value)
-            }
-            style={{ maxWidth: 160 }}
-          >
-            <option value="original">Original</option>
-            {translationItems.map((tr) => (
-              <option
-                key={tr.language_code}
-                value={tr.language_code}
-              >
-                {tr.language_code.toUpperCase()}
+              aria-pressed={karaokeActive}
+            >
+              <Icon name="text" size={14} />
+              <span>
+                {t('lyrics.karaokeMode', 'Karaoke')}
+              </span>
+            </MotionPress>
+          )}
+          {translationItems.length > 0 && (
+            <select
+              className="lyrics-lang-select"
+              value={selectedLang}
+              onChange={(e) =>
+                setSelectedLang(e.target.value)
+              }
+              aria-label={t(
+                'redesign.player.lyricsLanguage',
+                'Language',
+              )}
+            >
+              <option value="original">
+                {t(
+                  'redesign.player.lyricsOriginal',
+                  'Original',
+                )}
               </option>
-            ))}
-          </select>
-        )}
+              {translationItems.map((tr) => (
+                <option
+                  key={tr.language_code}
+                  value={tr.language_code}
+                >
+                  {tr.language_code.toUpperCase()}
+                </option>
+              ))}
+            </select>
+          )}
+        </div>
       </div>
 
       <div className="lyrics-content">
+        {firstLineLeadInMs !== null && firstLineLeadInMs > 250 && (
+          <button
+            type="button"
+            className="lyrics-lead-in"
+            onClick={() =>
+              handleLineClick(lyrics.synced_lines![0].time_ms)
+            }
+          >
+            <span className="lyrics-lead-in__label">
+              {t('lyrics.startsIn', 'Starts in')}
+            </span>
+            <span className="lyrics-lead-in__time">
+              {(firstLineLeadInMs / 1000).toFixed(1)}
+            </span>
+          </button>
+        )}
         {showSync && hasSyncData
           ? lyrics.synced_lines!.map((line, i) => {
               const isActive = i === activeIdx
+              const isPast = activeIdx > i
               let wordIdx = -1
               if (
                 karaokeActive &&
@@ -1041,7 +1107,21 @@ export function LyricsPanel({
                   ref={
                     isActive ? activeRef : null
                   }
-                  className={`lyrics-line${isActive ? ' lyrics-line-active' : ''}${(line.confidence ?? 0) < 0.5 ? ' lyrics-line-uncertain' : ''}`}
+                  className={`lyrics-line${
+                    isActive ? ' lyrics-line-active' : ''
+                  }${isPast ? ' lyrics-line-past' : ''}${
+                    (line.confidence ?? 0) < 0.5
+                      ? ' lyrics-line-uncertain'
+                      : ''
+                  }`}
+                  style={
+                    {
+                      ['--lyrics-line-progress']: `${
+                        isActive ? lineProgressPct(i) : 0
+                      }%`,
+                    } as CSSProperties
+                  }
+                  aria-current={isActive ? 'true' : undefined}
                   onClick={() =>
                     handleLineClick(line.time_ms)
                   }

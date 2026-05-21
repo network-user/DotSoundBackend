@@ -759,6 +759,7 @@ export const api = {
     page = 1,
     size = 20,
     sourceFilter?: string,
+    sortOrder?: string,
   ): Promise<UserLikesResponse> {
     const params = new URLSearchParams({
       page: String(page),
@@ -767,7 +768,34 @@ export const api = {
     if (sourceFilter && sourceFilter !== 'all') {
       params.set('source', sourceFilter)
     }
+    if (sortOrder) params.set('sort', sortOrder)
     return request(`/api/v1/likes/${userId}?${params}`)
+  },
+
+  getLikedPlaybackQueue(
+    userId: number,
+    currentTrackId: number,
+    size = 80,
+    sourceFilter?: string,
+    sortOrder?: string,
+    shuffle = false,
+    excludeIds?: number[],
+  ): Promise<TrackQueueResponse> {
+    const params = new URLSearchParams({
+      current_track_id: String(currentTrackId),
+      size: String(size),
+    })
+    if (sourceFilter && sourceFilter !== 'all') {
+      params.set('source', sourceFilter)
+    }
+    if (sortOrder) params.set('sort', sortOrder)
+    if (shuffle) params.set('shuffle', 'true')
+    if (excludeIds && excludeIds.length > 0) {
+      params.set('exclude_ids', excludeIds.join(','))
+    }
+    return request(
+      `/api/v1/likes/${userId}/queue?${params}`,
+    )
   },
 
   getDislikedTracks(

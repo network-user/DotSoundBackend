@@ -165,6 +165,7 @@
     "stageProcessing": "Обработка аудио...",
     "stageSaving": "Сохранение...",
     "notFound": "Текст не определён",
+    "startsIn": "Начало через",
     "showSync": "Подсветка по строкам",
     "karaokeMode": "Караоке",
     "syncOffset": "Смещение",

@@ -1,8 +1,12 @@
+from datetime import UTC, datetime, timedelta
+
 import pytest
 from dirty_equals import IsPartialDict
 from httpx import AsyncClient
+from sqlalchemy import update
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.models.like import Like
 from app.models.track import Track
 from tests.conftest import (
     auth_headers,
@@ -153,6 +157,115 @@ async def test_liked_tracks_includes_liked_at(
     assert len(items) == 1
     assert "liked_at" in items[0]
     assert items[0]["liked_at"] is not None
+
+
+async def test_liked_tracks_sort_oldest_before_pagination(
+    client: AsyncClient,
+    db_session: AsyncSession,
+) -> None:
+    user = await create_test_user(client, 100061)
+    headers = await auth_headers(client, user["id"])
+    tracks = [
+        await create_test_track(client, f"OldestSort{i}", user["id"])
+        for i in range(3)
+    ]
+    for track in tracks:
+        await client.post(
+            f"/api/v1/likes/{user['id']}/{track['id']}",
+            headers=headers,
+        )
+
+    base = datetime(2026, 1, 1, tzinfo=UTC)
+    liked_at_by_track = {
+        tracks[0]["id"]: base + timedelta(minutes=2),
+        tracks[1]["id"]: base,
+        tracks[2]["id"]: base + timedelta(minutes=1),
+    }
+    for track_id, liked_at in liked_at_by_track.items():
+        await db_session.execute(
+            update(Like)
+            .where(
+                Like.user_id == user["id"],
+                Like.track_id == track_id,
+            )
+            .values(created_at=liked_at)
+        )
+    await db_session.commit()
+
+    response = await client.get(
+        f"/api/v1/likes/{user['id']}?page=1&size=1&sort=oldest"
+    )
+    assert response.status_code == 200
+    data = response.json()
+    assert data["total"] == 3
+    assert [item["id"] for item in data["items"]] == [
+        tracks[1]["id"]
+    ]
+
+
+async def test_liked_tracks_sort_artist_before_pagination(
+    client: AsyncClient,
+    db_session: AsyncSession,
+) -> None:
+    user = await create_test_user(client, 100062)
+    headers = await auth_headers(client, user["id"])
+    tracks = [
+        await create_test_track(client, "Gamma Title", user["id"]),
+        await create_test_track(client, "Alpha Title", user["id"]),
+        await create_test_track(client, "Beta Title", user["id"]),
+    ]
+    artist_by_track = {
+        tracks[0]["id"]: "Zed Artist",
+        tracks[1]["id"]: "Alpha Artist",
+        tracks[2]["id"]: "Middle Artist",
+    }
+    for track in tracks:
+        await client.post(
+            f"/api/v1/likes/{user['id']}/{track['id']}",
+            headers=headers,
+        )
+    for track_id, artist in artist_by_track.items():
+        await db_session.execute(
+            update(Track)
+            .where(Track.id == track_id)
+            .values(artist=artist)
+        )
+    await db_session.commit()
+
+    response = await client.get(
+        f"/api/v1/likes/{user['id']}?page=1&size=1&sort=artist"
+    )
+    assert response.status_code == 200
+    assert [item["id"] for item in response.json()["items"]] == [
+        tracks[1]["id"]
+    ]
+
+
+async def test_liked_queue_shuffle_uses_tracks_beyond_first_page(
+    client: AsyncClient,
+) -> None:
+    user = await create_test_user(client, 100063)
+    headers = await auth_headers(client, user["id"])
+    tracks = []
+    for i in range(25):
+        track = await create_test_track(
+            client, f"QueueShuffle{i}", user["id"]
+        )
+        tracks.append(track)
+        await client.post(
+            f"/api/v1/likes/{user['id']}/{track['id']}",
+            headers=headers,
+        )
+
+    current_id = tracks[0]["id"]
+    response = await client.get(
+        f"/api/v1/likes/{user['id']}/queue"
+        f"?current_track_id={current_id}&size=100&shuffle=true"
+    )
+    assert response.status_code == 200
+    ids = {item["id"] for item in response.json()["next_tracks"]}
+    expected = {track["id"] for track in tracks if track["id"] != current_id}
+    assert ids == expected
 
 
 async def _insert_sc_track(

@@ -38,6 +38,10 @@ import { useNavigateToArtistByName } from '@/hooks/useNavigateToArtistByName'
 import { AddToPlaylistSheet } from '@/components/AddToPlaylistSheet/AddToPlaylistSheet'
 import { useTrackSlidePresence } from '@/hooks/useTrackSlidePresence'
 import {
+  PlaybackModeIndicator,
+  playbackModeLabel,
+} from './PlaybackModeIndicator'
+import {
   coverProxySizes,
   coverProxySrcSet,
   coverProxyUrl,
@@ -231,6 +235,13 @@ export function PlayerBar() {
     playPrev()
   }
 
+  const selectPlaybackMode = (nextShuffleOn: boolean) => {
+    if (shuffleOn !== nextShuffleOn) {
+      toggleShuffle()
+    }
+    setOverflowOpen(false)
+  }
+
   const handleBarSwipeDragEnd = (
     _: unknown,
     info: PanInfo,
@@ -243,10 +254,12 @@ export function PlayerBar() {
 
   const repeatTitle =
     repeatMode === 'none'
-      ? 'Повтор выкл.'
+      ? t('redesign.player.repeatNone')
       : repeatMode === 'one'
-        ? 'Повтор трека'
-        : 'Повтор всех'
+        ? t('redesign.player.repeatOne')
+        : t('redesign.player.repeatAll')
+  const sequentialLabel = playbackModeLabel(false, t)
+  const shuffleLabel = playbackModeLabel(true, t)
 
   const trackBpm = (track as unknown as { bpm?: number }).bpm
   const tapBpm =
@@ -417,6 +430,10 @@ export function PlayerBar() {
           >
             {track.artist ?? '—'}
           </p>
+          <PlaybackModeIndicator
+            shuffleOn={shuffleOn}
+            variant="player-bar"
+          />
         </div>
       </div>
       {track.source_platform &&
@@ -712,14 +729,41 @@ export function PlayerBar() {
                     role="menuitem"
                     variant="ghost"
                     haptic="selection"
-                    className={`pb-menu-item ${shuffleOn ? 'active' : ''}`}
+                    className={`pb-menu-item pb-menu-item--mode ${!shuffleOn ? 'active' : ''}`}
                     onClick={() => {
-                      toggleShuffle()
-                      setOverflowOpen(false)
+                      selectPlaybackMode(false)
                     }}
+                    aria-pressed={!shuffleOn}
+                  >
+                    <Icon name="list" size={16} />
+                    <span>{sequentialLabel}</span>
+                    {!shuffleOn && (
+                      <Icon
+                        name="check"
+                        size={15}
+                        className="pb-menu-item__check"
+                      />
+                    )}
+                  </MotionPress>
+                  <MotionPress
+                    role="menuitem"
+                    variant="ghost"
+                    haptic="selection"
+                    className={`pb-menu-item pb-menu-item--mode ${shuffleOn ? 'active' : ''}`}
+                    onClick={() => {
+                      selectPlaybackMode(true)
+                    }}
+                    aria-pressed={shuffleOn}
                   >
                     <Icon name="shuffle" size={16} />
-                    {t('redesign.playerBar.shuffleMenu')}
+                    <span>{shuffleLabel}</span>
+                    {shuffleOn && (
+                      <Icon
+                        name="check"
+                        size={15}
+                        className="pb-menu-item__check"
+                      />
+                    )}
                   </MotionPress>
                   <MotionPress
                     role="menuitem"

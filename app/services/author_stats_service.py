@@ -49,7 +49,7 @@ class AuthorStatsService:
     async def get_track_stats_for_owner(
         self, track: Track, owner: User
     ) -> AuthorTrackStats:
-        if track.uploaded_by_id != owner.id:
+        if track.uploaded_by_id != owner.id or track.catalog_type != "ugc":
             from fastapi import HTTPException, status
 
             raise HTTPException(

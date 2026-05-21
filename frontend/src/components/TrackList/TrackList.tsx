@@ -26,6 +26,7 @@ interface Props {
    * explicitly when the rendered list is a slice of a larger queue.
    */
   contextTracks?: Track[]
+  onPlayTrack?: (track: Track) => void
 }
 
 export function TrackList({
@@ -34,6 +35,7 @@ export function TrackList({
   emptyMessage = 'Ничего не найдено',
   emptyCta,
   contextTracks,
+  onPlayTrack,
 }: Props) {
   const { t } = useTranslation()
   const { isLiked, toggleLike } = useLikes()
@@ -151,6 +153,7 @@ export function TrackList({
               <TrackCard
                 track={tr}
                 contextTracks={contextTracks ?? tracks}
+                onPlay={onPlayTrack}
               />
             </SwipeRow>
           </div>

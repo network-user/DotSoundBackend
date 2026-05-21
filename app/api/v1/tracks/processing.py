@@ -109,7 +109,11 @@ async def _load_owned_track(
     session: AsyncSession, track_id: int, user_id: int
 ) -> Track:
     track = await session.get(Track, track_id)
-    if track is None or track.uploaded_by_id != user_id:
+    if (
+        track is None
+        or track.uploaded_by_id != user_id
+        or track.catalog_type != "ugc"
+    ):
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Track not found",

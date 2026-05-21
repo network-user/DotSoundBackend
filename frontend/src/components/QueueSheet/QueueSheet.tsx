@@ -14,6 +14,7 @@ import { MorphIcon } from '@/components/ui/MorphIcon'
 import { MotionPress } from '@/components/ui/MotionPress'
 import { useDesktopFinePointer } from '@/hooks/useDesktopFinePointer'
 import { useNavigateToArtistByName } from '@/hooks/useNavigateToArtistByName'
+import { playbackModeLabel } from '@/components/PlayerBar/PlaybackModeIndicator'
 import {
   coverProxySizes,
   coverProxySrcSet,
@@ -49,6 +50,8 @@ export function QueuePanelContent({
     number | null
   >(null)
   const dragOverIdx = useRef<number | null>(null)
+  const sequentialLabel = playbackModeLabel(false, t)
+  const shuffleLabel = playbackModeLabel(true, t)
 
   const onClickItem = (tr: Track) => {
     if (tr.id === track?.id) {
@@ -74,6 +77,12 @@ export function QueuePanelContent({
     }
     setDragIdx(null)
     dragOverIdx.current = null
+  }
+
+  const selectPlaybackMode = (nextShuffleOn: boolean) => {
+    if (shuffleOn !== nextShuffleOn) {
+      toggleShuffle()
+    }
   }
 
   const inner = (
@@ -133,16 +142,34 @@ export function QueuePanelContent({
               )}
             </span>
             <div className="queue-section-title-actions">
-              <MotionPress
-                variant="ghost"
-                haptic="selection"
-                className={`queue-action-btn queue-action-btn--icon${shuffleOn ? ' queue-action-btn--active' : ''}`}
-                onClick={toggleShuffle}
-                aria-label={t('redesign.player.shuffleToggle', 'Shuffle')}
-                aria-pressed={shuffleOn}
+              <div
+                className="queue-mode-switch"
+                role="group"
+                aria-label={t(
+                  'redesign.player.modeMenuGroup',
+                )}
               >
-                <Icon name="shuffle" size={14} />
-              </MotionPress>
+                <MotionPress
+                  variant="ghost"
+                  haptic="selection"
+                  className={`queue-mode-btn${!shuffleOn ? ' queue-mode-btn--active' : ''}`}
+                  onClick={() => selectPlaybackMode(false)}
+                  aria-pressed={!shuffleOn}
+                >
+                  <Icon name="list" size={13} />
+                  <span>{sequentialLabel}</span>
+                </MotionPress>
+                <MotionPress
+                  variant="ghost"
+                  haptic="selection"
+                  className={`queue-mode-btn${shuffleOn ? ' queue-mode-btn--active' : ''}`}
+                  onClick={() => selectPlaybackMode(true)}
+                  aria-pressed={shuffleOn}
+                >
+                  <Icon name="shuffle" size={13} />
+                  <span>{shuffleLabel}</span>
+                </MotionPress>
+              </div>
               <MotionPress
                 variant="ghost"
                 haptic="selection"

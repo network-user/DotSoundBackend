@@ -29,6 +29,7 @@ import { SharedCover } from '@/components/ui/SharedCover'
 import { BeatPulse } from '@/components/ui/BeatPulse'
 import { FullscreenLyrics } from '@/components/FullscreenLyrics/FullscreenLyrics'
 import { QueuePanelContent } from '@/components/QueueSheet/QueueSheet'
+import { PlaybackModeIndicator } from '@/components/PlayerBar/PlaybackModeIndicator'
 import { haptic } from '@/lib/telegram'
 import { usePrefetchTracks } from '@/store/PrefetchContext'
 import { useDesktopFinePointer } from '@/hooks/useDesktopFinePointer'
@@ -197,7 +198,8 @@ export function NowPlayingView() {
   const internalUid = getInternalUserId()
   const isUploader =
     internalUid !== null &&
-    track.uploaded_by_id === internalUid
+    track.uploaded_by_id === internalUid &&
+    track.catalog_type === 'ugc'
   const canLyricsChrome =
     Boolean(track.has_lyrics) ||
     isUploader ||
@@ -515,6 +517,10 @@ export function NowPlayingView() {
             )}
             {track.artist ?? '—'}
           </p>
+          <PlaybackModeIndicator
+            shuffleOn={shuffleOn}
+            variant="now-playing"
+          />
         </div>
 
         <div className="rp-now__seek">
@@ -547,7 +553,7 @@ export function NowPlayingView() {
         <div className="rp-now__controls">
           <MotionPress
             variant="icon"
-            ariaLabel={t('redesign.player.shuffleAria', 'Shuffle')}
+            ariaLabel={t('redesign.player.shuffleAria')}
             haptic="selection"
             aria-pressed={shuffleOn}
             className={shuffleOn ? 'rp-now__ctl-active' : ''}
@@ -599,7 +605,7 @@ export function NowPlayingView() {
           </MotionPress>
           <MotionPress
             variant="icon"
-            ariaLabel={t('redesign.player.repeatAria', 'Repeat')}
+            ariaLabel={t('redesign.player.repeatAria')}
             haptic="selection"
             aria-pressed={repeatMode !== 'none'}
             className={repeatMode !== 'none' ? 'rp-now__ctl-active' : ''}

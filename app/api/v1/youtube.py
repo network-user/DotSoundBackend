@@ -9,6 +9,7 @@ from app.dependencies import get_current_user, get_db
 from app.models.user import User
 from app.schemas.track import TrackResponse, YTSearchResult
 from app.services.track_response_build import build_track_response
+from app.services.track_service import TrackService
 from app.services.youtube_service import YouTubeService, _extract_video_id
 
 router = APIRouter(prefix="/youtube", tags=["youtube"])
@@ -66,13 +67,16 @@ async def import_youtube_track(
     structlog.contextvars.bind_contextvars(yt_url=data.yt_url)
 
     video_id = _extract_video_id(data.yt_url)
-    if not video_id:
-        if "youtube.com" not in data.yt_url and "youtu.be" not in data.yt_url:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="URL должен быть ссылкой на YouTube-видео "
-                "(youtube.com или youtu.be).",
-            )
+    if (
+        not video_id
+        and "youtube.com" not in data.yt_url
+        and "youtu.be" not in data.yt_url
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="URL должен быть ссылкой на YouTube-видео "
+            "(youtube.com или youtu.be).",
+        )
     from app.core.ssrf_guard import assert_public_http_url
 
     assert_public_http_url(data.yt_url, field="yt_url")
@@ -90,6 +94,11 @@ async def import_youtube_track(
         yt_data=yt_data,
         uploader_id=current_user.id,
         is_public=data.is_public,
+    )
+    await TrackService(session).add_to_library(
+        user_id=current_user.id,
+        track_id=track.id,
+        source="youtube",
     )
     logger.info(
         "yt_import_endpoint",

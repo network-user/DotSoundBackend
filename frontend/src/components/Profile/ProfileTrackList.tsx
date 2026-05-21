@@ -97,7 +97,8 @@ export function ProfileTrackList({
         <div className="profile-tracks-section__list track-list">
           {tracks.map((track) => {
             const isOwned =
-              track.uploaded_by_id === currentUserId
+              track.uploaded_by_id === currentUserId &&
+              track.catalog_type === 'ugc'
 
             const buildMenu = (): LongPressMenuItem[] => {
               const items: LongPressMenuItem[] = [

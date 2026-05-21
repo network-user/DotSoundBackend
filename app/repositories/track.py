@@ -7,9 +7,14 @@ from sqlalchemy.sql.elements import ColumnElement
 
 from app.models.artist import TrackArtist
 from app.models.track import Track
+from app.models.user_track_library import UserTrackLibrary
 from app.repositories.base import BaseRepository
 
 logger: structlog.stdlib.BoundLogger = structlog.get_logger(__name__)
+
+
+def _result_rowcount(result: object) -> int:
+    return int(getattr(result, "rowcount", 0) or 0)
 
 
 class TrackRepository(BaseRepository[Track]):
@@ -37,10 +42,11 @@ class TrackRepository(BaseRepository[Track]):
         result = await self._session.execute(
             select(func.coalesce(func.sum(Track.file_size_bytes), 0)).where(
                 Track.uploaded_by_id == user_id,
+                Track.catalog_type == "ugc",
                 Track.is_active.is_(True),
             )
         )
-        return result.scalar_one()
+        return int(result.scalar_one() or 0)
 
     @staticmethod
     def _playable_filter() -> ColumnElement[bool]:
@@ -67,7 +73,9 @@ class TrackRepository(BaseRepository[Track]):
             Track.playback_suppressed_until <= func.now(),
         )
 
-    async def get_access_info(self, track_id: int) -> tuple[bool, int] | None:
+    async def get_access_info(
+        self, track_id: int
+    ) -> tuple[bool, int | None] | None:
         result = await self._session.execute(
             select(Track.is_public, Track.uploaded_by_id).where(
                 Track.id == track_id,
@@ -75,9 +83,10 @@ class TrackRepository(BaseRepository[Track]):
             )
         )
         row = result.first()
-        if row is None or row[1] is None:
+        if row is None:
             return None
-        return bool(row[0]), int(row[1])
+        owner_id = int(row[1]) if row[1] is not None else None
+        return bool(row[0]), owner_id
 
     async def list_active(
         self,
@@ -183,25 +192,43 @@ class TrackRepository(BaseRepository[Track]):
         limit: int = 50,
         source_filter: str | None = None,
     ) -> tuple[list[Track], int]:
+        source_expr = func.lower(
+            func.coalesce(UserTrackLibrary.source, Track.imported_from, "")
+        )
         condition = (
             Track.is_active.is_(True)
             & self._exclude_hidden_sources()
-            & (Track.uploaded_by_id == user_id)
-            & Track.imported_from.isnot(None)
+            & Track.deleted_at.is_(None)
+            & (UserTrackLibrary.user_id == user_id)
+            & (
+                Track.imported_from.isnot(None)
+                | (
+                    UserTrackLibrary.source.isnot(None)
+                    & (UserTrackLibrary.source != "upload")
+                )
+            )
         )
         if source_filter:
-            condition = condition & (
-                func.lower(Track.imported_from) == source_filter.lower()
-            )
+            condition = condition & (source_expr == source_filter.lower())
         total_result = await self._session.execute(
-            select(func.count()).where(condition)
+            select(func.count(Track.id))
+            .select_from(Track)
+            .join(
+                UserTrackLibrary,
+                UserTrackLibrary.track_id == Track.id,
+            )
+            .where(condition)
         )
         total = int(total_result.scalar_one())
 
         tracks_result = await self._session.execute(
             select(Track)
+            .join(
+                UserTrackLibrary,
+                UserTrackLibrary.track_id == Track.id,
+            )
             .where(condition)
-            .order_by(Track.created_at.desc())
+            .order_by(UserTrackLibrary.imported_at.desc(), Track.id.desc())
             .offset(offset)
             .limit(limit)
         )
@@ -218,6 +245,7 @@ class TrackRepository(BaseRepository[Track]):
             Track.is_active.is_(True)
             & self._exclude_hidden_sources()
             & (Track.uploaded_by_id == user_id)
+            & (Track.catalog_type == "ugc")
         )
         if playable_only:
             condition = condition & self._playable_filter()
@@ -304,7 +332,7 @@ class TrackRepository(BaseRepository[Track]):
         *,
         playable_only: bool,
         genre_filter: str | None,
-    ):  # noqa: ANN202
+    ) -> ColumnElement[bool]:
         q = query.strip()
         base = (
             Track.is_active.is_(True)
@@ -491,7 +519,9 @@ class TrackRepository(BaseRepository[Track]):
                 & Track.duration_seconds.isnot(None)
                 & Track.duration_seconds.between(low, high)
             )
-            duration_diff = func.abs(Track.duration_seconds - duration_seconds)
+            duration_diff: ColumnElement[int] = func.abs(
+                Track.duration_seconds - duration_seconds
+            )
         else:
             duration_diff = case(
                 (Track.duration_seconds.is_(None), 999999),
@@ -514,7 +544,7 @@ class TrackRepository(BaseRepository[Track]):
             )
             .values(play_count=Track.play_count + 1)
         )
-        updated = result.rowcount > 0
+        updated = _result_rowcount(result) > 0
         if updated:
             logger.debug("db_play_count_incremented", track_id=track_id)
         else:
@@ -529,6 +559,7 @@ class TrackRepository(BaseRepository[Track]):
             .where(
                 Track.id == track_id,
                 Track.uploaded_by_id == user_id,
+                Track.catalog_type == "ugc",
                 Track.is_active.is_(True),
             )
             .values(is_public=is_public)
@@ -821,6 +852,7 @@ class TrackRepository(BaseRepository[Track]):
             select(Track)
             .where(
                 Track.uploaded_by_id == user_id,
+                Track.catalog_type == "ugc",
                 Track.blob_id == blob_id,
                 Track.is_active.is_(True),
             )
@@ -833,6 +865,8 @@ class TrackRepository(BaseRepository[Track]):
     ) -> Track | None:
         track = await self.get_by_id(track_id)
         if not track or track.uploaded_by_id != user_id:
+            return None
+        if track.catalog_type != "ugc":
             return None
         if track.deleted_at is not None:
             return None
@@ -848,6 +882,8 @@ class TrackRepository(BaseRepository[Track]):
     ) -> Track | None:
         track = await self.get_by_id(track_id)
         if not track or track.uploaded_by_id != user_id:
+            return None
+        if track.catalog_type != "ugc":
             return None
         if track.deleted_at is None:
             return None
@@ -899,6 +935,7 @@ class TrackRepository(BaseRepository[Track]):
     ) -> tuple[list[Track], int]:
         condition = (
             (Track.uploaded_by_id == user_id)
+            & (Track.catalog_type == "ugc")
             & Track.deleted_at.is_not(None)
             & (Track.deleted_reason == "owner")
         )
@@ -980,13 +1017,17 @@ class TrackRepository(BaseRepository[Track]):
             delete(Track).where(Track.id == track_id)
         )
         await self._session.flush()
-        return result.rowcount > 0
+        return _result_rowcount(result) > 0
 
     async def get_for_owner_including_trash(
         self, track_id: int, user_id: int
     ) -> Track | None:
         track = await self.get_by_id(track_id)
-        if not track or track.uploaded_by_id != user_id:
+        if (
+            not track
+            or track.uploaded_by_id != user_id
+            or track.catalog_type != "ugc"
+        ):
             return None
         return track
 
@@ -1103,6 +1144,7 @@ class TrackRepository(BaseRepository[Track]):
             & self._exclude_hidden_sources()
             & self._playback_listing_allowed()
             & (Track.uploaded_by_id == user_id)
+            & (Track.catalog_type == "ugc")
         )
         total_result = await self._session.execute(
             select(func.count()).where(condition)
@@ -1132,6 +1174,7 @@ class TrackRepository(BaseRepository[Track]):
             & self._exclude_hidden_sources()
             & self._playback_listing_allowed()
             & Track.uploaded_by_id.in_(user_ids)
+            & (Track.catalog_type == "ugc")
         )
         total_result = await self._session.execute(
             select(func.count()).where(condition)
@@ -1148,7 +1191,7 @@ class TrackRepository(BaseRepository[Track]):
         return list(tracks_result.scalars().all()), total
 
     @staticmethod
-    def _genre_sample_track_predicate():  # noqa: ANN205
+    def _genre_sample_track_predicate() -> ColumnElement[bool]:
         return (
             Track.blob_id.isnot(None)
             & Track.file_key.isnot(None)

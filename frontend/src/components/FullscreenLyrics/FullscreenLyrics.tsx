@@ -27,6 +27,10 @@ import {
 
 const KARAOKE_KEY = 'setting-lyrics-karaoke'
 
+function clampPct(value: number): number {
+  return Math.min(100, Math.max(0, value))
+}
+
 function fmt(sec: number) {
   if (!sec || isNaN(sec)) return '0:00'
   const mins = Math.floor(sec / 60)
@@ -108,6 +112,7 @@ export function FullscreenLyrics({
       return
     }
     setSelectedLang('original')
+    setVideoFailed(false)
     setLoading(true)
     api
       .getLyrics(track.id)
@@ -147,6 +152,27 @@ export function FullscreenLyrics({
     selectedTranslation?.translated_text ??
     lyrics?.plain_text ??
     ''
+  const firstLineLeadInMs =
+    lyrics?.synced_lines?.length && activeIdx < 0
+      ? Math.max(
+          0,
+          lyrics.synced_lines[0].time_ms - currentTime * 1000,
+        )
+      : null
+
+  const lineProgressPct = (lineIndex: number): number => {
+    const lines = lyrics?.synced_lines
+    if (!lines || lineIndex < 0) return 0
+    const current = lines[lineIndex]
+    const next = lines[lineIndex + 1]
+    const endMs =
+      next?.time_ms ??
+      (duration ? duration * 1000 : current.time_ms + 3500)
+    const spanMs = Math.max(1, endMs - current.time_ms)
+    return clampPct(
+      ((currentTime * 1000 - current.time_ms) / spanMs) * 100,
+    )
+  }
 
   useEffect(() => {
     const lines = lyrics?.synced_lines
@@ -259,7 +285,8 @@ export function FullscreenLyrics({
   const isOwner =
     track.uploaded_by_id != null &&
     uid != null &&
-    track.uploaded_by_id === uid
+    track.uploaded_by_id === uid &&
+    track.catalog_type === 'ugc'
 
   const showToolbar = hasWordTimes || translationItems.length > 0
   const toolbar = showToolbar ? (
@@ -308,9 +335,27 @@ export function FullscreenLyrics({
     >
       {loading && <div className="loader" />}
 
+      {firstLineLeadInMs !== null && firstLineLeadInMs > 250 && (
+        <button
+          type="button"
+          className="fl-countdown"
+          onClick={() =>
+            handleLineClick(lyrics!.synced_lines![0].time_ms)
+          }
+        >
+          <span className="fl-countdown__label">
+            {t('lyrics.startsIn', 'Starts in')}
+          </span>
+          <span className="fl-countdown__time">
+            {(firstLineLeadInMs / 1000).toFixed(1)}
+          </span>
+        </button>
+      )}
+
       {!loading && lyrics?.synced_lines?.length
         ? lyrics.synced_lines.map((line, i) => {
             const isActive = i === activeIdx
+            const isPast = activeIdx > i
             const lineWordIdx =
               karaokeActive && isActive ? wordIdx : -1
             return (
@@ -328,7 +373,17 @@ export function FullscreenLyrics({
                       }
                 }
                 transition={SPRING_GENTLE}
-                className={`fl-line${isActive ? ' fl-line-active' : ''}`}
+                className={`fl-line${
+                  isActive ? ' fl-line-active' : ''
+                }${isPast ? ' fl-line-past' : ''}`}
+                style={
+                  {
+                    ['--fl-line-progress']: `${
+                      isActive ? lineProgressPct(i) : 0
+                    }%`,
+                  } as CSSProperties
+                }
+                aria-current={isActive ? 'true' : undefined}
                 onClick={() =>
                   handleLineClick(line.time_ms)
                 }
@@ -486,12 +541,16 @@ export function FullscreenLyrics({
     <div className={`fl-overlay${exit.cls}`}>
       {videoSrc && !videoFailed && (
         <video
+          key={videoSrc}
           className="fl-video-bg"
           src={videoSrc}
           autoPlay
           loop
           muted
           playsInline
+          preload="auto"
+          onCanPlay={() => setVideoFailed(false)}
+          onLoadedData={() => setVideoFailed(false)}
           onError={() => setVideoFailed(true)}
         />
       )}

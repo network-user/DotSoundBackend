@@ -330,7 +330,7 @@ class BandcampService:
             "source_name": "Bandcamp",
             "file_key": None,
             "cover_key": cover_key,
-            "uploaded_by_id": uploader_id,
+            "uploaded_by_id": None,
             "is_public": is_public,
         }
 
