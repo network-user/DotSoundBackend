@@ -57,8 +57,24 @@
   "library": {
     "tabLiked": "Любимое",
     "tabPlaylists": "Плейлисты",
+    "tabArtists": "Артисты",
     "tabImported": "Импорт",
     "tabHistory": "История"
+  },
+  "favoriteArtists": {
+    "title": "Любимые артисты",
+    "allArtists": "Все",
+    "allTracks": "Треки любимых артистов",
+    "loaded": "Показано: {{count}}",
+    "filterAria": "Фильтр по любимым артистам",
+    "openArtist": "Открыть артиста {{name}}",
+    "playAll": "Слушать",
+    "playError": "Не удалось запустить воспроизведение",
+    "emptyArtists": "Вы ещё не подписались на артистов",
+    "findArtists": "Найти артистов",
+    "emptyTracks": "У этих артистов пока нет доступных треков",
+    "loading": "Загрузка…",
+    "showMore": "Показать ещё"
   },
   "admin": {
     "users": {

@@ -8,8 +8,8 @@ export const MIX_SHORTCUT_TILES = [
   {
     path: '/weekly-mix',
     labelKey: 'quickWeekly' as const,
-    profileIcon: 'star',
-    morph: 'star' as const,
+    profileIcon: 'sparkle',
+    morph: 'library' as const,
   },
   {
     path: '/weekly-top',
@@ -20,19 +20,19 @@ export const MIX_SHORTCUT_TILES = [
   {
     path: '/user-choice',
     labelKey: 'quickUserChoice' as const,
-    profileIcon: 'users-following',
+    profileIcon: 'heart',
     morph: 'heart' as const,
   },
   {
     path: '/forgotten-treasures',
     labelKey: 'quickForgotten' as const,
-    profileIcon: 'music',
+    profileIcon: 'bookmark',
     morph: 'bookmark' as const,
   },
   {
     path: '/my-top',
     labelKey: 'quickMyTop' as const,
-    profileIcon: 'chart',
+    profileIcon: 'star',
     morph: 'star' as const,
   },
   {
@@ -43,7 +43,7 @@ export const MIX_SHORTCUT_TILES = [
   },
 ] as const
 
-export const HOME_QUICK_VISIBLE_COUNT = 4
+export const HOME_QUICK_VISIBLE_COUNT = 6
 
 export type MixShortcutTile =
   (typeof MIX_SHORTCUT_TILES)[number]

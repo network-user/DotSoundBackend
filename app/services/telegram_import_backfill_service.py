@@ -4,6 +4,7 @@ import hashlib
 import mimetypes
 import uuid
 from dataclasses import asdict, dataclass
+from datetime import UTC, datetime
 from os.path import splitext
 from typing import Literal
 
@@ -27,6 +28,11 @@ _TELEGRAM = "telegram"
 _REPAIR_FEATURE_VERSION = "telegram-import-repair-v1"
 _URGENT_REPAIR_FEATURE_VERSION = "telegram-import-urgent-repair-v1"
 _URGENT_REPAIR_PRIORITY = 0
+
+
+def _force_retry_feature_version(base: str) -> str:
+    stamp = datetime.now(UTC).strftime("%Y%m%dT%H%M%SZ")
+    return f"{base}-retry-{stamp}"
 
 
 @dataclass(frozen=True, slots=True)
@@ -162,6 +168,7 @@ class TelegramImportBackfillService:
         limit: int = 100,
         dry_run: bool = True,
         urgent: bool = False,
+        force_retry: bool = False,
     ) -> TelegramImportBackfillReport:
         candidates = await self.list_candidates(limit=limit)
         if dry_run:
@@ -181,6 +188,15 @@ class TelegramImportBackfillService:
                 ],
             )
 
+        retry_feature_version: str | None = None
+        if force_retry:
+            base = (
+                _URGENT_REPAIR_FEATURE_VERSION
+                if urgent
+                else _REPAIR_FEATURE_VERSION
+            )
+            retry_feature_version = _force_retry_feature_version(base)
+
         items: list[TelegramImportBackfillItem] = []
         enqueued = 0
         failed = 0
@@ -189,6 +205,7 @@ class TelegramImportBackfillService:
                 item = await self._enqueue_candidate(
                     candidate,
                     urgent=urgent,
+                    feature_version_override=retry_feature_version,
                 )
             except Exception as exc:  # noqa: BLE001
                 failed += 1
@@ -223,6 +240,7 @@ class TelegramImportBackfillService:
         candidate: TelegramImportBackfillCandidate,
         *,
         urgent: bool = False,
+        feature_version_override: str | None = None,
     ) -> TelegramImportBackfillItem:
         raw = await s3.download_object(candidate.file_key)
         ext = _ext_from_key(candidate.file_key)
@@ -241,7 +259,9 @@ class TelegramImportBackfillService:
                 original_filename=f"audio.{ext}",
                 source_sha256=source_sha256,
                 priority=_URGENT_REPAIR_PRIORITY,
-                feature_version=_URGENT_REPAIR_FEATURE_VERSION,
+                feature_version=(
+                    feature_version_override or _URGENT_REPAIR_FEATURE_VERSION
+                ),
             )
         else:
             await repair_telegram_import_transcode_task.kiq(
@@ -249,6 +269,9 @@ class TelegramImportBackfillService:
                 raw_key=tmp_key,
                 original_filename=f"audio.{ext}",
                 source_sha256=source_sha256,
+                feature_version=(
+                    feature_version_override or _REPAIR_FEATURE_VERSION
+                ),
             )
         track = await self._session.get(Track, candidate.track_id)
         if track is not None and not track.source_sha256:
@@ -281,7 +304,7 @@ async def repair_telegram_import_transcode_task(
     feature_version: str = _REPAIR_FEATURE_VERSION,
 ) -> None:
     async with AsyncSessionLocal() as session:
-        await dispatch_compute_job(
+        result = await dispatch_compute_job(
             session,
             job_type=q.JOB_TRACK_TRANSCODING,
             target_kind=q.TARGET_KIND_TRACK,
@@ -297,3 +320,10 @@ async def repair_telegram_import_transcode_task(
             local_handler=transcode_and_upload_local,
         )
         await session.commit()
+        logger.info(
+            "telegram_import_repair_dispatched",
+            track_id=track_id,
+            feature_version=feature_version,
+            status=result.status,
+            job_id=result.job_id,
+        )

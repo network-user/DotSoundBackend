@@ -111,6 +111,35 @@ _HOME_SECTION_TITLES = {
 }
 
 
+def _dedupe_sections_cross_section(
+    sections: list[dict[str, Any]],
+    *,
+    min_section_size: int,
+    highlight_track_ids: set[int],
+) -> list[dict[str, Any]]:
+    """Remove tracks already shown in earlier sections (or in highlights).
+
+    Sections are processed in their existing priority order; the first
+    occurrence of each track wins. A section that ends up below
+    ``min_section_size`` is dropped entirely to avoid sparse rows.
+    """
+    seen: set[int] = set(highlight_track_ids)
+    result: list[dict[str, Any]] = []
+    for section in sections:
+        tracks = section.get("tracks") or []
+        deduped: list[Any] = []
+        for track in tracks:
+            tid = getattr(track, "id", None)
+            if tid is None or tid in seen:
+                continue
+            seen.add(tid)
+            deduped.append(track)
+        if len(deduped) >= min_section_size:
+            section = {**section, "tracks": deduped}
+            result.append(section)
+    return result
+
+
 async def _purge_genre_mixes_cache() -> int:
     redis = get_redis_client()
     keys: list[str] = []
@@ -120,6 +149,8 @@ async def _purge_genre_mixes_cache() -> int:
         await redis.delete(*keys)
     logger.info("genre_mixes_cache_purged", count=len(keys))
     return len(keys)
+
+
 _RADIO_CACHE_TTL = 30 * 60
 _RADIO_SKIP_GUARD_SECONDS = 1
 _RADIO_LAST_QUEUE_TTL = 20
@@ -129,8 +160,10 @@ _DEFAULT_DIVERSITY_LAMBDA = 0.7
 _RETRIEVAL_BLEND_KEY = "recsys.retrieval_blend"
 _RADIO_SESSION_KEY_PREFIX = "radio:session:"
 _RADIO_SESSION_TTL = 3600
-_RADIO_SESSION_BUFFER = 48
+_RADIO_SESSION_BUFFER = 96
 _RADIO_MERGED_EXCLUDE_CAP = 280
+_DAILY_NOVELTY_TARGET = 0.4
+_WEEKLY_NOVELTY_TARGET = 0.5
 _SEQUENTIAL_RADIO_KEY = "recsys.sequential_radio"
 _DEFAULT_SEQUENTIAL_BLEND_WEIGHT = 0.45
 
@@ -312,8 +345,8 @@ class RecommendationService:
         followed_artist_ids = await self._follow_repo.list_followed_artist_ids(
             user_id
         )
-        genre_rows_raw = (
-            await self._rec_repo.get_user_genre_listen_aggregates(user_id)
+        genre_rows_raw = await self._rec_repo.get_user_genre_listen_aggregates(
+            user_id
         )
         artist_rows_raw = (
             await self._rec_repo.get_user_artist_listen_aggregates(user_id)
@@ -344,27 +377,21 @@ class RecommendationService:
         learned_genres = [str(item.key) for item in ranked_genres]
         learned_artist_ids = [int(item.key) for item in ranked_artists]
         behavior_genre_weights = normalize_genre_taste_weights(
-            [
-                TasteWeight(item.key, item.score)
-                for item in ranked_genres
-            ]
+            [TasteWeight(item.key, item.score) for item in ranked_genres]
         )
         behavior_artist_weights = normalize_artist_taste_weights(
-            [
-                TasteWeight(item.key, item.score)
-                for item in ranked_artists
-            ]
+            [TasteWeight(item.key, item.score) for item in ranked_artists]
         )
         merged_artist_ids = list(
             dict.fromkeys(
-                onboarding_artist_ids + followed_artist_ids
+                onboarding_artist_ids
+                + followed_artist_ids
                 + learned_artist_ids
             )
         )
         preferred_genres = list(
             dict.fromkeys(
-                (pref.preferred_genres or [] if pref else [])
-                + learned_genres
+                (pref.preferred_genres or [] if pref else []) + learned_genres
             )
         )
         if merged_artist_ids:
@@ -460,12 +487,10 @@ class RecommendationService:
             )
             if isinstance(artist_tracks, list):
                 groups.append(artist_tracks)
-            similar_to_artist_tracks = await (
-                self._rec_repo.get_track_similarity_candidates_for_artist_ids(
-                    artist_ids,
-                    limit=max(50, limit // 2),
-                    exclude_ids=ex if ex else None,
-                )
+            similar_to_artist_tracks = await self._rec_repo.get_track_similarity_candidates_for_artist_ids(
+                artist_ids,
+                limit=max(50, limit // 2),
+                exclude_ids=ex if ex else None,
             )
             if isinstance(similar_to_artist_tracks, list):
                 groups.append(similar_to_artist_tracks)
@@ -602,6 +627,44 @@ class RecommendationService:
             ],
             limit=limit,
         )
+
+    async def _cold_start_fallback_tracks(
+        self,
+        *,
+        size: int,
+        exclude_ids: set[int] | None = None,
+    ) -> list[Track]:
+        if size <= 0:
+            return []
+        pool_limit = max(size * 4, 60)
+        pool = await self._rec_repo.get_popular_tracks(limit=pool_limit)
+        excluded = exclude_ids or set()
+        pool = [t for t in pool if t.id not in excluded]
+        if not pool:
+            return []
+
+        buckets: dict[str, list[Track]] = defaultdict(list)
+        for track in pool:
+            key = (track.genre or "_other").lower()
+            buckets[key].append(track)
+
+        result: list[Track] = []
+        seen_ids: set[int] = set()
+        while len(result) < size:
+            picked_this_round = False
+            for key in list(buckets.keys()):
+                if buckets[key]:
+                    track = buckets[key].pop(0)
+                    if track.id in seen_ids:
+                        continue
+                    seen_ids.add(track.id)
+                    result.append(track)
+                    picked_this_round = True
+                    if len(result) >= size:
+                        break
+            if not picked_this_round:
+                break
+        return result[:size]
 
     async def _import_external_candidates(
         self,
@@ -839,6 +902,12 @@ class RecommendationService:
                     }
                 )
 
+        sections = _dedupe_sections_cross_section(
+            sections,
+            min_section_size=3,
+            highlight_track_ids=highlight_track_ids,
+        )
+
         if sections:
             await redis.setex(
                 cache_key,
@@ -973,9 +1042,7 @@ class RecommendationService:
         ) = await self._build_user_prefs(user_id)
 
         if section_type == "new_releases":
-            tracks = await self._rec_repo.get_recent_tracks(
-                days=7, limit=size
-            )
+            tracks = await self._rec_repo.get_recent_tracks(days=7, limit=size)
             return {
                 "title": _HOME_SECTION_TITLES[section_type],
                 "section_type": section_type,
@@ -1057,7 +1124,7 @@ class RecommendationService:
             total_limit=400,
         )
         if not pool:
-            return []
+            return await self._cold_start_fallback_tracks(size=limit)
         ids = [t.id for t in pool]
         like_map = await self._rec_repo.get_likes_7d_count_by_track_ids(ids)
         items: list[UserChoiceTrackInput] = [
@@ -1069,7 +1136,10 @@ class RecommendationService:
             for t in pool
         ]
         ordered = rank_user_choice_tracks(items, limit=limit)
-        return await self._rec_repo.get_tracks_by_ids(ordered)
+        result = await self._rec_repo.get_tracks_by_ids(ordered)
+        if not result:
+            return await self._cold_start_fallback_tracks(size=limit)
+        return result
 
     async def get_weekly_top_playlist(
         self,
@@ -1122,6 +1192,9 @@ class RecommendationService:
             for tid in track_ids
         ]
         ordered_ids = rank_weekly_top_tracks(items, limit=size)
+        if not ordered_ids:
+            fallback = await self._cold_start_fallback_tracks(size=size)
+            ordered_ids = [t.id for t in fallback]
         now = datetime.now(UTC)
         ttl = _weekly_top_ttl()
         payload: dict[str, Any] = {
@@ -1212,12 +1285,10 @@ class RecommendationService:
 
         neighbor_ids: list[int] = []
         if seed_artist_ids:
-            neighbor_ids = await (
-                self._catalog_repo.get_station_neighbor_track_ids_for_artists(
-                    seed_artist_ids,
-                    exclude_track_ids=frozenset({seed.id}),
-                    limit=120,
-                )
+            neighbor_ids = await self._catalog_repo.get_station_neighbor_track_ids_for_artists(
+                seed_artist_ids,
+                exclude_track_ids=frozenset({seed.id}),
+                limit=120,
             )
 
         candidates = await self._rec_repo.get_candidate_tracks_stratified(
@@ -1303,7 +1374,14 @@ class RecommendationService:
             user_locale,
         )
         if not candidates:
-            return []
+            fallback = await self._cold_start_fallback_tracks(size=size)
+            if fallback:
+                await redis.setex(
+                    cache_key,
+                    _midnight_ttl(),
+                    json.dumps([t.id for t in fallback]),
+                )
+            return fallback
 
         unseen = await self._get_unseen_candidates(
             user_id,
@@ -1327,6 +1405,7 @@ class RecommendationService:
             history,
             cand_features,
             size,
+            novelty_target=_DAILY_NOVELTY_TARGET,
             unseen_candidates=unseen_features,
             use_diversity_rerank=rerank_enabled,
             diversity_lambda=rerank_lambda,
@@ -1336,6 +1415,8 @@ class RecommendationService:
         result = [
             track_map[s.track_id] for s in scored if s.track_id in track_map
         ]
+        if not result:
+            result = await self._cold_start_fallback_tracks(size=size)
         if await self._load_retrieval_blend_enabled(user_id=user_id):
             existing_ids = {t.id for t in result}
             blend_ids = await self._retrieval_blend_track_ids(
@@ -1720,7 +1801,7 @@ class RecommendationService:
                 exclude_ids=(
                     set(exclude_normalized) if exclude_normalized else None
                 ),
-        )
+            )
         seed_related_groups: list[list[Track]] = []
         exclude_for_seed = set(exclude_normalized) | {seed.id}
         seed_genre = getattr(seed, "genre", None)
@@ -2226,6 +2307,7 @@ class RecommendationService:
             history,
             cand_features,
             _DAILY_SIZE,
+            novelty_target=_DAILY_NOVELTY_TARGET,
             unseen_candidates=unseen_features,
             use_diversity_rerank=rerank_enabled,
             diversity_lambda=rerank_lambda,
@@ -2256,6 +2338,9 @@ class RecommendationService:
             s.track_id for s in int_scored if s.track_id in track_map
         ]
         global_top = await self.get_global_top()
+        if not internal_ids:
+            fallback = await self._cold_start_fallback_tracks(size=_DAILY_SIZE)
+            internal_ids = [t.id for t in fallback]
         external_track_ids: list[int] = []
         if ext_picked:
             try:
@@ -2326,6 +2411,7 @@ class RecommendationService:
             history,
             cand_features,
             _WEEKLY_SIZE,
+            novelty_target=_WEEKLY_NOVELTY_TARGET,
             unseen_candidates=unseen_features,
         )
 
@@ -2367,6 +2453,11 @@ class RecommendationService:
                     )
             except TimeoutError:
                 logger.warning("weekly_playlist_import_timeout")
+        if not internal_ids and not external_track_ids:
+            fallback = await self._cold_start_fallback_tracks(
+                size=_WEEKLY_SIZE
+            )
+            internal_ids = [t.id for t in fallback]
         await self._telemetry.record_impressions(
             user_id=user_id,
             surface="weekly_playlist",

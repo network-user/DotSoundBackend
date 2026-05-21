@@ -1,5 +1,23 @@
 # DotSound - TODO Tracker
 
+- [x] **Shuffle queue + favorite artists library/profile tab (2026-05-21)**
+  - Frontend player shuffle now changes the real upcoming queue when
+    enabled, shuffles context queues started while shuffle is active,
+    and picks random available queue entries when the stored queue was
+    still sequential.
+  - Added `FavoriteArtistsView`: users can browse followed artists,
+    filter tracks by a selected artist, open the artist page, and play
+    tracks from the followed-artists catalog.
+  - Library now has an `Artists` tab; Profile now has a `My library`
+    action that opens the same favorite-artists view as a profile
+    subview.
+  - Legal check: reviewed `LEGAL.md` and `docs/legal/*` references for
+    playback/storage constraints. No legal text change needed because
+    the playback change only reorders existing queued tracks and does
+    not alter source modes, storage, caching, or third-party stream
+    handling.
+  - Verification: `npm run build`.
+
 - [x] **Admin track lyrics sync filter (2026-05-21)**
   - Admin track API now returns `has_synced_timecodes` and
     `lyrics_sync_status` (`synced`, `unsynced`, `missing`) for each listed

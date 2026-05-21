@@ -144,12 +144,14 @@ async def admin_list_tracks(
             "without text"
         ),
     ),
-    lyrics_sync_status: Literal[
-        "synced",
-        "unsynced",
-        "missing",
-    ]
-    | None = Query(
+    lyrics_sync_status: (
+        Literal[
+            "synced",
+            "unsynced",
+            "missing",
+        ]
+        | None
+    ) = Query(
         None,
         description=(
             "Filter by lyric timecode state: synced has non-empty "
@@ -222,12 +224,14 @@ async def admin_list_track_ids(
     is_active: bool | None = Query(None),
     without_lyrics: bool = Query(False),
     lyrics_catalog_miss_only: bool = Query(False),
-    lyrics_sync_status: Literal[
-        "synced",
-        "unsynced",
-        "missing",
-    ]
-    | None = Query(None),
+    lyrics_sync_status: (
+        Literal[
+            "synced",
+            "unsynced",
+            "missing",
+        ]
+        | None
+    ) = Query(None),
     search: str | None = Query(None, max_length=128),
     playback_error: str | None = Query(None, max_length=160),
     for_playlist_owner_id: int | None = Query(None, ge=1),
@@ -258,10 +262,11 @@ async def admin_list_track_ids(
             search=search,
         )
     elif scope == "sc_encrypted_unsupported":
-        ids, total = await (
-            service.list_track_ids_soundcloud_encrypted_unsupported(
-                search=search
-            )
+        (
+            ids,
+            total,
+        ) = await service.list_track_ids_soundcloud_encrypted_unsupported(
+            search=search
         )
     elif scope == "deleted":
         ids, total = await service.list_deleted_track_ids(search=search)
@@ -293,9 +298,7 @@ async def admin_list_playback_unavailable_tracks(
         page=page,
         size=size,
         search=search,
-        playback_error=(
-            playback_error.strip() if playback_error else None
-        ),
+        playback_error=(playback_error.strip() if playback_error else None),
     )
     return AdminTrackListResponse(
         items=await _admin_track_responses(service, tracks),
@@ -320,12 +323,10 @@ async def admin_list_soundcloud_encrypted_unsupported_tracks(
     _admin: User = Depends(require_admin_session),
 ) -> AdminTrackListResponse:
     service = AdminService(session)
-    tracks, total = await (
-        service.list_tracks_soundcloud_encrypted_unsupported(
-            page=page,
-            size=size,
-            search=search,
-        )
+    tracks, total = await service.list_tracks_soundcloud_encrypted_unsupported(
+        page=page,
+        size=size,
+        search=search,
     )
     return AdminTrackListResponse(
         items=await _admin_track_responses(service, tracks),
@@ -494,6 +495,7 @@ async def admin_normalize_telegram_playback(
         limit=body.limit,
         dry_run=body.dry_run,
         urgent=True,
+        force_retry=body.force_retry,
     )
     await session.commit()
     logger.info(
@@ -502,6 +504,7 @@ async def admin_normalize_telegram_playback(
         enqueued=report.enqueued,
         failed=report.failed,
         dry_run=report.dry_run,
+        force_retry=body.force_retry,
     )
     return AdminTelegramPlaybackNormalizeResponse(
         **report.to_dict(),

@@ -57,8 +57,24 @@
   "library": {
     "tabLiked": "Favorites",
     "tabPlaylists": "Playlists",
+    "tabArtists": "Artists",
     "tabImported": "Imports",
     "tabHistory": "History"
+  },
+  "favoriteArtists": {
+    "title": "Favorite artists",
+    "allArtists": "All",
+    "allTracks": "Favorite artists' tracks",
+    "loaded": "Showing {{count}}",
+    "filterAria": "Filter by favorite artists",
+    "openArtist": "Open artist {{name}}",
+    "playAll": "Play",
+    "playError": "Could not start playback",
+    "emptyArtists": "You have not followed any artists yet",
+    "findArtists": "Find artists",
+    "emptyTracks": "No playable tracks from these artists yet",
+    "loading": "Loading…",
+    "showMore": "Show more"
   },
   "admin": {
     "users": {

@@ -34,6 +34,7 @@ class AdminPlaybackRepairBulkResponse(BaseModel):
 class AdminTelegramPlaybackNormalizeRequest(BaseModel):
     limit: int = Field(default=500, ge=1, le=5000)
     dry_run: bool = False
+    force_retry: bool = True
 
 
 class AdminTelegramPlaybackNormalizeItem(BaseModel):

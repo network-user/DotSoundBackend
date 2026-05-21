@@ -42,6 +42,7 @@ import { ProfileDebugMenu } from '@/components/Admin/ProfileDebugMenu'
 import { MyComplaintsList } from '@/components/Profile/MyComplaintsList'
 import { ProfileStatsTab } from '@/components/Profile/ProfileStatsTab'
 import { DislikedView } from '@/views/DislikedView'
+import { FavoriteArtistsView } from '@/views/FavoriteArtistsView'
 
 import '@/styles/redesign-profile.css'
 import '@/styles/redesign-track-edit.css'
@@ -51,6 +52,7 @@ const PROFILE_COLLECTION_PAGE_SIZE = 30
 type ProfileTab =
   | 'profile'
   | 'import'
+  | 'artists'
   | 'complaints'
   | 'dislikes'
   | 'stats'
@@ -417,6 +419,8 @@ export function ProfileView({
     switch (tab) {
       case 'import':
         return t('profile.tabImport')
+      case 'artists':
+        return t('profile.tabArtists')
       case 'complaints':
         return t('profile.tabComplaints')
       case 'dislikes':
@@ -568,6 +572,7 @@ export function ProfileView({
             <ArtistProfileCard />
             <ProfileActions
               onOpenImport={() => goTab('import')}
+              onOpenFavoriteArtists={() => goTab('artists')}
               onOpenComplaints={() => goTab('complaints')}
               onOpenDislikes={() => goTab('dislikes')}
               onOpenStats={() => goTab('stats')}
@@ -598,6 +603,9 @@ export function ProfileView({
                 active={tab === 'import'}
                 onImportComplete={refreshProfileData}
               />
+            )}
+            {tab === 'artists' && (
+              <FavoriteArtistsView embedded />
             )}
             {tab === 'complaints' && <MyComplaintsList />}
             {tab === 'dislikes' && <DislikedView />}

@@ -140,6 +140,7 @@ async def test_apply_copies_raw_object_and_queues_repair(
         raw_key=tmp_key,
         original_filename="audio.ogg",
         source_sha256=source_sha,
+        feature_version="telegram-import-repair-v1",
     )
     mock_reindex.assert_awaited_once_with(track.id)
 
@@ -184,6 +185,43 @@ async def test_urgent_apply_queues_high_priority_repair(
     assert kwargs["feature_version"] == "telegram-import-urgent-repair-v1"
 
 
+@patch(
+    "app.services.search_index_notify.schedule_reindex_track",
+    new_callable=AsyncMock,
+)
+@patch(
+    f"{_MOD}.repair_telegram_import_transcode_task.kiq",
+    new_callable=AsyncMock,
+)
+@patch(f"{_MOD}.s3.upload_object", new_callable=AsyncMock)
+@patch(
+    f"{_MOD}.s3.download_object",
+    new_callable=AsyncMock,
+    return_value=b"raw-ogg",
+)
+async def test_force_retry_uses_unique_feature_version(
+    _mock_download: AsyncMock,
+    _mock_upload: AsyncMock,
+    mock_repair_kiq: AsyncMock,
+    _mock_reindex: AsyncMock,
+    db_session: AsyncSession,
+) -> None:
+    user = await _make_user(db_session, 6104)
+    await _make_telegram_track(db_session, user_id=user.id)
+
+    service = TelegramImportBackfillService(db_session)
+    await service.run(
+        limit=10, dry_run=False, urgent=True, force_retry=True
+    )
+
+    kwargs = mock_repair_kiq.await_args.kwargs
+    feature_version = kwargs["feature_version"]
+    assert feature_version.startswith(
+        "telegram-import-urgent-repair-v1-retry-"
+    )
+    assert feature_version != "telegram-import-urgent-repair-v1"
+
+
 @patch(f"{_MOD}.s3.upload_object", new_callable=AsyncMock)
 @patch(
     f"{_MOD}.s3.download_object",
@@ -216,3 +254,4 @@ async def test_apply_hashes_source_when_blob_is_missing(
         "48c2a3cc55bca79baff97910b96c74b906fc5d893a1bc5ccd14d629d"
         "3f3ef715"
     )
+    assert kwargs["feature_version"] == "telegram-import-repair-v1"

@@ -584,6 +584,34 @@ function _cloneTrackForStorage(t: Track): Track {
   return rest as Track
 }
 
+function _shuffleTracks<T>(items: readonly T[]): T[] {
+  const shuffled = [...items]
+  for (let i = shuffled.length - 1; i > 0; i -= 1) {
+    const j = Math.floor(Math.random() * (i + 1))
+    const tmp = shuffled[i]
+    shuffled[i] = shuffled[j]
+    shuffled[j] = tmp
+  }
+  return shuffled
+}
+
+function _pickQueueIndex(
+  items: readonly Track[],
+  unavailableIds: ReadonlySet<number>,
+  shuffle: boolean,
+): number {
+  const available: number[] = []
+  for (let i = 0; i < items.length; i += 1) {
+    const item = items[i]
+    if (item && !unavailableIds.has(item.id)) {
+      available.push(i)
+    }
+  }
+  if (available.length === 0) return -1
+  if (!shuffle || available.length === 1) return available[0]
+  return available[Math.floor(Math.random() * available.length)]
+}
+
 function _saveState(
   t: Track | null,
   s: number,
@@ -1928,11 +1956,16 @@ export function PlayerProvider({
   }, [])
 
   const toggleShuffle = useCallback(() => {
-    setShuffleOn((prev) => {
-      shuffleOnRef.current = !prev
-      localStorage.setItem('player-shuffle', String(!prev))
-      return !prev
-    })
+    const next = !shuffleOnRef.current
+    shuffleOnRef.current = next
+    localStorage.setItem('player-shuffle', String(next))
+    setShuffleOn(next)
+    if (next && manualQueueRef.current.length > 1) {
+      manualQueueRef.current = _shuffleTracks(
+        manualQueueRef.current,
+      )
+      setQueue([...manualQueueRef.current])
+    }
   }, [])
 
   const clearHlsError = useCallback(() => setHlsError(null), [])
@@ -3522,8 +3555,12 @@ export function PlayerProvider({
           : contextTracks.filter(
               (it) => it.id !== newTrack.id,
             )
-      manualQueueRef.current = [...tail]
-      setQueue([...tail])
+      const nextQueue =
+        shuffleOnRef.current && tail.length > 1
+          ? _shuffleTracks(tail)
+          : tail
+      manualQueueRef.current = [...nextQueue]
+      setQueue([...nextQueue])
       radioModeRef.current = false
       radioSeedTrackIdRef.current = null
       setRadioMode(false)
@@ -4310,19 +4347,28 @@ export function PlayerProvider({
         const { isCached } = await import(
           '@/lib/offlineCache'
         )
-        for (
-          let i = 0;
-          i < manualQueueRef.current.length;
-          i += 1
-        ) {
+        const cachedQueueIndices: number[] = []
+        for (let i = 0; i < manualQueueRef.current.length; i += 1) {
           const item = manualQueueRef.current[i]
           if (
             !item ||
             unavailableTrackIdsRef.current.has(item.id)
           )
             continue
-          if (await isCached(item.id)) {
-            manualQueueRef.current.splice(i, 1)
+          if (await isCached(item.id)) cachedQueueIndices.push(i)
+        }
+        const pickedCachedIdx =
+          shuffleOnRef.current && cachedQueueIndices.length > 1
+            ? cachedQueueIndices[
+                Math.floor(Math.random() * cachedQueueIndices.length)
+              ]
+            : cachedQueueIndices[0]
+        if (pickedCachedIdx !== undefined) {
+          const [item] = manualQueueRef.current.splice(
+            pickedCachedIdx,
+            1,
+          )
+          if (item) {
             setQueue([...manualQueueRef.current])
             return await advance(item)
           }
@@ -4339,8 +4385,10 @@ export function PlayerProvider({
     }
     try {
       if (manualQueueRef.current.length > 0) {
-        const nextIdx = manualQueueRef.current.findIndex(
-          (item) => !unavailableTrackIdsRef.current.has(item.id),
+        const nextIdx = _pickQueueIndex(
+          manualQueueRef.current,
+          unavailableTrackIdsRef.current,
+          shuffleOnRef.current,
         )
         if (nextIdx < 0) {
           manualQueueRef.current = []

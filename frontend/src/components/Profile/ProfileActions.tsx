@@ -8,6 +8,7 @@ import { useSound } from '@/store/SoundContext'
 
 interface ProfileActionsProps {
   onOpenImport: () => void
+  onOpenFavoriteArtists: () => void
   onOpenComplaints: () => void
   onOpenDislikes: () => void
   onOpenStats: () => void
@@ -28,6 +29,7 @@ interface ActionGroup {
 
 export function ProfileActions({
   onOpenImport,
+  onOpenFavoriteArtists,
   onOpenComplaints,
   onOpenDislikes,
   onOpenStats,
@@ -93,6 +95,15 @@ export function ProfileActions({
       onClick: () => {
         tap()
         navigate('/library?tab=liked')
+      },
+    },
+    {
+      id: 'profile-action-artists',
+      icon: 'users-following',
+      label: t('profile.tabArtists'),
+      onClick: () => {
+        tap()
+        onOpenFavoriteArtists()
       },
     },
     {
