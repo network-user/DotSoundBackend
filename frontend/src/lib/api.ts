@@ -1773,10 +1773,11 @@ export const api = {
   uploadTrackVideo(
     trackId: number,
     formData: FormData,
+    signal?: AbortSignal,
   ): Promise<Track> {
     return request(
       `/api/v1/tracks/${trackId}/video`,
-      { method: 'POST', body: formData },
+      { method: 'POST', body: formData, signal },
     )
   },
 

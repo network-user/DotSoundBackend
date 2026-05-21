@@ -502,9 +502,15 @@ async def delete_track_video(
     track = await _get_owned_track(
         track_id, current_user, session
     )
+    had_video_state = bool(
+        track.video_key
+        or track.video_processing_status
+        or track.video_thumbnail_key
+    )
     if track.video_key:
         with suppress(Exception):
             await s3.delete_object(track.video_key)
+    if had_video_state:
         track.video_key = None
         track.video_processing_status = None
         track.video_thumbnail_key = None

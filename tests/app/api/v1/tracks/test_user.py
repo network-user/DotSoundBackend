@@ -535,6 +535,44 @@ async def test_delete_video_success(
     assert saved.video_processing_status is None
 
 
+async def test_delete_processing_video_clears_stuck_status(
+    client: AsyncClient,
+    db_session: AsyncSession,
+) -> None:
+    user = await create_test_user(client, 60022)
+    headers = await auth_headers(
+        client, user["id"]
+    )
+    track = await create_test_track(
+        client, "VidCancel", user["id"]
+    )
+    await db_session.execute(
+        update(Track)
+        .where(Track.id == track["id"])
+        .values(video_processing_status="processing:stuck")
+    )
+    await db_session.commit()
+
+    with patch(
+        "app.core.s3.delete_object",
+        new_callable=AsyncMock,
+    ) as mock_del:
+        r = await client.delete(
+            f"/api/v1/tracks/{track['id']}/video",
+            headers=headers,
+        )
+
+    assert r.status_code == 204
+    mock_del.assert_not_called()
+    result = await db_session.execute(
+        select(Track).where(Track.id == track["id"])
+    )
+    saved = result.scalar_one()
+    assert saved.video_key is None
+    assert saved.video_processing_status is None
+    assert saved.video_thumbnail_key is None
+
+
 async def test_update_track_title(
     client: AsyncClient,
 ) -> None:

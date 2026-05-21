@@ -37,6 +37,9 @@
   - The client now rejects empty files and unsupported formats before upload,
     showing the exact reason inline and through the existing notification
     surface.
+  - Stuck video processing can now be cancelled from the track card: the UI
+    aborts an active upload request, clears polling, and asks backend to reset
+    `video_processing_status` even when no processed `video_key` exists yet.
   - Video deletion clears processing and thumbnail state together with
     `video_key`.
   - Follow-up: video transcode tasks now carry a short processing token, and
@@ -46,6 +49,7 @@
     text change needed because the feature still uses existing UGC video
     upload/storage semantics.
   - Verification: `npm run build`; `poetry run pytest
+    tests/app/api/v1/tracks/test_user.py::test_delete_processing_video_clears_stuck_status
     tests/app/api/v1/tracks/test_user.py::test_upload_video_success
     tests/app/api/v1/tracks/test_user.py::test_delete_video_success
     tests/app/services/test_video_transcoding.py`;

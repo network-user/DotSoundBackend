@@ -106,6 +106,10 @@ function isSupportedVideoFile(file: File): boolean {
   return name.endsWith('.mp4') || name.endsWith('.webm')
 }
 
+function isAbortError(err: unknown): boolean {
+  return err instanceof DOMException && err.name === 'AbortError'
+}
+
 interface Props {
   onOpenArtist?: (name: string) => void
 }
@@ -280,6 +284,9 @@ export function TrackCardSheet({
   const videoInputRef =
     useRef<HTMLInputElement>(null)
   const videoPollRef = useRef<number | null>(null)
+  const videoUploadAbortRef =
+    useRef<AbortController | null>(null)
+  const videoCancelRequestedRef = useRef(false)
   const videoPlaybackErrorShownRef = useRef(false)
   const [extrasOpen, setExtrasOpen] = useState(false)
   const [streamOverrideDraft, setStreamOverrideDraft] =
@@ -1107,6 +1114,9 @@ export function TrackCardSheet({
       setVideoBusy(true)
       setVideoStatusKind('info')
       setVideoStatusPhase('uploading')
+      videoCancelRequestedRef.current = false
+      const uploadAbort = new AbortController()
+      videoUploadAbortRef.current = uploadAbort
       setVideoStatusMessage(
         t('trackSheet.videoUploading'),
       )
@@ -1116,7 +1126,21 @@ export function TrackCardSheet({
         const updated = await api.uploadTrackVideo(
           track.id,
           fd,
+          uploadAbort.signal,
         )
+        if (
+          videoCancelRequestedRef.current ||
+          uploadAbort.signal.aborted
+        ) {
+          await api.deleteTrackVideo(track.id)
+          updateTrack({
+            id: track.id,
+            video_key: null,
+            video_processing_status: null,
+            video_thumbnail_key: null,
+          })
+          return
+        }
         updateTrack(updated)
         setVideoReady(false)
         showIsland({
@@ -1137,6 +1161,16 @@ export function TrackCardSheet({
           pollVideoProcessing(track.id)
         }
       } catch (err) {
+        if (
+          isAbortError(err) ||
+          videoCancelRequestedRef.current
+        ) {
+          setVideoBusy(false)
+          setVideoStatusKind('info')
+          setVideoStatusPhase('idle')
+          setVideoStatusMessage(null)
+          return
+        }
         const message = getApiErrorMessage(
           err,
           t('trackSheet.videoUploadFailed'),
@@ -1152,6 +1186,10 @@ export function TrackCardSheet({
         })
       }
       finally {
+        if (videoUploadAbortRef.current === uploadAbort) {
+          videoUploadAbortRef.current = null
+        }
+        videoCancelRequestedRef.current = false
         e.target.value = ''
       }
     },
@@ -1165,10 +1203,15 @@ export function TrackCardSheet({
   )
 
   const handleVideoDelete = useCallback(async () => {
-    if (!track?.video_key) return
+    if (!track) return
+    const wasCancelling =
+      videoBusy ||
+      isVideoProcessingStatus(track.video_processing_status)
+    videoCancelRequestedRef.current = true
+    videoUploadAbortRef.current?.abort()
+    clearVideoPoll()
     try {
       await api.deleteTrackVideo(track.id)
-      clearVideoPoll()
       updateTrack({
         id: track.id,
         video_key: null,
@@ -1180,10 +1223,23 @@ export function TrackCardSheet({
       setVideoStatusKind('info')
       setVideoStatusPhase('idle')
       setVideoStatusMessage(null)
+      showIsland({
+        kind: 'toast',
+        title: t(
+          wasCancelling
+            ? 'trackSheet.videoUploadCancelled'
+            : 'trackSheet.videoRemoved',
+        ),
+        durationMs: 3000,
+      })
     } catch (err) {
       const message = getApiErrorMessage(
         err,
-        t('trackSheet.videoDeleteFailed'),
+        t(
+          wasCancelling
+            ? 'trackSheet.videoCancelFailed'
+            : 'trackSheet.videoDeleteFailed',
+        ),
       )
       setVideoStatusKind('error')
       setVideoStatusPhase('error')
@@ -1193,8 +1249,17 @@ export function TrackCardSheet({
         title: message,
         durationMs: 4500,
       })
+    } finally {
+      videoCancelRequestedRef.current = false
     }
-  }, [clearVideoPoll, t, track, updateTrack])
+  }, [
+    clearVideoPoll,
+    showIsland,
+    t,
+    track,
+    updateTrack,
+    videoBusy,
+  ])
 
   const [offlineSaved, setOfflineSaved] = useState(false)
   const [offlineBusy, setOfflineBusy] = useState(false)
@@ -1386,6 +1451,8 @@ export function TrackCardSheet({
   const videoProcessing =
     videoBusy ||
     isVideoProcessingStatus(track.video_processing_status)
+  const videoCanRemoveOrCancel =
+    Boolean(track.video_key) || videoProcessing
   const videoStatusIsBusy =
     videoStatusPhase === 'uploading' ||
     videoStatusPhase === 'processing' ||
@@ -1420,6 +1487,9 @@ export function TrackCardSheet({
   ]
     .filter(Boolean)
     .join(' ')
+  const videoRemoveOrCancelLabel = videoProcessing
+    ? t('trackSheet.cancelVideoUpload')
+    : t('trackSheet.removeVideo')
   const visualMode =
     showLyrics || hasActiveVideo
   const perfLite =
@@ -2498,7 +2568,7 @@ export function TrackCardSheet({
                   ? t('trackSheet.videoProcessingAction')
                   : t('trackSheet.video')}
               </button>
-              {track.video_key && (
+              {videoCanRemoveOrCancel && (
                 <button
                   className="tcs-edit-btn"
                   onClick={handleVideoDelete}
@@ -2507,7 +2577,7 @@ export function TrackCardSheet({
                     name="x"
                     size={18}
                   />
-                  {t('trackSheet.removeVideo')}
+                  {videoRemoveOrCancelLabel}
                 </button>
               )}
             </div>
