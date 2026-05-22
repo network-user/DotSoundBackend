@@ -4,9 +4,6 @@ import secrets
 from contextlib import suppress
 
 import structlog
-from dotsound_private_core.services.upload_policy import (
-    MAX_VIDEO_BYTES as _MAX_VIDEO_BYTES,
-)
 from fastapi import (
     APIRouter,
     BackgroundTasks,
@@ -40,6 +37,10 @@ from app.services.track_response_build import (
     dedupe_and_build_track_list,
 )
 from app.services.track_service import TrackService
+from app.services.track_video_upload_service import (
+    normalize_video_upload_content_type,
+    upload_track_video_bytes,
+)
 from app.services.upload_service import UploadService
 
 router = APIRouter()
@@ -418,7 +419,7 @@ async def regenerate_track_cover(
 
 
 _ALLOWED_VIDEO_MIMES = frozenset(
-    {"video/mp4", "video/webm"}
+    {"video/mp4", "video/webm", "video/quicktime"}
 )
 
 
@@ -438,50 +439,25 @@ async def upload_track_video(
         track_id, current_user, session
     )
 
-    mime = video.content_type or ""
-    if mime not in _ALLOWED_VIDEO_MIMES:
+    data = await video.read()
+    normalized = normalize_video_upload_content_type(
+        video.content_type
+    )
+    if (
+        normalized is not None
+        and normalized not in _ALLOWED_VIDEO_MIMES
+    ):
         raise HTTPException(
             status_code=status.HTTP_415_UNSUPPORTED_MEDIA_TYPE,
             detail="Video must be MP4 or WebM",
         )
 
-    data = await video.read()
-    if len(data) > _MAX_VIDEO_BYTES:
-        limit_mb = _MAX_VIDEO_BYTES // (1024 * 1024)
-        raise HTTPException(
-            status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
-            detail=f"Video exceeds {limit_mb} MB limit",
-        )
-
-    from app.services.file_validator import validate_video_async
-    await validate_video_async(data, video.filename)
-
-    if track.video_key:
-        with suppress(Exception):
-            await s3.delete_object(track.video_key)
-        track.video_key = None
-        track.video_thumbnail_key = None
-
-    safe_name = re.sub(
-        r"[^\w.\-]", "_", video.filename or "video"
-    )[:100]
-    raw_key = f"temp/video/{track.id}_{safe_name}"
-    await s3.upload_object(
-        key=raw_key, data=data, content_type=mime
-    )
-
-    processing_status = f"processing:{secrets.token_hex(4)}"
-    track.video_processing_status = processing_status
-    await session.flush()
-
-    from app.services.video_transcoding import (
-        transcode_video,
-    )
-    await transcode_video.kiq(
-        track_id=track.id,
-        raw_key=raw_key,
-        original_filename=video.filename or "video.mp4",
-        expected_status=processing_status,
+    await upload_track_video_bytes(
+        session,
+        track,
+        data,
+        video.content_type,
+        video.filename,
     )
 
     await session.refresh(track)

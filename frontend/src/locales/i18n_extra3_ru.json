@@ -111,6 +111,7 @@
       "tabQr": "QR",
       "tabCard": "Карточка",
       "copy": "Копировать",
+      "copyLink": "Скопировать ссылку",
       "copied": "Ссылка скопирована",
       "copyFail": "Не удалось скопировать",
       "shareTelegram": "В Telegram",
@@ -122,6 +123,7 @@
       "followers": "Подписч.",
       "qrFail": "QR недоступен"
     },
+    "publicPreview": "Как видят другие",
     "trackAction": {
       "share": "Поделиться",
       "open": "Открыть страницу",

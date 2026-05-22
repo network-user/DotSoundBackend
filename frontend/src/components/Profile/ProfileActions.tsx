@@ -1,6 +1,8 @@
 import { useTranslation } from 'react-i18next'
 import { useNavigate } from 'react-router-dom'
 import { Icon } from '@/components/Icon/Icon'
+import { HomeMixShortcutIcon } from '@/components/home/HomeMixShortcutIcon'
+import type { HomeMixShortcutIconId } from '@/components/home/HomeMixShortcutIcon'
 import { MotionPress } from '@/components/ui/MotionPress'
 import { MIX_SHORTCUT_TILES } from '@/lib/homeShortcuts'
 import { isYearRecapSeasonActive } from '@/lib/recapSeason'
@@ -17,6 +19,7 @@ interface ProfileActionsProps {
 interface ActionRow {
   id: string
   icon: string
+  shortcutIcon?: HomeMixShortcutIconId
   label: string
   onClick: () => void
 }
@@ -130,6 +133,7 @@ export function ProfileActions({
     MIX_SHORTCUT_TILES.map((tile) => ({
       id: `profile-mix-${tile.labelKey}`,
       icon: tile.profileIcon,
+      shortcutIcon: tile.shortcutIcon,
       label: t(`redesign.home.${tile.labelKey}`),
       onClick: () => {
         tap()
@@ -196,7 +200,14 @@ export function ProfileActions({
                   onClick={row.onClick}
                 >
                   <span className="rp-action-tile__icon">
-                    <Icon name={row.icon} size={18} />
+                    {'shortcutIcon' in row && row.shortcutIcon ? (
+                      <HomeMixShortcutIcon
+                        id={row.shortcutIcon}
+                        size={18}
+                      />
+                    ) : (
+                      <Icon name={row.icon} size={18} />
+                    )}
                   </span>
                   <span className="rp-action-tile__label">
                     {row.label}

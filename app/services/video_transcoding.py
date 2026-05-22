@@ -196,7 +196,7 @@ async def transcode_video(
             ":force_original_aspect_ratio=decrease",
             "-c:v", "libx264",
             "-crf", "23",
-            "-preset", "medium",
+            "-preset", "fast",
             "-c:a", "aac",
             "-b:a", "128k",
             "-movflags", "+faststart",

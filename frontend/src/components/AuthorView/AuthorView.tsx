@@ -15,6 +15,7 @@ import { Icon } from '@/components/Icon/Icon'
 import { MotionPress } from '@/components/ui/MotionPress'
 import { showIsland } from '@/lib/island'
 import { queueMutation } from '@/lib/pendingEvents'
+import { resolvePublicProfileUrl } from '@/lib/publicUrls'
 import { copyToClipboard } from '@/lib/platform'
 import { ProfileShareModal } from '@/components/Profile/ProfileShareModal'
 import type { AuthorProfile, Track, UserStatsResponse } from '@/types/api'
@@ -141,7 +142,10 @@ export function AuthorView({ authorId, onClose }: Props) {
     if (!authorId) return
     try {
       const card = await api.getProfileShareCard(authorId)
-      const url = card.deep_link || card.profile_url
+      const url = resolvePublicProfileUrl(
+        card.profile_url,
+        authorId,
+      )
       const ok = await copyToClipboard(url)
       showIsland({
         kind: ok ? 'toast' : 'error',

@@ -74,7 +74,12 @@ import {
 const TCS_DRAG_CLOSE_THRESHOLD = 100
 
 const SPEED_OPTIONS = [0.75, 1, 1.25, 1.5]
-const VIDEO_UPLOAD_MIMES = new Set(['video/mp4', 'video/webm'])
+const VIDEO_UPLOAD_MIMES = new Set([
+  'video/mp4',
+  'video/webm',
+  'video/quicktime',
+])
+const VIDEO_UPLOAD_TIMEOUT_MS = 120_000
 const LYRICS_VISIBLE_KEY = 'setting-track-card-lyrics-visible'
 
 function readLyricsVisiblePreference(): boolean {
@@ -1214,6 +1219,7 @@ export function TrackCardSheet({
           track.id,
           fd,
           uploadAbort.signal,
+          VIDEO_UPLOAD_TIMEOUT_MS,
         )
         if (
           videoCancelRequestedRef.current ||

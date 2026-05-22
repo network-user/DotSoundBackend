@@ -1803,10 +1803,28 @@ export const api = {
     trackId: number,
     formData: FormData,
     signal?: AbortSignal,
+    timeoutMs = 120_000,
   ): Promise<Track> {
+    const timeoutSignal =
+      typeof AbortSignal !== 'undefined' &&
+      'timeout' in AbortSignal
+        ? (
+            AbortSignal as typeof AbortSignal & {
+              timeout(ms: number): AbortSignal
+            }
+          ).timeout(timeoutMs)
+        : null
+    const mergedSignal =
+      signal && timeoutSignal
+        ? AbortSignal.any([signal, timeoutSignal])
+        : signal ?? timeoutSignal ?? undefined
     return request(
       `/api/v1/tracks/${trackId}/video`,
-      { method: 'POST', body: formData, signal },
+      {
+        method: 'POST',
+        body: formData,
+        signal: mergedSignal,
+      },
     )
   },
 

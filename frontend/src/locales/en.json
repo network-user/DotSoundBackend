@@ -95,6 +95,10 @@
     "myTracksEmptyHint": "Like tracks or import music from Telegram, SoundCloud, and other services — they will appear here",
     "myTracksUpload": "Upload track",
     "avatarEditHint": "Change profile photo",
+    "publicPreview": "Public preview",
+    "share": {
+      "copyLink": "Copy link"
+    },
     "uploadCallout": {
       "title": "Upload a track",
       "body": "Open the upload wizard to add audio, then add your own lyrics and timecodes before publishing.",
@@ -403,7 +407,52 @@
       "importedCount": "Imported: {{count}}",
       "importGmTitle": "Import AI response (genre / mood)",
       "importGmSubtitle": "JSON: tracks[].id, genre (string), moods (array of tags). Empty genre does not touch the field. New moods are added to existing ones.",
-      "gmOverwriteLabel": "Overwrite genre when already filled"
+      "gmOverwriteLabel": "Overwrite genre when already filled",
+      "openTimecodeSync": "Timecode sync queue"
+    },
+    "timecodeSync": {
+      "title": "Lyrics timecode sync",
+      "subtitle": "Enqueue alignment for tracks that already have lyrics text but no synced timecodes. Monitor the dedicated queue and reorder waiting jobs.",
+      "backToTracks": "Back to tracks",
+      "tabQueue": "Queue",
+      "tabEnqueue": "Start sync",
+      "candidatesHint": "{{count}} tracks eligible (text present, no timecodes, no active job).",
+      "limitLabel": "Batch limit",
+      "enqueueAll": "Enqueue all eligible",
+      "enqueueIds": "Enqueue listed IDs ({{count}})",
+      "idsLabel": "Track IDs (comma or newline separated)",
+      "idsPlaceholder": "101\n102\n103",
+      "enqueueDone": "Queued {{enqueued}} jobs (requested {{requested}}, skipped {{skipped}}).",
+      "loadFailed": "Failed to load queue",
+      "statQueued": "Queued: {{count}}",
+      "statRunning": "Running: {{count}}",
+      "statCandidates": "Eligible backlog: {{count}}",
+      "nowTitle": "Current work",
+      "badgeRunning": "In progress",
+      "badgeNext": "Next up",
+      "noneRunning": "No job running",
+      "noneNext": "Queue empty",
+      "queuedTitle": "Waiting queue",
+      "queuedHint": "Higher priority runs first after the current job finishes. Use “Run next” to jump to the front.",
+      "queuedEmpty": "No queued timecode jobs",
+      "recentTitle": "Recently finished",
+      "recentEmpty": "No finished jobs in this view yet",
+      "colTrack": "Track",
+      "colPriority": "Priority",
+      "colStatus": "Status",
+      "colActions": "Priority",
+      "colFinished": "Finished",
+      "colError": "Error",
+      "priorityInput": "Priority",
+      "applyPriority": "Apply",
+      "bumpNext": "Run next",
+      "jobId": "Job {{id}}",
+      "filterMine": "Only my enqueue runs",
+      "filterSinceAll": "All history",
+      "filterSince24h": "Last 24h",
+      "filterSince7d": "Last 7 days",
+      "cancelJob": "Cancel",
+      "cancelDone": "Job cancelled"
     },
     "albums": {
       "title": "Albums",
@@ -1124,7 +1173,8 @@
       "lyricsPipelineHint": "Full cascade order",
       "lyricsIntent": {
         "sync": "Timed lyrics",
-        "bypass": "Bypass cache"
+        "bypass": "Bypass cache",
+        "alignExisting": "Align existing text"
       },
       "lyricsTier": {
         "catalog_only": "Catalog lyrics lookup",

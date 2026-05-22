@@ -7,6 +7,17 @@
  * / desktop.
  */
 
+.profile-public-preview-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0 0 12px;
+  padding: 8px 12px;
+  border-radius: 999px;
+  font-size: 13px;
+  color: var(--text-secondary, rgba(255, 255, 255, 0.72));
+}
+
 /* ───────────── Hero dynamic gradient (l) ───────────── */
 
 .rp-hero-bg {

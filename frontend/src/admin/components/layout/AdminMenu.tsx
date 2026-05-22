@@ -33,7 +33,7 @@ const GROUPS: MenuGroup[] = [
     labelKey: 'admin.menu.groups.catalog',
     fallback: 'Catalog',
     match: (i) =>
-      /^(tracks|albums|artists|playlists|promotions|lyrics|station-gap)$/i.test(
+      /^(tracks|track-timecodes|albums|artists|playlists|promotions|lyrics|station-gap)$/i.test(
         i.id,
       ),
   },

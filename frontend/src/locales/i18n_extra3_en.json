@@ -111,6 +111,7 @@
       "tabQr": "QR",
       "tabCard": "Card",
       "copy": "Copy",
+      "copyLink": "Copy link",
       "copied": "Link copied",
       "copyFail": "Couldn't copy",
       "shareTelegram": "Send in Telegram",
@@ -122,6 +123,7 @@
       "followers": "Followers",
       "qrFail": "QR unavailable"
     },
+    "publicPreview": "Public preview",
     "trackAction": {
       "share": "Share",
       "open": "Open page",

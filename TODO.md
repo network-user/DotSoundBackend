@@ -1,5 +1,38 @@
 # DotSound - TODO Tracker
 
+- [x] **Track card video upload stuck on processing (2026-05-22)**
+  - Root cause: `app.services.video_transcoding` was not registered on
+    the Taskiq worker (`main.py`, `docker-compose.yml`), so uploads
+    queued transcode jobs that never ran.
+  - Small MP4 (≤25 MB) now fast-attach without a background job;
+    limit raised to 80 MB; `video/quicktime` accepted; ffmpeg preset
+    `fast`; frontend upload timeout 120s.
+  - Verification: `pytest tests/app/api/v1/tracks/test_user.py -k video
+    tests/app/services/test_track_video_upload_service.py`; PrivateCore
+    `test_upload_policy.py`.
+
+- [x] **Admin timecode-sync queue for unsynced lyrics (2026-05-22)**
+  - Admin API: enqueue alignment for tracks with plain text but no
+    synced lines; queue snapshot (running / next / queued / recent);
+    PATCH priority + bump-next; POST cancel; queue filters `mine` and
+    `since_hours`; `request_align_existing_text` on lyrics job list/detail.
+  - Migration `0119_lyrics_job_align_existing_text`; background enqueue
+    skips `catalog_only` tier when aligning existing text.
+  - Admin UI: menu «Таймкоды», tabs Queue / Start sync, cancel + filters;
+    Tasks lyrics jobs badge «Таймкоды к тексту»; `docs/admin/README.md`.
+  - Verification: `pytest tests/app/api/v1/admin/test_tracks_timecode_sync.py
+    tests/app/services/test_admin_lyrics_timecode_sync_service.py
+    tests/app/services/test_lyrics_service.py -k timecode`; `npm run build`.
+
+- [x] **Home page full surface redesign (2026-05-22)**
+  - `home-surface.css` + `rh-home--refresh`: editorial header (greeting +
+    display name), spotlight hero, «Дальше» mini-queue, radio station card,
+    deck-wrapped shortcut rail, accent section heads, card-style track tiles
+    with play chip, cluster intros for discovery/social bands.
+  - `HomeMixShortcutIcon` + horizontal `HomeQuickShortcuts` rail.
+  - Performance: idle-deferred promos/profile, memoized tiles/sections.
+  - Verification: `npm run build`.
+
 - [x] **Liked playback queue order: forward-only fallback (2026-05-22)**
   - Fixed `playFromPaginatedCollection` falling back to the entire
     loaded list (which includes items shown *above* the clicked track)
@@ -39,6 +72,25 @@
     tests/app/services/test_recommendation_service.py -k "radio_guard"`;
     `poetry run ruff check app/services/recommendation_service.py
     tests/app/services/test_recommendation_service.py`; `npm run build`.
+
+- [x] **Profile share i18n, E2E, hidden owner share-card (2026-05-22)**
+  - i18n: `profile.share.copyLink`, `profile.publicPreview` (en/ru +
+    i18n_extra3).
+  - E2E `frontend/e2e/profile-share.spec.ts`: share → copy link → open
+    `/mini_app/profile/:id` (public profile user id 2).
+  - Share-card: owner of a `hidden` profile gets 200; strangers 403.
+  - Fix: removed stale `caps` reference crashing ProfileShareModal.
+  - Verification: `pytest test_hidden_profile_share_card_ok_for_owner`;
+    `npx playwright test e2e/profile-share.spec.ts`.
+
+- [x] **Profile share uses web URL, not Telegram bot deep-link (2026-05-22)**
+  - Share modal, QR, and copy now prefer canonical `/mini_app/profile/:id`
+    URLs; `deep_link` stays API-only for Telegram `startapp` routing.
+  - Backend `public_web_urls` normalizes `MINI_APP_URL` with `/mini_app`
+    when the env value omits the path segment.
+  - Own profile: «Как видят другие» opens `/profile/:id?preview=1`.
+  - Verification: `pytest tests/app/services/test_public_web_urls.py`
+    and share-card test; `vitest src/lib/publicUrls.test.ts`.
 
 - [x] **Full public user profile route and share deep-links (2026-05-22)**
   - Added a routed public profile screen at `/profile/:userId` with

@@ -3,6 +3,25 @@ import { ensureCsrf, readCsrfCookie } from './csrf'
 import { getAdminApiBasePath } from '@/lib/adminPath'
 import type { PlaybackRepairSummary } from '../components/widgets/PlaybackRepairSummaryPanel'
 
+export interface LyricsTimecodeSyncJob {
+  id: string
+  track_id: number
+  track_title: string | null
+  track_artist: string | null
+  status: string
+  profile: string
+  queue_priority: number
+  current_tier: string | null
+  error: string | null
+  attempts: number
+  created_at: string | null
+  started_at: string | null
+  finished_at: string | null
+  duration_ms: number | null
+  progress_id: string | null
+  request_with_sync: boolean
+}
+
 function normalizeHttpDetail(raw: unknown): string {
   if (typeof raw === 'string') {
     return raw
@@ -1649,6 +1668,7 @@ export const adminApi = {
       tiers_planned?: string[] | null
       request_with_sync?: boolean
       request_bypass_cache?: boolean
+      request_align_existing_text?: boolean
       live: {
         stage: string | null
         percent: number | null
@@ -2569,6 +2589,57 @@ export const adminApi = {
           skip_existing: skipExisting,
         },
       },
+    ),
+
+  lyricsTimecodeSyncQueue: (params?: {
+    mine?: boolean
+    since_hours?: number
+  }) =>
+    adminFetch<{
+      filters: {
+        requested_by_user_id: number | null
+        since: string | null
+      }
+      candidate_count: number
+      counts: {
+        queued: number
+        running: number
+        recent_terminal: number
+      }
+      running: LyricsTimecodeSyncJob | null
+      next: LyricsTimecodeSyncJob | null
+      queued: LyricsTimecodeSyncJob[]
+      recent: LyricsTimecodeSyncJob[]
+    }>('/tracks/lyrics-timecode-sync/queue', { query: params }),
+
+  lyricsTimecodeSyncCancelJob: (jobId: string) =>
+    adminFetch<{ status: string; job_status?: string }>(
+      `/tracks/lyrics-timecode-sync/jobs/${encodeURIComponent(jobId)}/cancel`,
+      { method: 'POST', body: {} },
+    ),
+
+  lyricsTimecodeSyncEnqueue: (body: {
+    track_ids?: number[]
+    enqueue_all_unsynced?: boolean
+    limit?: number
+  }) =>
+    adminFetch<{
+      requested: number
+      enqueued: number
+      skipped: number
+      job_ids: string[]
+    }>('/tracks/lyrics-timecode-sync/enqueue', {
+      method: 'POST',
+      body,
+    }),
+
+  lyricsTimecodeSyncSetPriority: (
+    jobId: string,
+    body: { queue_priority?: number; bump_next?: boolean },
+  ) =>
+    adminFetch<LyricsTimecodeSyncJob>(
+      `/tracks/lyrics-timecode-sync/jobs/${encodeURIComponent(jobId)}/priority`,
+      { method: 'PATCH', body },
     ),
 
   batchGenreMoodPrompt: (body: {

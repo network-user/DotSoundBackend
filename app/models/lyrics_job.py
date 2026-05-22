@@ -89,3 +89,8 @@ class LyricsJob(Base, TimestampMixin):
         nullable=False,
         server_default="false",
     )
+    request_align_existing_text: Mapped[bool] = mapped_column(
+        Boolean,
+        nullable=False,
+        server_default="false",
+    )

@@ -403,6 +403,66 @@ async def test_trigger_sync_ignores_stale_lines_without_time_ms(
     assert captured["queue_priority"] == 1_000_000
 
 
+async def test_enqueue_background_align_skips_catalog_tier(
+    session: AsyncSession,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    uid = await _make_user(session)
+    tid = await _make_track(session, uid)
+    svc = LyricsService(session)
+    await svc.create_or_update(tid, uid, "Line 1\nLine 2")
+
+    captured: dict[str, object] = {}
+
+    async def fake_start_cascade(
+        _session: AsyncSession,
+        *,
+        job: LyricsJob,
+        with_sync: bool,
+        bypass_cache: bool,
+        skip_tiers: tuple[str, ...] = (),
+        skip_reason: str | None = None,
+    ) -> str:
+        captured["skip_tiers"] = skip_tiers
+        captured["skip_reason"] = skip_reason
+        captured["align_flag"] = job.request_align_existing_text
+        job.current_tier = "remote_whisper"
+        return "remote_whisper"
+
+    monkeypatch.setattr(
+        compute_router,
+        "get_routing_mode",
+        AsyncMock(return_value="auto"),
+    )
+    monkeypatch.setattr(
+        lyrics_worker,
+        "set_cached_lyrics_result",
+        AsyncMock(),
+    )
+    monkeypatch.setattr(
+        lyrics_worker,
+        "set_lyrics_progress",
+        AsyncMock(),
+    )
+    monkeypatch.setattr(
+        lyrics_cascade,
+        "start_cascade",
+        fake_start_cascade,
+    )
+
+    progress_id = await svc.enqueue_background_lyrics(
+        tid,
+        requested_by_user_id=uid,
+        with_sync=True,
+        force_sync_existing_text=True,
+    )
+
+    assert progress_id
+    assert captured["skip_tiers"] == ("catalog_only",)
+    assert captured["skip_reason"] == "existing_text_needs_timing"
+    assert captured["align_flag"] is True
+
+
 async def test_redefine_sync_clears_existing_timing_and_queues_job(
     session: AsyncSession,
     monkeypatch: pytest.MonkeyPatch,

@@ -6,6 +6,7 @@ import {
   useState,
 } from 'react'
 import { useTranslation } from 'react-i18next'
+import { useNavigate } from 'react-router-dom'
 import { api } from '@/lib/api'
 import {
   getInternalUserId,
@@ -65,6 +66,7 @@ export function ProfileView({
   onOpenSettings,
 }: Props) {
   const { t } = useTranslation()
+  const navigate = useNavigate()
   const { playTrack } = usePlayerActions()
   const sound = useSound()
   const fallbackName = t(
@@ -106,6 +108,9 @@ export function ProfileView({
     useState<File | null>(null)
   const [palette, setPalette] = useState<CoverPalette | null>(null)
   const [shareOpen, setShareOpen] = useState(false)
+  const [profileUserId, setProfileUserId] = useState<
+    number | null
+  >(null)
   const [pendingDeleteIds, setPendingDeleteIds] = useState<Set<number>>(new Set())
   const deleteTimers = useRef<Map<number, ReturnType<typeof setTimeout>>>(new Map())
   const [serverDebug, setServerDebug] = useState(false)
@@ -203,6 +208,7 @@ export function ProfileView({
     api
       .getUserProfile(internalId)
       .then((profile) => {
+        setProfileUserId(profile.id)
         const name =
           profile.display_name ||
           [
@@ -455,10 +461,8 @@ export function ProfileView({
                 variant="icon"
                 haptic="light"
                 className="icon-btn"
-                ariaLabel={t(
-                  'profile.share.open',
-                  'Поделиться профилем',
-                )}
+                ariaLabel={t('profile.share.open')}
+                data-testid="profile-share-open"
                 onClick={() => {
                   feedbackTap()
                   setShareOpen(true)
@@ -562,12 +566,31 @@ export function ProfileView({
                 handleAvatarRejected
               }
               onShare={
-                getInternalUserId()
+                profileUserId
                   ? () => setShareOpen(true)
                   : undefined
               }
             />
             <ProfileStats stats={stats} />
+            {profileUserId ? (
+              <MotionPress
+                type="button"
+                variant="ghost"
+                haptic="light"
+                className="profile-public-preview-link"
+                onClick={() => {
+                  hapticSelection()
+                  navigate(
+                    `/profile/${profileUserId}?preview=1`,
+                  )
+                }}
+              >
+                <Icon name="user" size={16} />
+                <span>
+                  {t('profile.publicPreview')}
+                </span>
+              </MotionPress>
+            ) : null}
             <ListenerStats />
             <ArtistProfileCard />
             <ProfileActions
@@ -614,13 +637,13 @@ export function ProfileView({
         )}
       </div>
 
-      {shareOpen && getInternalUserId() && (
+      {shareOpen && profileUserId ? (
         <ProfileShareModal
           open={shareOpen}
-          userId={getInternalUserId() as number}
+          userId={profileUserId}
           onClose={() => setShareOpen(false)}
         />
-      )}
+      ) : null}
     </section>
   )
 }

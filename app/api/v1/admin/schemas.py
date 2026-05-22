@@ -148,6 +148,28 @@ class LyricsBatchImportResponse(BaseModel):
     errors: list[str]
 
 
+class LyricsTimecodeSyncEnqueueRequest(BaseModel):
+    track_ids: list[int] = Field(default_factory=list, max_length=500)
+    enqueue_all_unsynced: bool = False
+    limit: int = Field(default=100, ge=1, le=500)
+
+
+class LyricsTimecodeSyncEnqueueResponse(BaseModel):
+    requested: int
+    enqueued: int
+    skipped: int
+    job_ids: list[str]
+
+
+class LyricsTimecodeSyncPriorityRequest(BaseModel):
+    queue_priority: int | None = Field(
+        default=None,
+        ge=-1_000_000,
+        le=1_000_000,
+    )
+    bump_next: bool = False
+
+
 class GenreMoodBatchPromptRequest(BaseModel):
     track_ids: list[int] = Field(default_factory=list, max_length=200)
     search: str | None = Field(default=None, max_length=128)

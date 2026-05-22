@@ -337,6 +337,10 @@ Highlights:
 - `MorphIcon` — outline ↔ filled icon morph for `heart`, `play`,
   `pause`, `star`, `bookmark`, `home`, `search`, `library`,
   `chats`, `profile`, `radio`, `users-following`, `flame`.
+- `HomeMixShortcutIcon` — static stroke glyphs for home/profile mix
+  shortcuts (`mix-daily`, `mix-weekly`, `mix-top`, `mix-trending`,
+  `mix-forgotten`, `mix-personal`); rendered inside
+  `HomeQuickShortcuts` horizontal rail on `HomeView`.
 - `SwipeRow` — left/right swipe-actions row with rubber-band and
   threshold-armed haptic.
 - `LongPressMenu` — iOS-style context menu over any trigger; overlay is

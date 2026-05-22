@@ -1,18 +1,20 @@
 ﻿import {
   type KeyboardEvent,
+  memo,
   useCallback,
   useEffect,
+  useMemo,
   useRef,
   useState,
 } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useNavigate } from 'react-router-dom'
 import { Icon } from '@/components/Icon/Icon'
+import { HomeQuickShortcuts } from '@/components/home/HomeQuickShortcuts'
 import { NotificationBell } from '@/components/Notifications/NotificationBell'
 import { AmbientStage } from '@/components/ui/AmbientStage'
 import { HorizontalSnap } from '@/components/ui/HorizontalSnap'
 import { KenBurnsCover } from '@/components/ui/KenBurnsCover'
-import { MorphIcon } from '@/components/ui/MorphIcon'
 import { MotionPress } from '@/components/ui/MotionPress'
 import { showIsland } from '@/lib/island'
 import { api, getApiErrorMessage } from '@/lib/api'
@@ -30,15 +32,12 @@ import { PullToRefreshIndicator } from '@/components/ui/PullToRefreshIndicator'
 import { useDesktopFinePointer } from '@/hooks/useDesktopFinePointer'
 import { useNavigateToArtistByName } from '@/hooks/useNavigateToArtistByName'
 import {
-  HOME_QUICK_VISIBLE_COUNT,
-  MIX_SHORTCUT_TILES,
-} from '@/lib/homeShortcuts'
-import {
   coverProxySrcSet,
   coverProxyUrl,
   type CoverRenderWidth,
 } from '@/lib/coverProxy'
 import '@/styles/redesign-home.css'
+import '@/styles/home-surface.css'
 import type {
   FollowedArtistItem,
   GenreMixItem,
@@ -179,7 +178,10 @@ interface HomeTrackTileProps {
   onPlay: (t: Track) => void
 }
 
-function HomeTrackTile({ track, onPlay }: HomeTrackTileProps) {
+const HomeTrackTile = memo(function HomeTrackTile({
+  track,
+  onPlay,
+}: HomeTrackTileProps) {
   const { t } = useTranslation()
   const desktopFineNav = useDesktopFinePointer()
   const goArtistByName = useNavigateToArtistByName()
@@ -206,6 +208,9 @@ function HomeTrackTile({ track, onPlay }: HomeTrackTileProps) {
           <Icon name="music" size={28} />
         </div>
       )}
+      <span className="rh-home-tile__play" aria-hidden>
+        <Icon name="play" size={14} />
+      </span>
     </div>
   )
   if (desktopFineNav && track.artist) {
@@ -251,7 +256,7 @@ function HomeTrackTile({ track, onPlay }: HomeTrackTileProps) {
       )}
     </button>
   )
-}
+})
 
 interface HomeGenreMixCardProps {
   mix: GenreMixItem
@@ -280,7 +285,7 @@ function HomeGenreCell({ src }: { src: string | null }) {
   )
 }
 
-function HomeGenreMixCard({
+const HomeGenreMixCard = memo(function HomeGenreMixCard({
   mix,
   onPlay,
   onOpen,
@@ -335,7 +340,7 @@ function HomeGenreMixCard({
       </span>
     </div>
   )
-}
+})
 
 interface HomeTrackSnapSectionProps {
   title: string
@@ -379,7 +384,7 @@ function HomeTrackSnapSection({
   if (!tracks.length) return null
   const pages = chunk(tracks, 3)
   return (
-    <>
+    <section className="rh-home-block">
       <div className="rh-home-section-head">
         <span className="rh-home-section-head__title">
           {title}
@@ -413,7 +418,7 @@ function HomeTrackSnapSection({
         className="rh-home-h-snap"
         ariaLabel={snapAria}
       />
-    </>
+    </section>
   )
 }
 
@@ -506,7 +511,7 @@ function HomeLazyTrackSection({
 
   if (!section || section.tracks.length === 0) {
     return (
-      <div ref={sentinelRef}>
+      <div ref={sentinelRef} className="rh-home-block">
         <div className="rh-home-section-head">
           <span className="rh-home-section-head__title">
             {fallbackTitle}
@@ -579,24 +584,39 @@ export function HomeView({ onOpenArtist }: HomeViewProps) {
 
   useEffect(() => {
     let active = true
-    void api
-      .getHeroPromotions(3)
-      .then((res) => {
-        if (active) setPromoHero(res.items)
-      })
-      .catch(() => {
-        if (active) setPromoHero([])
-      })
-    void api
-      .getSectionPromotions(10)
-      .then((res) => {
-        if (active) setPromoSection(res.items)
-      })
-      .catch(() => {
-        if (active) setPromoSection([])
-      })
+    const loadPromotions = () => {
+      void api
+        .getHeroPromotions(3)
+        .then((res) => {
+          if (active) setPromoHero(res.items)
+        })
+        .catch(() => {
+          if (active) setPromoHero([])
+        })
+      void api
+        .getSectionPromotions(10)
+        .then((res) => {
+          if (active) setPromoSection(res.items)
+        })
+        .catch(() => {
+          if (active) setPromoSection([])
+        })
+    }
+    const idleId =
+      typeof window.requestIdleCallback === 'function'
+        ? window.requestIdleCallback(loadPromotions, {
+            timeout: 1800,
+          })
+        : window.setTimeout(loadPromotions, 480)
     return () => {
       active = false
+      if (typeof idleId === 'number') {
+        window.clearTimeout(idleId)
+      } else if (
+        typeof window.cancelIdleCallback === 'function'
+      ) {
+        window.cancelIdleCallback(idleId)
+      }
     }
   }, [])
 
@@ -691,9 +711,14 @@ export function HomeView({ onOpenArtist }: HomeViewProps) {
     }, HOME_DATA_WATCHDOG_MS)
 
     const uid = getInternalUserId()
-    if (uid) {
-      api.getUserProfile(uid).then(setMe).catch(() => {})
+    const loadProfile = () => {
+      if (!uid) return
+      void api.getUserProfile(uid).then(setMe).catch(() => {})
     }
+    const profileIdleId =
+      typeof window.requestIdleCallback === 'function'
+        ? window.requestIdleCallback(loadProfile, { timeout: 2400 })
+        : window.setTimeout(loadProfile, 720)
 
     api
       .getHomeSection('continue', 10)
@@ -741,6 +766,13 @@ export function HomeView({ onOpenArtist }: HomeViewProps) {
     return () => {
       cancelled = true
       window.clearTimeout(watchdogId)
+      if (typeof profileIdleId === 'number') {
+        window.clearTimeout(profileIdleId)
+      } else if (
+        typeof window.cancelIdleCallback === 'function'
+      ) {
+        window.cancelIdleCallback(profileIdleId)
+      }
     }
   }, [])
 
@@ -921,14 +953,31 @@ export function HomeView({ onOpenArtist }: HomeViewProps) {
     me?.username ||
     null
 
-  const sectionMap = new Map<string, HomeSection>()
-  if (sections) {
+  const sectionMap = useMemo(() => {
+    const map = new Map<string, HomeSection>()
+    if (!sections) return map
     for (const s of sections) {
-      if (s && s.section_type) {
-        sectionMap.set(s.section_type, s)
+      if (s?.section_type) {
+        map.set(s.section_type, s)
       }
     }
-  }
+    return map
+  }, [sections])
+
+  const topSlotSection = useMemo(() => {
+    const priority = [
+      'continue',
+      'personalized',
+      'user_choice',
+      'popular',
+    ] as const
+    return priority
+      .map((key) => sectionMap.get(key))
+      .find((s) => s && s.tracks.length > 0)
+  }, [sectionMap])
+
+  const topSlotKey = topSlotSection?.section_type ?? null
+
   const featuredSource =
     sectionMap.get('continue') ||
     sectionMap.get('personalized') ||
@@ -983,26 +1032,31 @@ export function HomeView({ onOpenArtist }: HomeViewProps) {
     ? coverProxySrcSet(featuredTrack.cover_key)
     : undefined
 
-  const TOP_SLOT_PRIORITY = [
-    'continue',
-    'personalized',
-    'user_choice',
-    'popular',
-  ] as const
-  const topSlotSection = TOP_SLOT_PRIORITY.map((key) =>
-    sectionMap.get(key),
-  ).find((s) => s && s.tracks.length > 0)
-  const topSlotKey = topSlotSection?.section_type ?? null
-
   const genreTrackCount = (n: number) =>
     t('artist.catalog_release_card_tracks_other', {
       count: n,
     })
 
+  const heroQueueTracks = useMemo(() => {
+    const continueTracks = sectionMap.get('continue')?.tracks ?? []
+    const fromContinue = continueTracks.slice(1, 4)
+    if (fromContinue.length >= 2) return fromContinue
+    const continueIds = new Set(continueTracks.map((tr) => tr.id))
+    const recent = (recentlyPlayed ?? []).filter(
+      (tr) => !continueIds.has(tr.id),
+    )
+    if (featuredTrack) {
+      return recent
+        .filter((tr) => tr.id !== featuredTrack.id)
+        .slice(0, 3)
+    }
+    return recent.slice(0, 3)
+  }, [sectionMap, recentlyPlayed, featuredTrack])
+
   return (
     <section
       id="view-home"
-      className="view active rh-home-root"
+      className="view active rh-home-root rh-home--refresh"
     >
       <PullToRefreshIndicator state={pull} />
       <span className="sr-only" aria-live="polite">
@@ -1023,14 +1077,10 @@ export function HomeView({ onOpenArtist }: HomeViewProps) {
       >
         <div className="rh-home-greeting">
           <div className="rh-home-greeting__copy">
-            <div className="rh-home-greeting__label">
-              {displayName
-                ? `${greeting} | ${displayName}`
-                : greeting}
-            </div>
-            <div className="rh-home-greeting__sub">
-              {brandLabel}
-            </div>
+            <div className="rh-home-greeting__label">{greeting}</div>
+            <h1 className="rh-home-greeting__title">
+              {displayName || brandLabel}
+            </h1>
           </div>
           <NotificationBell />
         </div>
@@ -1043,7 +1093,7 @@ export function HomeView({ onOpenArtist }: HomeViewProps) {
       >
 
         {featuredTrack ? (
-          <div className="rh-home-hero">
+          <div className="rh-home-hero rh-home-hero--spotlight">
             <AmbientStage
               coverUrl={heroCoverSrc ?? undefined}
             >
@@ -1164,6 +1214,61 @@ export function HomeView({ onOpenArtist }: HomeViewProps) {
                     </MotionPress>
                   </div>
                 </div>
+                {heroQueueTracks.length >= 2 && (
+                  <div className="rh-home-hero-queue">
+                    <div className="rh-home-hero-queue__head">
+                      <Icon name="queue" size={14} />
+                      <span>{t('redesign.home.heroQueueTitle')}</span>
+                    </div>
+                    <div className="rh-home-hero-queue__list">
+                      {heroQueueTracks.map((tr) => (
+                        <button
+                          key={tr.id}
+                          type="button"
+                          className="rh-home-hero-queue__item"
+                          onClick={() => {
+                            void handlePlay(tr)
+                          }}
+                          title={[tr.title, tr.artist]
+                            .filter(Boolean)
+                            .join(' — ')}
+                        >
+                          <div className="rh-home-hero-queue__cover">
+                            {coverUrl(tr.cover_key) ? (
+                              <img
+                                src={coverUrl(tr.cover_key)!}
+                                alt=""
+                                width={44}
+                                height={44}
+                                loading="lazy"
+                                decoding="async"
+                              />
+                            ) : (
+                              <Icon name="music" size={18} />
+                            )}
+                          </div>
+                          <div className="rh-home-hero-queue__meta">
+                            <span className="rh-home-hero-queue__title">
+                              {tr.title ||
+                                t('redesign.home.untitled')}
+                            </span>
+                            {tr.artist && (
+                              <span className="rh-home-hero-queue__artist">
+                                {tr.artist}
+                              </span>
+                            )}
+                          </div>
+                          <span
+                            className="rh-home-hero-queue__play"
+                            aria-hidden
+                          >
+                            <Icon name="play" size={12} />
+                          </span>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
               </div>
             </AmbientStage>
           </div>
@@ -1174,46 +1279,56 @@ export function HomeView({ onOpenArtist }: HomeViewProps) {
           </div>
         ) : null}
 
-        <div className="rh-home-quick rh-home-command-deck">
-          {MIX_SHORTCUT_TILES.slice(
-            0,
-            HOME_QUICK_VISIBLE_COUNT,
-          ).map((item) => (
+        <HomeQuickShortcuts
+          onStartRadio={() => {
+            void handleStartRadioFromHomeRecommendations(
+              'home_start_radio',
+            )
+          }}
+        />
+
+        <div className="rh-home-station-card">
+          <div className="rh-home-station-card__wave" aria-hidden>
+            {Array.from({ length: 12 }).map((_, i) => (
+              <span key={i} />
+            ))}
+          </div>
+          <div className="rh-home-station-card__copy">
+            <span className="rh-home-station-card__eyebrow">
+              {t('redesign.home.stationEyebrow')}
+            </span>
+            <h2 className="rh-home-station-card__title">
+              {t('redesign.home.stationTitle')}
+            </h2>
+            <p className="rh-home-station-card__hint">
+              {t('redesign.home.stationHint')}
+            </p>
+          </div>
+          <div className="rh-home-station-card__actions">
             <MotionPress
-              key={item.path}
-              variant="subtle"
-              className="rh-home-quick-card glass--medium"
+              variant="primary"
+              className="rh-home-station-card__primary"
               onClick={() => {
-                if (item.path === '/radio') {
-                  void handleStartRadioFromHomeRecommendations(
-                    'home_start_radio',
-                  )
-                  return
-                }
-                navigate(item.path)
+                void handleStartRadioFromHomeRecommendations(
+                  'home_start_radio',
+                )
               }}
             >
-              <span
-                className="rh-home-quick-card__icon"
-                aria-hidden
-              >
-                {'morph' in item ? (
-                  <MorphIcon
-                    name={item.morph}
-                    filled
-                    size={22}
-                  />
-                ) : null}
-              </span>
-              <span className="rh-home-quick-card__label">
-                {t(`redesign.home.${item.labelKey}`)}
-              </span>
+              <Icon name="radio" size={18} />
+              <span>{t('redesign.home.stationStart')}</span>
             </MotionPress>
-          ))}
+            <MotionPress
+              variant="ghost"
+              className="rh-home-station-card__ghost"
+              onClick={() => navigate('/search')}
+            >
+              <Icon name="search" size={18} />
+            </MotionPress>
+          </div>
         </div>
 
         {sections === null ? (
-          <div>
+          <div className="rh-home-block">
             <div className="rh-home-section-head">
               <span className="rh-home-section-head__title">
                 {t('redesign.home.sectionContinue')}
@@ -1241,6 +1356,17 @@ export function HomeView({ onOpenArtist }: HomeViewProps) {
         )}
 
         <section className="rh-home-discovery-band">
+        <div className="rh-home-cluster-intro">
+          <span className="rh-home-cluster-intro__eyebrow">
+            {t('redesign.home.discoveryEyebrow')}
+          </span>
+          <h2 className="rh-home-cluster-intro__title">
+            {t('redesign.home.discoveryTitle')}
+          </h2>
+          <p className="rh-home-cluster-intro__hint">
+            {t('redesign.home.discoveryHint')}
+          </p>
+        </div>
         {genreMixes === null ? (
           <div ref={genreMixesSentinelRef}>
             <div className="rh-home-section-head">
@@ -1307,6 +1433,17 @@ export function HomeView({ onOpenArtist }: HomeViewProps) {
         </section>
 
         <section className="rh-home-social-band">
+        <div className="rh-home-cluster-intro">
+          <span className="rh-home-cluster-intro__eyebrow">
+            {t('redesign.home.socialEyebrow')}
+          </span>
+          <h2 className="rh-home-cluster-intro__title">
+            {t('redesign.home.socialTitle')}
+          </h2>
+          <p className="rh-home-cluster-intro__hint">
+            {t('redesign.home.socialHint')}
+          </p>
+        </div>
         {recentlyPlayed === null ? (
           <div>
             <div className="rh-home-section-head">

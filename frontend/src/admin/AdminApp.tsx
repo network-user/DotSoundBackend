@@ -169,6 +169,11 @@ const TracksRoute = lazy(() =>
     default: m.TracksRoute,
   })),
 )
+const TimecodeSyncRoute = lazy(() =>
+  import('./routes/TimecodeSyncRoute').then((m) => ({
+    default: m.TimecodeSyncRoute,
+  })),
+)
 const UsersRoute = lazy(() =>
   import('./routes/UsersRoute').then((m) => ({
     default: m.UsersRoute,
@@ -362,6 +367,10 @@ export function AdminApp() {
                   <Route
                     path="tracks"
                     element={<TracksRoute />}
+                  />
+                  <Route
+                    path="tracks/timecode-sync"
+                    element={<TimecodeSyncRoute />}
                   />
                   <Route
                     path="albums"

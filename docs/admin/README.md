@@ -75,6 +75,7 @@ the same source when Loki is not configured.
 | Dashboard | `/{ADMIN_PANEL_PATH}` | – |
 | Users | `/{ADMIN_PANEL_PATH}/users` | `users.manage` |
 | Tracks | `/{ADMIN_PANEL_PATH}/tracks` | `tracks.manage` |
+| Timecodes | `/{ADMIN_PANEL_PATH}/tracks/timecode-sync` | `tracks.manage` |
 | Complaints | `/{ADMIN_PANEL_PATH}/complaints` | `complaints.moderate` |
 | Artists | `/{ADMIN_PANEL_PATH}/artists` | `artists.enrich` |
 | Compute | `/{ADMIN_PANEL_PATH}/audio-compute` | `audio_compute.manage` |
@@ -126,6 +127,31 @@ Five failed TOTP attempts within
 Critical events fire alerts through Taskiq → DotSoundBot's
 internal endpoint. See [security.md](security.md) for the contract
 and the list of events.
+
+## Lyrics timecode sync queue
+
+Section **Timecodes** (`tracks/timecode-sync`, capability
+`tracks.manage`) is for tracks that already have plain lyrics but no
+synced timecodes. It enqueues `LyricsJob` rows tagged
+`request_align_existing_text` and shows a dedicated queue: job in
+progress, next waiting item, reorderable backlog, and recent
+outcomes.
+
+- **Start sync** tab: enqueue all eligible tracks (batch limit) or
+  explicit track IDs. The tracks list filter «No timecodes» links here
+  and supports batch enqueue for the current selection.
+- **Queue** tab: optional filters **Only my enqueue runs** (matches
+  `requested_by_user_id`) and **Last 24h / 7 days** (`since_hours`).
+  Waiting jobs support numeric priority and **Run next** (bumps
+  `queue_priority` above the current queued maximum). **Cancel** stops
+  queued or running align jobs.
+- REST: `GET/POST /tracks/lyrics-timecode-sync/queue|enqueue`,
+  `PATCH .../jobs/{id}/priority`, `POST .../jobs/{id}/cancel`.
+- On **Tasks → Lyrics jobs**, jobs with the align flag show the badge
+  «Align existing text» (`request_align_existing_text`).
+
+Background enqueue skips the catalog-only tier when aligning existing
+text (same rule as manual user sync in `LyricsService`).
 
 ## Operations cheat sheet
 

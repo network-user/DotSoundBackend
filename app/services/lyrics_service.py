@@ -313,6 +313,7 @@ class LyricsService:
             ),
             request_with_sync=with_sync,
             request_bypass_cache=bypass_cache,
+            request_align_existing_text=reuse_existing_text,
         )
         self._session.add(job)
         await self._session.flush()
@@ -476,15 +477,34 @@ class LyricsService:
             status="queued",
             request_with_sync=with_sync,
             request_bypass_cache=bypass_cache,
+            request_align_existing_text=sync_existing_text,
         )
         self._session.add(job)
         await self._session.flush()
+
+        skip_tiers: tuple[str, ...] = ()
+        skip_reason: str | None = None
+        if sync_existing_text:
+            from dotsound_private_core.services.asr_policy import (
+                skipped_tiers_for_existing_text_sync,
+            )
+
+            skip_tiers = skipped_tiers_for_existing_text_sync(
+                with_sync=with_sync,
+                has_existing_text=True,
+                has_existing_sync=False,
+            )
+            skip_reason = (
+                "existing_text_needs_timing" if skip_tiers else None
+            )
 
         active_tier = await start_cascade(
             self._session,
             job=job,
             with_sync=with_sync,
             bypass_cache=bypass_cache,
+            skip_tiers=skip_tiers,
+            skip_reason=skip_reason,
         )
         await self._session.commit()
 

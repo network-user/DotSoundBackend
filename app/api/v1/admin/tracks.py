@@ -1,6 +1,7 @@
 """Admin endpoints for track management."""
 
 from collections.abc import Sequence
+from datetime import UTC, datetime, timedelta
 from typing import Any, Literal
 
 import structlog
@@ -38,6 +39,9 @@ from app.schemas.track import TrackUpdateRequest
 from app.services.admin_lyrics_import_service import (
     AdminLyricsImportService,
 )
+from app.services.admin_lyrics_timecode_sync_service import (
+    AdminLyricsTimecodeSyncService,
+)
 from app.services.admin_service import AdminService
 from app.services.admin_track_context_service import (
     AdminTrackContextService,
@@ -68,6 +72,9 @@ from .schemas import (
     LyricsBatchImportResponse,
     LyricsBatchPromptRequest,
     LyricsBatchPromptResponse,
+    LyricsTimecodeSyncEnqueueRequest,
+    LyricsTimecodeSyncEnqueueResponse,
+    LyricsTimecodeSyncPriorityRequest,
     SinglePromptResponse,
     TrackContextResponse,
     TrackContextUpdateRequest,
@@ -1033,6 +1040,112 @@ async def admin_batch_lyrics_import(
         skip_existing=data.skip_existing,
     )
     return LyricsBatchImportResponse(imported=imported, errors=errors)
+
+
+@router.get(
+    "/tracks/lyrics-timecode-sync/queue",
+    summary="[Admin] Timecode-align job queue snapshot",
+)
+async def admin_lyrics_timecode_sync_queue(
+    mine: bool = Query(
+        False,
+        description="Only jobs enqueued by the current admin user",
+    ),
+    since_hours: int | None = Query(
+        None,
+        ge=1,
+        le=168,
+        description="Limit to jobs created within the last N hours",
+    ),
+    session: AsyncSession = Depends(get_db),
+    admin: User = Depends(require_admin_session),
+) -> dict[str, Any]:
+    since: datetime | None = None
+    if since_hours is not None:
+        since = datetime.now(UTC) - timedelta(hours=int(since_hours))
+    requested_by = admin.id if mine else None
+    return await AdminLyricsTimecodeSyncService(session).get_overview(
+        requested_by_user_id=requested_by,
+        since=since,
+    )
+
+
+@router.post(
+    "/tracks/lyrics-timecode-sync/enqueue",
+    response_model=LyricsTimecodeSyncEnqueueResponse,
+    summary=(
+        "[Admin] Enqueue alignment for tracks with lyrics "
+        "but no timecodes"
+    ),
+)
+@limiter.limit("30/minute")
+async def admin_lyrics_timecode_sync_enqueue(
+    request: Request,
+    body: LyricsTimecodeSyncEnqueueRequest,
+    session: AsyncSession = Depends(get_db),
+    admin: User = Depends(require_admin_session),
+) -> LyricsTimecodeSyncEnqueueResponse:
+    if not body.enqueue_all_unsynced and not body.track_ids:
+        raise HTTPException(
+            status_code=400,
+            detail="track_ids_or_enqueue_all_required",
+        )
+    out = await AdminLyricsTimecodeSyncService(session).enqueue(
+        admin,
+        track_ids=body.track_ids or None,
+        enqueue_all_unsynced=body.enqueue_all_unsynced,
+        limit=body.limit,
+    )
+    return LyricsTimecodeSyncEnqueueResponse(**out)
+
+
+@router.patch(
+    "/tracks/lyrics-timecode-sync/jobs/{job_id}/priority",
+    summary="[Admin] Reorder a queued timecode-align job",
+)
+async def admin_lyrics_timecode_sync_priority(
+    job_id: str,
+    body: LyricsTimecodeSyncPriorityRequest,
+    session: AsyncSession = Depends(get_db),
+    _admin: User = Depends(require_admin_session),
+) -> dict[str, Any]:
+    if not body.bump_next and body.queue_priority is None:
+        raise HTTPException(
+            status_code=400,
+            detail="priority_or_bump_next_required",
+        )
+    svc = AdminLyricsTimecodeSyncService(session)
+    try:
+        out = await svc.set_priority(
+            job_id,
+            queue_priority=body.queue_priority,
+            bump_next=body.bump_next,
+        )
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=400,
+            detail=str(exc),
+        ) from exc
+    if not out:
+        raise HTTPException(status_code=404, detail="job_not_found")
+    return out
+
+
+@router.post(
+    "/tracks/lyrics-timecode-sync/jobs/{job_id}/cancel",
+    summary="[Admin] Cancel a timecode-align lyrics job",
+)
+async def admin_lyrics_timecode_sync_cancel(
+    job_id: str,
+    session: AsyncSession = Depends(get_db),
+    _admin: User = Depends(require_admin_session),
+) -> dict[str, Any]:
+    out = await AdminLyricsTimecodeSyncService(session).cancel_job(
+        job_id
+    )
+    if out is None:
+        raise HTTPException(status_code=404, detail="job_not_found")
+    return out
 
 
 @router.post(

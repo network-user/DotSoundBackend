@@ -265,6 +265,7 @@ interface JobRow {
   tiers_planned?: string[] | null
   request_with_sync?: boolean
   request_bypass_cache?: boolean
+  request_align_existing_text?: boolean
 }
 
 interface ComputeJobRow {
@@ -538,8 +539,16 @@ function buildJobColumns(
                 )}
               </span>
             ) : null}
+            {row.request_align_existing_text ? (
+              <span className="admin-lyrics-goal__flag">
+                {t(
+                  'admin.tasks.lyricsIntent.alignExisting',
+                )}
+              </span>
+            ) : null}
             {!row.request_with_sync &&
-            !row.request_bypass_cache ? (
+            !row.request_bypass_cache &&
+            !row.request_align_existing_text ? (
               <span className="admin-lyrics-goal__flag admin-lyrics-goal__flag--muted">
                 –
               </span>

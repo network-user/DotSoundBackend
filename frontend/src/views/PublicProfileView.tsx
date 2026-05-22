@@ -41,6 +41,10 @@ export function PublicProfileView() {
   const { userId } = useParams<{ userId: string }>()
   const navigate = useNavigate()
   const location = useLocation()
+  const previewOwnProfile = useMemo(() => {
+    const params = new URLSearchParams(location.search)
+    return params.get('preview') === '1'
+  }, [location.search])
   const { playTrack } = usePlayerActions()
   const currentUserId = getInternalUserId()
   const viewedUserId = Number(userId)
@@ -152,7 +156,7 @@ export function PublicProfileView() {
       navigate('/profile', { replace: true })
       return
     }
-    if (isOwnProfile) {
+    if (isOwnProfile && !previewOwnProfile) {
       navigate('/profile', { replace: true })
       return
     }
@@ -208,6 +212,7 @@ export function PublicProfileView() {
     navigate,
     resetContent,
     t,
+    previewOwnProfile,
     validUserId,
     viewedUserId,
   ])
@@ -335,6 +340,7 @@ export function PublicProfileView() {
   return (
     <section
       id="view-public-profile"
+      data-testid="public-profile-view"
       className="view active rp-public-profile"
     >
       <header className="profile-page-header profile-page-header--sub">
@@ -359,10 +365,8 @@ export function PublicProfileView() {
               variant="icon"
               haptic="light"
               className="icon-btn"
-              ariaLabel={t(
-                'profile.share.open',
-                'Поделиться профилем',
-              )}
+              ariaLabel={t('profile.share.open')}
+              data-testid="public-profile-share-open"
               onClick={() => setShareOpen(true)}
             >
               <Icon name="share" size={20} />

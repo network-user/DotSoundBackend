@@ -537,13 +537,10 @@ async def test_upload_video_success(
         )
     assert r.status_code == 200
     data = r.json()
-    assert data["video_processing_status"].startswith("processing:")
-    assert data.get("video_key") is None
+    assert data["video_processing_status"] == "active"
+    assert data.get("video_key")
     mock_del.assert_called_once_with("videos/old.mp4")
-    assert (
-        mock_kiq.await_args.kwargs["expected_status"]
-        == data["video_processing_status"]
-    )
+    mock_kiq.assert_not_awaited()
 
 
 async def test_delete_video_success(
@@ -586,9 +583,9 @@ async def test_delete_video_success(
                 )
             },
         )
-    assert r.json()["video_processing_status"].startswith(
-        "processing:"
-    )
+    upload_body = r.json()
+    assert upload_body["video_processing_status"] == "active"
+    assert upload_body.get("video_key")
     await _set_track_video_key(
         db_session, track["id"], "videos/vid1.mp4"
     )

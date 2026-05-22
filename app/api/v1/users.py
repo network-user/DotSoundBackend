@@ -482,7 +482,11 @@ async def get_share_card(
             detail="User not found",
         )
     access = ProfileAccessService(session)
-    if not await access.can_view_extended(viewer, user):
+    is_owner = viewer is not None and viewer.id == user.id
+    if not is_owner and not await access.can_view_extended(
+        viewer,
+        user,
+    ):
         access.raise_profile_restricted()
 
     if user.avatar_key:
@@ -497,12 +501,13 @@ async def get_share_card(
     else:
         avatar_url = None
 
-    mini_app_url = (settings.mini_app_url or "").rstrip("/")
+    from app.services.public_web_urls import build_user_profile_web_url
+
     bot_username = settings.telegram_bot_username or ""
-    profile_url = (
-        f"{mini_app_url}/profile/{user_id}"
-        if mini_app_url
-        else f"/profile/{user_id}"
+    profile_url = build_user_profile_web_url(
+        settings,
+        user_id,
+        request=request,
     )
     deep_link = (
         f"https://t.me/{bot_username}/app?startapp=profile_{user_id}"

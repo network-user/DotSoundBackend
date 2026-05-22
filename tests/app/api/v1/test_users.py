@@ -251,6 +251,50 @@ async def test_hidden_profile_stats_blocked_for_others(
     assert stats_own.status_code == 200
 
 
+@patch("app.api.v1.users.settings")
+async def test_user_share_card_profile_url_uses_mini_app_path(
+    mock_settings: object,
+    client: AsyncClient,
+) -> None:
+    created = await create_test_user(
+        client, 88055, username="shareu55"
+    )
+    uid = int(created["id"])
+    mock_settings.mini_app_url = "https://dotsound.example"
+    r = await client.get(f"/api/v1/users/{uid}/share-card")
+    assert r.status_code == 200
+    body = r.json()
+    assert body["profile_url"] == (
+        f"https://dotsound.example/mini_app/profile/{uid}"
+    )
+    assert body["deep_link"] is None or "t.me" in body["deep_link"]
+
+
+async def test_hidden_profile_share_card_ok_for_owner(
+    client: AsyncClient,
+) -> None:
+    owner = await create_test_user(
+        client, 88066, username="hidshare"
+    )
+    oid = int(owner["id"])
+    headers = await auth_headers(client, 88066)
+    patch = await client.patch(
+        "/api/v1/users/me",
+        headers=headers,
+        json={"profile_visibility": "hidden"},
+    )
+    assert patch.status_code == 200
+    own_card = await client.get(
+        f"/api/v1/users/{oid}/share-card",
+        headers=headers,
+    )
+    assert own_card.status_code == 200
+    assert "/profile/" in own_card.json()["profile_url"]
+    await create_test_user(client, 88067, username="stranger")
+    stranger = await client.get(f"/api/v1/users/{oid}/share-card")
+    assert stranger.status_code == 403
+
+
 async def test_followers_only_profile_stats_after_follow(
     client: AsyncClient,
 ) -> None:

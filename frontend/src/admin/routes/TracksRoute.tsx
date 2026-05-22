@@ -6,7 +6,8 @@ import {
   useQuery,
   useQueryClient,
 } from '@tanstack/react-query'
-import { useNavigate } from 'react-router-dom'
+import { Link, useNavigate } from 'react-router-dom'
+import { getAdminPanelRoute } from '@/lib/adminPath'
 import type { ColumnDef } from '@tanstack/react-table'
 import { MotionPress } from '@/components/ui/MotionPress'
 import { AdminRangeSwitch } from '../components/widgets/AdminRangeSwitch'
@@ -922,6 +923,27 @@ export function TracksRoute() {
     }
   }
 
+  const handleEnqueueTimecodeSyncSelected = async () => {
+    if (selectedIds.size === 0) return
+    try {
+      const res = await adminApi.lyricsTimecodeSyncEnqueue({
+        track_ids: [...selectedIds],
+        limit: 500,
+      })
+      showAlert(
+        t('admin.timecodeSync.enqueueDone', {
+          enqueued: res.enqueued,
+          skipped: res.skipped,
+          requested: res.requested,
+        }),
+      )
+    } catch (e) {
+      showAlert(
+        e instanceof Error ? e.message : String(e),
+      )
+    }
+  }
+
   const handleBatchLyricsPromptSelected = async () => {
     const ids = Array.from(selectedIds)
     try {
@@ -1562,6 +1584,16 @@ export function TracksRoute() {
           />
           {t('admin.tracks.filterWithoutLyrics')}
         </label>
+        {listView === 'all' &&
+          lyricsSyncFilter === 'unsynced' && (
+            <Link
+              to={getAdminPanelRoute('/tracks/timecode-sync')}
+              className="admin-card__sub"
+              style={{ alignSelf: 'center' }}
+            >
+              {t('admin.tracks.openTimecodeSync')}
+            </Link>
+          )}
         {listView === 'all' && (
           <AdminRangeSwitch
             groupId="admin-tracks-lyrics-sync"
@@ -1667,6 +1699,21 @@ export function TracksRoute() {
             count: selectedIds.size,
           })}
         </MotionPress>
+        {lyricsSyncFilter === 'unsynced' && (
+          <MotionPress
+            variant="ghost"
+            disabled={selectedIds.size === 0}
+            title={
+              selectedIds.size === 0
+                ? t('admin.tracks.batchSelectHint')
+                : undefined
+            }
+            onClick={handleEnqueueTimecodeSyncSelected}
+          >
+            {t('admin.timecodeSync.tabEnqueue')} (
+            {selectedIds.size})
+          </MotionPress>
+        )}
         <MotionPress
           variant="ghost"
           disabled={selectedIds.size === 0}

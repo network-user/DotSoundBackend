@@ -10,12 +10,12 @@ import { Icon } from '@/components/Icon/Icon'
 import { MotionPress } from '@/components/ui/MotionPress'
 import { api } from '@/lib/api'
 import { renderRoundedQrDataUrl } from '@/lib/roundedQr'
-import {
-  copyToClipboard,
-  getShareCapabilities,
-  shareNatively,
-} from '@/lib/platform'
+import { copyToClipboard, shareNatively } from '@/lib/platform'
 import { showIsland } from '@/lib/island'
+import {
+  resolvePublicArtistUrl,
+  resolvePublicProfileUrl,
+} from '@/lib/publicUrls'
 import { formatPlays } from '@/lib/utils'
 import type {
   ArtistShareCardResponse,
@@ -49,8 +49,6 @@ export function ProfileShareModal({
   const [showQr, setShowQr] = useState(false)
   const [qrDataUrl, setQrDataUrl] = useState('')
   const previewRef = useRef<HTMLDivElement | null>(null)
-
-  const caps = useMemo(() => getShareCapabilities(), [])
 
   const isUserMode = Boolean(userId && !artistId)
   const isArtistMode = Boolean(artistId && !userId)
@@ -94,9 +92,15 @@ export function ProfileShareModal({
   const shareUrl = useMemo(() => {
     if (!card) return ''
     if (card.kind === 'user') {
-      return card.data.deep_link || card.data.profile_url || ''
+      return resolvePublicProfileUrl(
+        card.data.profile_url,
+        card.data.user_id,
+      )
     }
-    return card.data.deep_link || card.data.profile_url || ''
+    return resolvePublicArtistUrl(
+      card.data.profile_url,
+      card.data.artist_id,
+    )
   }, [card])
 
   useEffect(() => {
@@ -167,6 +171,7 @@ export function ProfileShareModal({
       role="dialog"
       aria-modal="true"
       aria-label={modalTitle}
+      data-testid="profile-share-modal"
       onClick={(e) => {
         if (e.target === e.currentTarget) onClose()
       }}
@@ -294,14 +299,21 @@ export function ProfileShareModal({
                 onClick={() => void handleShare()}
                 disabled={!shareUrl}
               >
-                <Icon
-                  name={caps.telegram ? 'send' : 'share'}
-                  size={16}
-                />
+                <Icon name="share" size={16} />
+                <span>{t('profile.share.shareNative')}</span>
+              </MotionPress>
+              <MotionPress
+                type="button"
+                variant="ghost"
+                haptic="light"
+                className="rp-share-inline__btn"
+                data-testid="profile-share-copy"
+                onClick={() => void handleCopy()}
+                disabled={!shareUrl}
+              >
+                <Icon name="copy" size={16} />
                 <span>
-                  {caps.telegram
-                    ? t('profile.share.shareTelegram', 'В Telegram')
-                    : t('profile.share.shareNative', 'Поделиться')}
+                  {t('profile.share.copyLink')}
                 </span>
               </MotionPress>
               <MotionPress

@@ -308,12 +308,13 @@ async def get_artist_share_card(
             f"/api/v1/tracks/cover_proxy?key={artist.image_key}"
         )
 
-    mini_app_url = (settings.mini_app_url or "").rstrip("/")
+    from app.services.public_web_urls import build_artist_profile_web_url
+
     bot_username = settings.telegram_bot_username or ""
-    profile_url = (
-        f"{mini_app_url}/artist/{artist_id}"
-        if mini_app_url
-        else f"/artist/{artist_id}"
+    profile_url = build_artist_profile_web_url(
+        settings,
+        artist_id,
+        request=request,
     )
     deep_link = (
         f"https://t.me/{bot_username}/app?startapp=artist_{artist_id}"

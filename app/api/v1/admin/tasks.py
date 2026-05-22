@@ -246,6 +246,9 @@ async def get_lyrics_job(
         "tiers_planned": row.tiers_planned,
         "request_with_sync": row.request_with_sync,
         "request_bypass_cache": row.request_bypass_cache,
+        "request_align_existing_text": (
+            row.request_align_existing_text
+        ),
         "live": progress,
     }
 
@@ -354,6 +357,9 @@ async def list_lyrics_jobs(
                 "tiers_planned": row.tiers_planned,
                 "request_with_sync": row.request_with_sync,
                 "request_bypass_cache": row.request_bypass_cache,
+                "request_align_existing_text": (
+                    row.request_align_existing_text
+                ),
             }
             for row in rows
         ],

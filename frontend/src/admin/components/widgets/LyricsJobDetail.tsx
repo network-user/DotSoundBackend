@@ -247,6 +247,11 @@ export function LyricsJobDetail({
                           'admin.tasks.lyricsIntent.bypass',
                         )
                       : null,
+                    data.request_align_existing_text
+                      ? t(
+                          'admin.tasks.lyricsIntent.alignExisting',
+                        )
+                      : null,
                   ]
                     .filter(Boolean)
                     .join(' · ') || '–'}

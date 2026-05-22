@@ -95,6 +95,10 @@
     "myTracksEmptyHint": "Лайкайте треки или импортируйте музыку из Telegram, SoundCloud и других сервисов — они появятся здесь",
     "myTracksUpload": "Загрузить трек",
     "avatarEditHint": "Сменить фото профиля",
+    "publicPreview": "Как видят другие",
+    "share": {
+      "copyLink": "Скопировать ссылку"
+    },
     "uploadCallout": {
       "title": "Загрузить трек",
       "body": "Открой мастер загрузки: аудио, затем свой текст и таймкоды перед публикацией.",
@@ -403,7 +407,52 @@
       "importedCount": "Импортировано: {{count}}",
       "importGmTitle": "Импорт ответа AI (genre / mood)",
       "importGmSubtitle": "JSON: tracks[].id, genre (строка), moods (массив тегов). Пустой genre не меняет поле. Новые mood добавляются к существующим.",
-      "gmOverwriteLabel": "Перезаписать жанр, если уже заполнен"
+      "gmOverwriteLabel": "Перезаписать жанр, если уже заполнен",
+      "openTimecodeSync": "Очередь таймкодов"
+    },
+    "timecodeSync": {
+      "title": "Синхронизация таймкодов",
+      "subtitle": "Постановка в очередь выравнивания для треков с текстом, но без таймкодов. Отдельная вкладка очереди: что в работе, что следующее, что уже обработано.",
+      "backToTracks": "К списку треков",
+      "tabQueue": "Очередь",
+      "tabEnqueue": "Запуск",
+      "candidatesHint": "Подходит {{count}} треков (есть текст, нет таймкодов, нет активной задачи).",
+      "limitLabel": "Лимит пачки",
+      "enqueueAll": "Поставить все подходящие",
+      "enqueueIds": "Поставить по ID ({{count}})",
+      "idsLabel": "ID треков (через запятую или с новой строки)",
+      "idsPlaceholder": "101\n102\n103",
+      "enqueueDone": "В очередь: {{enqueued}} (запрошено {{requested}}, пропущено {{skipped}}).",
+      "loadFailed": "Не удалось загрузить очередь",
+      "statQueued": "В очереди: {{count}}",
+      "statRunning": "В работе: {{count}}",
+      "statCandidates": "Ожидают постановки: {{count}}",
+      "nowTitle": "Сейчас",
+      "badgeRunning": "В работе",
+      "badgeNext": "Следующий",
+      "noneRunning": "Ничего не выполняется",
+      "noneNext": "Очередь пуста",
+      "queuedTitle": "Ожидающие",
+      "queuedHint": "Чем выше приоритет, тем раньше задача стартует после освобождения воркера. «Следующим» — сразу после текущей.",
+      "queuedEmpty": "Нет задач в очереди",
+      "recentTitle": "Недавно завершённые",
+      "recentEmpty": "Завершённых задач пока нет",
+      "colTrack": "Трек",
+      "colPriority": "Приоритет",
+      "colStatus": "Статус",
+      "colActions": "Приоритет",
+      "colFinished": "Завершено",
+      "colError": "Ошибка",
+      "priorityInput": "Приоритет",
+      "applyPriority": "Применить",
+      "bumpNext": "Следующим",
+      "jobId": "Задача {{id}}",
+      "filterMine": "Только мои постановки",
+      "filterSinceAll": "Вся история",
+      "filterSince24h": "За 24 ч",
+      "filterSince7d": "За 7 дней",
+      "cancelJob": "Отменить",
+      "cancelDone": "Задача отменена"
     },
     "albums": {
       "title": "Альбомы",
@@ -1124,7 +1173,8 @@
       "lyricsPipelineHint": "Порядок каскада",
       "lyricsIntent": {
         "sync": "С синхронизацией строк",
-        "bypass": "Обход кэша"
+        "bypass": "Обход кэша",
+        "alignExisting": "Таймкоды к тексту"
       },
       "lyricsTier": {
         "catalog_only": "Поиск текста в каталогах",
