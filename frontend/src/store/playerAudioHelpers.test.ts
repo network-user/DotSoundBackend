@@ -321,4 +321,79 @@ describe('tweenVolume', () => {
     } as unknown as HTMLAudioElement
     await expect(tweenVolume(a, 0.3, 1)).resolves.toBeUndefined()
   })
+
+  it('snaps directly to target when document is hidden at start', async () => {
+    const a = makeFakeAudio()
+    a.volume = 0
+    const hiddenDescriptor = Object.getOwnPropertyDescriptor(
+      Document.prototype,
+      'hidden',
+    )
+    Object.defineProperty(document, 'hidden', {
+      configurable: true,
+      get() {
+        return true
+      },
+    })
+    let rafCalls = 0
+    const originalLocalRaf = globalThis.requestAnimationFrame
+    globalThis.requestAnimationFrame = ((
+      cb: FrameRequestCallback,
+    ): number => {
+      rafCalls += 1
+      return originalLocalRaf(cb)
+    }) as typeof globalThis.requestAnimationFrame
+    try {
+      await tweenVolume(a, 0.6, 200)
+      expect(a.volume).toBeCloseTo(0.6, 5)
+      expect(rafCalls).toBe(0)
+    } finally {
+      globalThis.requestAnimationFrame = originalLocalRaf
+      if (hiddenDescriptor) {
+        Object.defineProperty(document, 'hidden', hiddenDescriptor)
+      } else {
+        Object.defineProperty(document, 'hidden', {
+          configurable: true,
+          get() {
+            return false
+          },
+        })
+      }
+    }
+  })
+
+  it('snaps to target when visibility flips to hidden mid-tween', async () => {
+    const a = makeFakeAudio()
+    a.volume = 0
+    let hidden = false
+    const hiddenDescriptor = Object.getOwnPropertyDescriptor(
+      Document.prototype,
+      'hidden',
+    )
+    Object.defineProperty(document, 'hidden', {
+      configurable: true,
+      get() {
+        return hidden
+      },
+    })
+    try {
+      const promise = tweenVolume(a, 0.8, 1000)
+      await new Promise((r) => setTimeout(r, 5))
+      hidden = true
+      document.dispatchEvent(new Event('visibilitychange'))
+      await promise
+      expect(a.volume).toBeCloseTo(0.8, 5)
+    } finally {
+      if (hiddenDescriptor) {
+        Object.defineProperty(document, 'hidden', hiddenDescriptor)
+      } else {
+        Object.defineProperty(document, 'hidden', {
+          configurable: true,
+          get() {
+            return false
+          },
+        })
+      }
+    }
+  })
 })

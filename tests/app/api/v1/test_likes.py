@@ -98,6 +98,83 @@ async def test_get_user_likes_empty(
     assert r.json()["has_more"] is False
 
 
+async def test_hidden_profile_likes_blocked_for_others(
+    client: AsyncClient,
+) -> None:
+    user = await create_test_user(client, 100041)
+    track = await create_test_track(
+        client, "HiddenLiked", user["id"]
+    )
+    headers = await auth_headers(client, user["id"])
+    await client.post(
+        f"/api/v1/likes/{user['id']}/{track['id']}",
+        headers=headers,
+    )
+    patch = await client.patch(
+        "/api/v1/users/me",
+        headers=headers,
+        json={"profile_visibility": "hidden"},
+    )
+    assert patch.status_code == 200
+
+    denied = await client.get(f"/api/v1/likes/{user['id']}")
+    assert denied.status_code == 403
+
+    denied_queue = await client.get(
+        f"/api/v1/likes/{user['id']}/queue"
+        f"?current_track_id={track['id']}",
+    )
+    assert denied_queue.status_code == 403
+
+    own = await client.get(
+        f"/api/v1/likes/{user['id']}",
+        headers=headers,
+    )
+    assert own.status_code == 200
+    assert own.json()["total"] == 1
+
+
+async def test_followers_only_profile_likes_after_follow(
+    client: AsyncClient,
+) -> None:
+    owner = await create_test_user(client, 100042)
+    visitor = await create_test_user(client, 100043)
+    track = await create_test_track(
+        client, "FollowerLiked", owner["id"]
+    )
+    owner_headers = await auth_headers(client, owner["id"])
+    visitor_headers = await auth_headers(client, visitor["id"])
+    await client.post(
+        f"/api/v1/likes/{owner['id']}/{track['id']}",
+        headers=owner_headers,
+    )
+    patch = await client.patch(
+        "/api/v1/users/me",
+        headers=owner_headers,
+        json={"profile_visibility": "followers_only"},
+    )
+    assert patch.status_code == 200
+
+    denied = await client.get(
+        f"/api/v1/likes/{owner['id']}",
+        headers=visitor_headers,
+    )
+    assert denied.status_code == 403
+
+    followed = await client.post(
+        f"/api/v1/users/{owner['id']}/follow",
+        headers=visitor_headers,
+    )
+    assert followed.status_code == 200
+
+    allowed = await client.get(
+        f"/api/v1/likes/{owner['id']}",
+        headers=visitor_headers,
+    )
+    assert allowed.status_code == 200
+    assert allowed.json()["total"] == 1
+
+
 async def test_get_user_likes_pagination(
     client: AsyncClient,
 ) -> None:

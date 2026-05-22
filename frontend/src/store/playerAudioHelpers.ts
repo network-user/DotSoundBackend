@@ -78,12 +78,31 @@ export function tweenVolume(
 ): Promise<void> {
   return new Promise((resolve) => {
     const clampedTarget = Math.max(0, Math.min(1, target))
-    if (durationMs <= 0) {
+    const snap = () => {
       try {
         audio.volume = clampedTarget
       } catch {
         /* ignore */
       }
+    }
+    if (durationMs <= 0) {
+      snap()
+      resolve()
+      return
+    }
+    // Locked-screen / hidden-tab guard. Browsers freeze
+    // ``requestAnimationFrame`` callbacks while the page is hidden,
+    // so a RAF-driven fade would leave ``audio.volume`` stuck at its
+    // starting value (often 0 right after ``playTrack`` mutes the
+    // element for the cross-track fade). The audio element keeps
+    // playing on the audio thread, but the user hears silence until
+    // they unlock the phone and RAF resumes. Snapping to target on
+    // hidden -- both at start and on a mid-tween ``visibilitychange``
+    // -- keeps the new track audible the moment it starts.
+    const docRef: Document | null =
+      typeof document !== 'undefined' ? document : null
+    if (docRef && docRef.hidden === true) {
+      snap()
       resolve()
       return
     }
@@ -94,7 +113,26 @@ export function tweenVolume(
       typeof performance !== 'undefined'
         ? performance.now()
         : Date.now()
+    let finished = false
+    const onVisibility = () => {
+      if (docRef && docRef.hidden === true) {
+        snap()
+        finish()
+      }
+    }
+    const finish = () => {
+      if (finished) return
+      finished = true
+      if (docRef) {
+        docRef.removeEventListener('visibilitychange', onVisibility)
+      }
+      resolve()
+    }
+    if (docRef) {
+      docRef.addEventListener('visibilitychange', onVisibility)
+    }
     const tick = () => {
+      if (finished) return
       const now =
         typeof performance !== 'undefined'
           ? performance.now()
@@ -105,7 +143,7 @@ export function tweenVolume(
       try {
         audio.volume = Math.max(0, Math.min(1, v))
       } catch {
-        resolve()
+        finish()
         return
       }
       if (t < 1) {
@@ -115,7 +153,7 @@ export function tweenVolume(
           setTimeout(tick, 16)
         }
       } else {
-        resolve()
+        finish()
       }
     }
     if (typeof requestAnimationFrame === 'function') {
