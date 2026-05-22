@@ -10,7 +10,8 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Any
 
-from sqlalchemy import and_, desc, func, or_, select, update
+from sqlalchemy import and_, cast, desc, func, or_, select, update
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.sql import Select
 from sqlalchemy.sql.elements import ColumnElement
@@ -106,6 +107,14 @@ class AdminRepository:
         )
 
     def _synced_lines_present(self) -> ColumnElement[bool]:
+        dialect = self._session.get_bind().dialect.name
+        if dialect == "postgresql":
+            synced = cast(TrackLyrics.synced_lines, JSONB)
+            return and_(
+                TrackLyrics.synced_lines.isnot(None),
+                func.jsonb_typeof(synced) == "array",
+                func.jsonb_array_length(synced) > 0,
+            )
         return (
             func.coalesce(
                 func.json_array_length(TrackLyrics.synced_lines),

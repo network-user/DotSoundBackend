@@ -274,6 +274,35 @@ async def test_timecode_sync_queue_since_hours_filter(
     assert "lj_timecode_old" not in ids
 
 
+async def test_timecode_queue_treats_scalar_synced_lines_as_unsynced(
+    client: AsyncClient,
+    db_session: AsyncSession,
+) -> None:
+    admin = await create_test_user(client, 131098)
+    headers = await admin_bearer_for_user(
+        client, db_session, user_id=admin["id"]
+    )
+    track_id = await _unsynced_track(
+        db_session,
+        title="Scalar Synced Lines",
+        uploader_id=admin["id"],
+    )
+    row = (
+        await db_session.execute(
+            select(TrackLyrics).where(TrackLyrics.track_id == track_id)
+        )
+    ).scalar_one()
+    row.synced_lines = {"invalid": "object-not-array"}
+    await db_session.commit()
+
+    response = await client.get(
+        "/api/v1/admin/tracks/lyrics-timecode-sync/queue",
+        headers=headers,
+    )
+    assert response.status_code == 200
+    assert response.json()["candidate_count"] >= 1
+
+
 async def test_timecode_sync_queue_reports_missing_migration(
     client: AsyncClient,
     db_session: AsyncSession,
