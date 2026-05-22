@@ -26,14 +26,15 @@ function ShortcutTile({
   return (
     <MotionPress
       variant="subtle"
-      className={`rh-home-shortcut rh-home-shortcut--${item.shortcutIcon}`}
+      className="dh-shortcut"
       onClick={() => onActivate(item.path)}
+      ariaLabel={label}
     >
-      <span className="rh-home-shortcut__frame" aria-hidden>
-        <HomeMixShortcutIcon id={item.shortcutIcon} size={22} />
+      <span className="dh-shortcut__icon" aria-hidden>
+        <HomeMixShortcutIcon id={item.shortcutIcon} size={20} />
       </span>
-      <span className="rh-home-shortcut__label">{label}</span>
-      <span className="rh-home-shortcut__arrow" aria-hidden>
+      <span className="dh-shortcut__label">{label}</span>
+      <span className="dh-shortcut__chev" aria-hidden>
         <Icon name="chevron-right" size={14} />
       </span>
     </MotionPress>
@@ -60,18 +61,10 @@ export const HomeQuickShortcuts = memo(function HomeQuickShortcuts({
 
   return (
     <section
-      className="rh-home-shortcuts"
+      className="dh-shortcuts"
       aria-label={t('redesign.home.shortcutsAria')}
     >
-      <div className="rh-home-shortcuts__head">
-        <span className="rh-home-shortcuts__eyebrow">
-          {t('redesign.home.shortcutsEyebrow')}
-        </span>
-        <h2 className="rh-home-shortcuts__title">
-          {t('redesign.home.shortcutsTitle')}
-        </h2>
-      </div>
-      <div className="rh-home-shortcuts-grid">
+      <div className="dh-shortcuts__grid">
         {tiles.map((item) => (
           <ShortcutTile
             key={item.path}

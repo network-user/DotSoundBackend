@@ -1,5 +1,4 @@
 ﻿import {
-  type KeyboardEvent,
   memo,
   useCallback,
   useEffect,
@@ -12,14 +11,9 @@ import { useNavigate } from 'react-router-dom'
 import { Icon } from '@/components/Icon/Icon'
 import { HomeQuickShortcuts } from '@/components/home/HomeQuickShortcuts'
 import { NotificationBell } from '@/components/Notifications/NotificationBell'
-import { AmbientStage } from '@/components/ui/AmbientStage'
-import { HorizontalSnap } from '@/components/ui/HorizontalSnap'
-import { KenBurnsCover } from '@/components/ui/KenBurnsCover'
 import { MotionPress } from '@/components/ui/MotionPress'
 import { showIsland } from '@/lib/island'
 import { api, getApiErrorMessage } from '@/lib/api'
-import { getRadioFreshness } from '@/lib/radioFreshness'
-import type { RadioFreshness } from '@/types/api'
 import { getInternalUserId } from '@/lib/telegram'
 import { useBrandLabel } from '@/lib/brand'
 import { m, VARIANTS_FADE_UP } from '@/lib/motion'
@@ -36,8 +30,7 @@ import {
   coverProxyUrl,
   type CoverRenderWidth,
 } from '@/lib/coverProxy'
-import '@/styles/redesign-home.css'
-import '@/styles/home-surface.css'
+import '@/styles/dot-home.css'
 import type {
   FollowedArtistItem,
   GenreMixItem,
@@ -54,22 +47,6 @@ interface HomeSection {
   tracks: Track[]
 }
 
-function coverUrl(
-  key: string | null,
-  width: CoverRenderWidth = 240,
-): string | null {
-  if (!key) return null
-  return coverProxyUrl(key, { width })
-}
-
-function chunk<T>(items: readonly T[], size: number): T[][] {
-  const out: T[][] = []
-  for (let i = 0; i < items.length; i += size) {
-    out.push(items.slice(i, i + size))
-  }
-  return out
-}
-
 const HOME_DATA_WATCHDOG_MS = 22_000
 
 const HOME_RADIO_SECTION_ORDER = [
@@ -81,6 +58,26 @@ const HOME_RADIO_SECTION_ORDER = [
   'fav_artists',
   'popular',
 ] as const
+
+const HOME_LAZY_SECTIONS: ReadonlyArray<{
+  key: string
+  morePath?: string
+}> = [
+  { key: 'personalized' },
+  { key: 'new_releases', morePath: '/search' },
+  { key: 'genre_popular' },
+  { key: 'user_choice', morePath: '/user-choice' },
+  { key: 'fav_artists' },
+  { key: 'popular' },
+]
+
+function coverUrl(
+  key: string | null,
+  width: CoverRenderWidth = 240,
+): string | null {
+  if (!key) return null
+  return coverProxyUrl(key, { width })
+}
 
 function pickHomeRadioSeedFromSections(
   sections: HomeSection[] | null,
@@ -113,163 +110,153 @@ async function resolveHomeRadioSeedTrack(
   }
 }
 
-function SkeletonBlock({ className }: { className: string }) {
-  return <div className={`skeleton ${className}`} />
-}
-
-function HeroFreshnessSignal({
-  trackId,
-  newLabel,
-  familiarLabel,
-  rediscoveryLabel,
-}: {
-  trackId: number
-  newLabel: string
-  familiarLabel: string
-  rediscoveryLabel: string
-}) {
-  const [label, setLabel] = useState<RadioFreshness | null>(() =>
-    getRadioFreshness(trackId),
-  )
-  useEffect(() => {
-    const cached = getRadioFreshness(trackId)
-    if (cached) {
-      setLabel(cached)
-      return
-    }
-    let active = true
-    void api
-      .getFreshness([trackId])
-      .then((res) => {
-        if (!active) return
-        const value = res.freshness[trackId] ?? null
-        setLabel(value as RadioFreshness | null)
-      })
-      .catch(() => {
-        if (active) setLabel(null)
-      })
-    return () => {
-      active = false
-    }
-  }, [trackId])
-  if (!label || label === 'seed') return null
-  const iconName =
-    label === 'new'
-      ? 'sparkle'
-      : label === 'rediscovery'
-        ? 'bookmark'
-        : 'check'
-  const text =
-    label === 'new'
-      ? newLabel
-      : label === 'rediscovery'
-        ? rediscoveryLabel
-        : familiarLabel
-  return (
-    <span>
-      <Icon name={iconName} size={14} />
-      {text}
-    </span>
+function resolveSectionTitle(
+  section: HomeSection,
+  t: (key: string, defaultValue: string) => string,
+): string {
+  return t(
+    `redesign.home.sectionTitle.${section.section_type}`,
+    section.title,
   )
 }
 
-interface HomeTrackTileProps {
+interface DhTileProps {
   track: Track
   onPlay: (t: Track) => void
 }
 
-const HomeTrackTile = memo(function HomeTrackTile({
-  track,
-  onPlay,
-}: HomeTrackTileProps) {
+const DhTile = memo(function DhTile({ track, onPlay }: DhTileProps) {
   const { t } = useTranslation()
-  const desktopFineNav = useDesktopFinePointer()
+  const desktopFine = useDesktopFinePointer()
   const goArtistByName = useNavigateToArtistByName()
-  const src = coverUrl(track.cover_key)
   const [coverFailed, setCoverFailed] = useState(false)
+  const src = coverUrl(track.cover_key)
   const fallbackTitle = t('redesign.home.untitled')
   const titleAttr = [track.title, track.artist]
     .filter(Boolean)
     .join(' — ')
-  const coverBlock = (
-    <div className="rh-home-tile__cover">
-      {src && !coverFailed ? (
-        <img
-          src={src}
-          alt=""
-          width={112}
-          height={112}
-          loading="lazy"
-          decoding="async"
-          onError={() => setCoverFailed(true)}
-        />
-      ) : (
-        <div className="rh-home-tile__ph">
-          <Icon name="music" size={28} />
-        </div>
-      )}
-      <span className="rh-home-tile__play" aria-hidden>
-        <Icon name="play" size={14} />
-      </span>
-    </div>
-  )
-  if (desktopFineNav && track.artist) {
-    return (
-      <div className="rh-home-tile rh-home-tile--split-desktop">
-        <button
-          type="button"
-          className="rh-home-tile__playback"
-          onClick={() => onPlay(track)}
-          title={titleAttr}
-        >
-          {coverBlock}
-          <div className="rh-home-tile__title">
-            {track.title || fallbackTitle}
-          </div>
-        </button>
-        <button
-          type="button"
-          className="rh-home-tile__artist-link"
-          onClick={() => void goArtistByName(track.artist)}
-          title={track.artist}
-        >
-          {track.artist}
-        </button>
-      </div>
-    )
+  const handleArtistClick = (e: React.MouseEvent) => {
+    if (!desktopFine || !track.artist) return
+    e.stopPropagation()
+    void goArtistByName(track.artist)
   }
   return (
     <button
       type="button"
-      className="rh-home-tile"
+      className="dh-tile"
       onClick={() => onPlay(track)}
       title={titleAttr}
+      aria-label={titleAttr || fallbackTitle}
     >
-      {coverBlock}
-      <div className="rh-home-tile__title">
-        {track.title || fallbackTitle}
+      <div className="dh-tile__cover">
+        {src && !coverFailed ? (
+          <img
+            src={src}
+            alt=""
+            width={196}
+            height={196}
+            loading="lazy"
+            decoding="async"
+            onError={() => setCoverFailed(true)}
+          />
+        ) : (
+          <div className="dh-tile__ph">
+            <Icon name="music" size={24} />
+          </div>
+        )}
+        <span className="dh-tile__overlay" aria-hidden>
+          <span className="dh-tile__overlay-btn">
+            <Icon name="play" size={16} />
+          </span>
+        </span>
       </div>
+      <p className="dh-tile__title" dir="auto">
+        {track.title || fallbackTitle}
+      </p>
       {track.artist && (
-        <div className="rh-home-tile__artist">
+        <p
+          className={
+            desktopFine
+              ? 'dh-tile__artist dh-tile__artist--nav'
+              : 'dh-tile__artist'
+          }
+          dir="auto"
+          onClick={handleArtistClick}
+        >
           {track.artist}
-        </div>
+        </p>
       )}
     </button>
   )
 })
 
-interface HomeGenreMixCardProps {
-  mix: GenreMixItem
-  onPlay: (tracks: Track[]) => void
-  onOpen: () => void
-  countLabel: string
-  listenAria: string
+interface DhSectionHeadProps {
+  title: string
+  onMore?: () => void
+  moreLabel: string
 }
 
-function HomeGenreCell({ src }: { src: string | null }) {
+function DhSectionHead({
+  title,
+  onMore,
+  moreLabel,
+}: DhSectionHeadProps) {
+  return (
+    <div className="dh-section-head">
+      <h3 className="dh-section-head__title">{title}</h3>
+      {onMore && (
+        <button
+          type="button"
+          className="dh-section-head__more"
+          onClick={onMore}
+        >
+          {moreLabel}
+        </button>
+      )}
+    </div>
+  )
+}
+
+interface DhTileRowProps {
+  title: string
+  tracks: Track[]
+  onPlay: (t: Track) => void
+  onMore?: () => void
+  moreLabel: string
+  ariaLabel: string
+}
+
+function DhTileRow({
+  title,
+  tracks,
+  onPlay,
+  onMore,
+  moreLabel,
+  ariaLabel,
+}: DhTileRowProps) {
+  if (!tracks.length) return null
+  return (
+    <section className="dh-section" aria-label={ariaLabel}>
+      <DhSectionHead
+        title={title}
+        onMore={onMore}
+        moreLabel={moreLabel}
+      />
+      <div className="dh-scroller" role="list">
+        {tracks.map((tr) => (
+          <div role="listitem" key={tr.id}>
+            <DhTile track={tr} onPlay={onPlay} />
+          </div>
+        ))}
+      </div>
+    </section>
+  )
+}
+
+function DhMixCell({ src }: { src: string | null }) {
   const [failed, setFailed] = useState(false)
   return (
-    <div className="rh-home-genre-card__cell">
+    <div className="dh-mix__cell">
       {src && !failed ? (
         <img
           src={src}
@@ -285,159 +272,98 @@ function HomeGenreCell({ src }: { src: string | null }) {
   )
 }
 
-const HomeGenreMixCard = memo(function HomeGenreMixCard({
+interface DhMixCardProps {
+  mix: GenreMixItem
+  countLabel: string
+  onOpen: () => void
+  onPlay: (tracks: Track[]) => void
+  listenAria: string
+}
+
+const DhMixCard = memo(function DhMixCard({
   mix,
-  onPlay,
-  onOpen,
   countLabel,
+  onOpen,
+  onPlay,
   listenAria,
-}: HomeGenreMixCardProps) {
+}: DhMixCardProps) {
   const covers = mix.tracks
     .slice(0, 4)
     .map((t) => coverUrl(t.cover_key))
-    .filter(Boolean) as string[]
-
-  const handleCardKeyDown = (
-    e: KeyboardEvent<HTMLDivElement>,
-  ) => {
-    if (e.key === 'Enter' || e.key === ' ') {
-      e.preventDefault()
-      onOpen()
-    }
-  }
-
+  while (covers.length < 4) covers.push(null)
   return (
-    <div
-      role="button"
-      tabIndex={0}
-      className="rh-home-genre-card"
+    <button
+      type="button"
+      className="dh-mix"
       onClick={onOpen}
-      onKeyDown={handleCardKeyDown}
       title={mix.title}
     >
-      <div className="rh-home-genre-card__mosaic">
-        {Array.from({ length: 4 }).map((_, i) => (
-          <HomeGenreCell key={i} src={covers[i] ?? null} />
-        ))}
+      <div className="dh-mix__cover">
+        <div className="dh-mix__mosaic">
+          {covers.map((src, i) => (
+            <DhMixCell key={i} src={src} />
+          ))}
+        </div>
+        <span
+          className="dh-mix__play"
+          onClick={(e) => {
+            e.stopPropagation()
+            if (mix.tracks.length) onPlay(mix.tracks)
+          }}
+          role="button"
+          tabIndex={-1}
+          aria-label={listenAria}
+        >
+          <Icon name="play" size={14} />
+        </span>
       </div>
-      <div className="rh-home-genre-card__overlay" />
-      <button
-        type="button"
-        className="rh-home-genre-card__play"
-        onClick={(e) => {
-          e.stopPropagation()
-          if (mix.tracks.length) onPlay(mix.tracks)
-        }}
-        aria-label={listenAria}
-      >
-        <Icon name="play" size={14} />
-      </button>
-      <span className="rh-home-genre-card__genre">
-        {mix.genre.charAt(0).toUpperCase() + mix.genre.slice(1)}
-      </span>
-      <span className="rh-home-genre-card__count">
-        {countLabel}
-      </span>
-    </div>
+      <p className="dh-mix__title">{mix.genre}</p>
+      <p className="dh-mix__count">{countLabel}</p>
+    </button>
   )
 })
 
-interface HomeTrackSnapSectionProps {
-  title: string
-  tracks: Track[]
-  onPlay: (t: Track) => void
-  onMore?: () => void
-  moreLabel: string
-  snapAria: string
+interface DhArtistChipProps {
+  artist: FollowedArtistItem
+  onOpen: (artist: FollowedArtistItem) => void
 }
 
-function HomeArtistAvatar({ src }: { src: string | null }) {
+const DhArtistChip = memo(function DhArtistChip({
+  artist,
+  onOpen,
+}: DhArtistChipProps) {
   const [failed, setFailed] = useState(false)
-  if (src && !failed) {
-    return (
-      <img
-        src={src}
-        alt=""
-        width={64}
-        height={64}
-        loading="lazy"
-        decoding="async"
-        onError={() => setFailed(true)}
-      />
-    )
-  }
+  const src = coverUrl(artist.image_key)
   return (
-    <div className="rh-home-artist-chip__ph">
-      <Icon name="user" size={24} />
-    </div>
-  )
-}
-
-function HomeTrackSnapSection({
-  title,
-  tracks,
-  onPlay,
-  onMore,
-  moreLabel,
-  snapAria,
-}: HomeTrackSnapSectionProps) {
-  if (!tracks.length) return null
-  const pages = chunk(tracks, 3)
-  return (
-    <section className="rh-home-block">
-      <div className="rh-home-section-head">
-        <span className="rh-home-section-head__title">
-          {title}
-        </span>
-        {onMore && (
-          <button
-            type="button"
-            className="rh-home-section-head__link"
-            onClick={onMore}
-          >
-            {moreLabel}
-          </button>
-        )}
-      </div>
-      <HorizontalSnap
-        items={pages}
-        renderItem={(page) => (
-          <div className="rh-home-snap-page">
-            {page.map((tr) => (
-              <HomeTrackTile
-                key={tr.id}
-                track={tr}
-                onPlay={onPlay}
-              />
-            ))}
+    <button
+      type="button"
+      className="dh-artist"
+      onClick={() => onOpen(artist)}
+      title={artist.name}
+    >
+      <div className="dh-artist__avatar">
+        {src && !failed ? (
+          <img
+            src={src}
+            alt=""
+            width={88}
+            height={88}
+            loading="lazy"
+            decoding="async"
+            onError={() => setFailed(true)}
+          />
+        ) : (
+          <div className="dh-artist__ph">
+            <Icon name="user" size={28} />
           </div>
         )}
-        pageDots
-        parallax={false}
-        showArrows="never"
-        className="rh-home-h-snap"
-        ariaLabel={snapAria}
-      />
-    </section>
+      </div>
+      <span className="dh-artist__name">{artist.name}</span>
+    </button>
   )
-}
+})
 
-interface HomeSectionConfig {
-  key: string
-  morePath?: string
-}
-
-/** Секции, которые рендерятся одинаковым HomeTrackSnapSection ниже hero/recent. */
-const HOME_TRACK_SECTIONS: HomeSectionConfig[] = [
-  { key: 'personalized' },
-  { key: 'new_releases', morePath: '/search' },
-  { key: 'genre_popular' },
-  { key: 'user_choice', morePath: '/user-choice' },
-  { key: 'fav_artists' },
-  { key: 'popular' },
-]
-
-interface HomeLazyTrackSectionProps {
+interface DhLazyTileRowProps {
   sectionKey: string
   initialSection: HomeSection | null
   fallbackTitle: string
@@ -447,17 +373,7 @@ interface HomeLazyTrackSectionProps {
   moreLabel: string
 }
 
-function resolveSectionTitle(
-  section: HomeSection,
-  t: (key: string, defaultValue: string) => string,
-): string {
-  return t(
-    `redesign.home.sectionTitle.${section.section_type}`,
-    section.title,
-  )
-}
-
-function HomeLazyTrackSection({
+function DhLazyTileRow({
   sectionKey,
   initialSection,
   fallbackTitle,
@@ -465,7 +381,7 @@ function HomeLazyTrackSection({
   onPlay,
   onMore,
   moreLabel,
-}: HomeLazyTrackSectionProps) {
+}: DhLazyTileRowProps) {
   const { t } = useTranslation()
   const [section, setSection] = useState<HomeSection | null>(
     initialSection,
@@ -511,33 +427,29 @@ function HomeLazyTrackSection({
 
   if (!section || section.tracks.length === 0) {
     return (
-      <div ref={sentinelRef} className="rh-home-block">
-        <div className="rh-home-section-head">
-          <span className="rh-home-section-head__title">
-            {fallbackTitle}
-          </span>
-        </div>
-        <div className="rh-home-skel-row home-skeleton-row">
+      <section className="dh-section" ref={sentinelRef}>
+        <DhSectionHead
+          title={fallbackTitle}
+          moreLabel={moreLabel}
+        />
+        <div className="dh-scroller" aria-hidden>
           {[1, 2, 3, 4].map((i) => (
-            <SkeletonBlock
-              key={i}
-              className="home-skeleton-tile"
-            />
+            <div key={i} className="dh-skel dh-skel--tile" />
           ))}
         </div>
-      </div>
+      </section>
     )
   }
 
   const title = resolveSectionTitle(section, t)
   return (
-    <HomeTrackSnapSection
+    <DhTileRow
       title={title}
       tracks={section.tracks}
       onPlay={onPlay}
       onMore={onMore}
       moreLabel={moreLabel}
-      snapAria={title}
+      ariaLabel={title}
     />
   )
 }
@@ -551,21 +463,29 @@ export function HomeView({ onOpenArtist }: HomeViewProps) {
   const navigate = useNavigate()
   const { playTrack, startRadio } = usePlayerActions()
   const brandLabel = useBrandLabel()
-  const desktopFineNav = useDesktopFinePointer()
+  const desktopFine = useDesktopFinePointer()
   const goArtistByName = useNavigateToArtistByName()
 
   const [me, setMe] = useState<UserResponse | null>(null)
   const [sections, setSections] = useState<HomeSection[] | null>(null)
-  const [genreMixes, setGenreMixes] = useState<GenreMixItem[] | null>(null)
+  const [genreMixes, setGenreMixes] = useState<GenreMixItem[] | null>(
+    null,
+  )
   const [genreMixesLoading, setGenreMixesLoading] = useState(false)
   const [followedArtists, setFollowedArtists] = useState<
     FollowedArtistItem[] | null
   >(null)
   const [followedArtistsLoading, setFollowedArtistsLoading] =
     useState(false)
-  const [recentlyPlayed, setRecentlyPlayed] = useState<Track[] | null>(null)
-  const [fallbackTracks, setFallbackTracks] = useState<Track[] | null>(null)
-  const [promoHero, setPromoHero] = useState<PromotionPublic[] | null>(null)
+  const [recentlyPlayed, setRecentlyPlayed] = useState<
+    Track[] | null
+  >(null)
+  const [fallbackTracks, setFallbackTracks] = useState<Track[] | null>(
+    null,
+  )
+  const [promoHero, setPromoHero] = useState<PromotionPublic[] | null>(
+    null,
+  )
   const [promoSection, setPromoSection] = useState<
     PromotionPublic[] | null
   >(null)
@@ -848,7 +768,7 @@ export function HomeView({ onOpenArtist }: HomeViewProps) {
             String(Math.round(main.scrollTop)),
           )
         } catch {
-          // quota / privacy mode; ignore
+          /* quota / privacy */
         }
       })
     }
@@ -942,16 +862,24 @@ export function HomeView({ onOpenArtist }: HomeViewProps) {
     )
   }, [handleStartRadioFromHomeRecommendations])
 
+  const handleOpenArtist = useCallback(
+    (artist: FollowedArtistItem) => {
+      if (onOpenArtist) {
+        onOpenArtist(artist.id)
+        return
+      }
+      navigate(`/search?q=${encodeURIComponent(artist.name)}`)
+    },
+    [navigate, onOpenArtist],
+  )
+
   const hour = new Date().getHours()
   const greeting =
     hour < 18
       ? t('redesign.home.greetingMorning')
       : t('redesign.home.greetingEvening')
   const displayName =
-    me?.display_name ||
-    me?.first_name ||
-    me?.username ||
-    null
+    me?.display_name || me?.first_name || me?.username || brandLabel
 
   const sectionMap = useMemo(() => {
     const map = new Map<string, HomeSection>()
@@ -1020,7 +948,7 @@ export function HomeView({ onOpenArtist }: HomeViewProps) {
       (featuredSource.section_type === 'continue' ||
         featuredSource.section_type === 'user_choice')
         ? resolveSectionTitle(featuredSource, t)
-        : brandLabel)
+        : t('redesign.home.heroSignalRadio'))
   const loadingFeatured =
     sections === null &&
     fallbackTracks === null &&
@@ -1031,32 +959,37 @@ export function HomeView({ onOpenArtist }: HomeViewProps) {
   const heroCoverSrcSet = featuredTrack?.cover_key
     ? coverProxySrcSet(featuredTrack.cover_key)
     : undefined
+  const [heroCoverFailed, setHeroCoverFailed] = useState(false)
+
+  useEffect(() => {
+    setHeroCoverFailed(false)
+  }, [featuredTrack?.cover_key])
 
   const genreTrackCount = (n: number) =>
-    t('artist.catalog_release_card_tracks_other', {
-      count: n,
-    })
+    t('artist.catalog_release_card_tracks_other', { count: n })
 
-  const heroQueueTracks = useMemo(() => {
-    const continueTracks = sectionMap.get('continue')?.tracks ?? []
-    const fromContinue = continueTracks.slice(1, 4)
-    if (fromContinue.length >= 2) return fromContinue
-    const continueIds = new Set(continueTracks.map((tr) => tr.id))
-    const recent = (recentlyPlayed ?? []).filter(
-      (tr) => !continueIds.has(tr.id),
+  const filteredRecent = useMemo(() => {
+    if (!recentlyPlayed) return null
+    const continueIds = new Set(
+      (sectionMap.get('continue')?.tracks ?? []).map((tr) => tr.id),
     )
-    if (featuredTrack) {
-      return recent
-        .filter((tr) => tr.id !== featuredTrack.id)
-        .slice(0, 3)
-    }
-    return recent.slice(0, 3)
-  }, [sectionMap, recentlyPlayed, featuredTrack])
+    return recentlyPlayed.filter((tr) => !continueIds.has(tr.id))
+  }, [recentlyPlayed, sectionMap])
+
+  const allEmpty =
+    sections !== null &&
+    sections.length === 0 &&
+    fallbackTracks !== null &&
+    fallbackTracks.length === 0 &&
+    recentlyPlayed !== null &&
+    recentlyPlayed.length === 0 &&
+    genreMixes !== null &&
+    followedArtists !== null
 
   return (
     <section
       id="view-home"
-      className="view active rh-home-root rh-home--refresh"
+      className="view active dh-home"
     >
       <PullToRefreshIndicator state={pull} />
       <span className="sr-only" aria-live="polite">
@@ -1068,214 +1001,119 @@ export function HomeView({ onOpenArtist }: HomeViewProps) {
       </span>
 
       <div ref={sentinelRef} aria-hidden style={{ height: 0 }} />
+
       <header
         className={
-          headerStuck
-            ? 'rh-home-header is-stuck'
-            : 'rh-home-header'
+          headerStuck ? 'dh-topbar is-stuck' : 'dh-topbar'
         }
       >
-        <div className="rh-home-greeting">
-          <div className="rh-home-greeting__copy">
-            <div className="rh-home-greeting__label">{greeting}</div>
-            <h1 className="rh-home-greeting__title">
-              {displayName || brandLabel}
-            </h1>
-          </div>
-          <NotificationBell />
+        <div className="dh-topbar__greeting">
+          <span className="dh-topbar__label">{greeting}</span>
+          <h1 className="dh-topbar__title">{displayName}</h1>
         </div>
+        <NotificationBell />
       </header>
 
       <m.div
+        className="dh-stack"
         initial="hidden"
         animate="visible"
         variants={VARIANTS_FADE_UP}
       >
-
         {featuredTrack ? (
-          <div className="rh-home-hero rh-home-hero--spotlight">
-            <AmbientStage
-              coverUrl={heroCoverSrc ?? undefined}
+          <article className="dh-hero" aria-label={featuredTrack.title}>
+            <button
+              type="button"
+              className="dh-hero__cover"
+              onClick={() => void handlePlay(featuredTrack)}
+              aria-label={t('redesign.home.heroPlay')}
             >
-              <div className="rh-home-hero__inner">
-                <div className="rh-home-hero__visual">
-                  <div className="rh-home-hero__cover">
-                    {heroCoverSrc ? (
-                      <KenBurnsCover
-                        src={heroCoverSrc}
-                        srcSet={heroCoverSrcSet}
-                        alt=""
-                      />
-                    ) : (
-                      <div className="rh-home-tile__ph">
-                        <Icon name="music" size={36} />
-                      </div>
-                    )}
-                  </div>
-                  <div className="rh-home-hero__signal" aria-hidden>
-                    <span />
-                    <span />
-                    <span />
-                    <span />
-                    <span />
-                  </div>
+              {heroCoverSrc && !heroCoverFailed ? (
+                <img
+                  src={heroCoverSrc}
+                  srcSet={heroCoverSrcSet}
+                  sizes="(min-width: 768px) 320px, 80vw"
+                  alt=""
+                  onError={() => setHeroCoverFailed(true)}
+                />
+              ) : (
+                <div className="dh-hero__cover-ph">
+                  <Icon name="music" size={36} />
                 </div>
-                <div className="rh-home-hero__copy">
-                  <span className="rh-home-hero__eyebrow">
-                    {featuredEyebrow}
-                  </span>
-                  <h1 className="rh-home-hero__title">
-                    {featuredTrack.title || t('redesign.home.untitled')}
-                  </h1>
-                  <p
-                    className={
-                      desktopFineNav &&
-                      featuredTrack.artist
-                        ? 'rh-home-hero__artist rh-home-hero__artist--nav'
-                        : 'rh-home-hero__artist'
-                    }
-                    role={
-                      desktopFineNav &&
-                      featuredTrack.artist
-                        ? 'link'
-                        : undefined
-                    }
-                    tabIndex={
-                      desktopFineNav &&
-                      featuredTrack.artist
-                        ? 0
-                        : undefined
-                    }
-                    onClick={
-                      desktopFineNav &&
-                      featuredTrack.artist
-                        ? () => {
-                            void goArtistByName(
-                              featuredTrack.artist,
-                            )
-                          }
-                        : undefined
-                    }
-                    onKeyDown={
-                      desktopFineNav &&
-                      featuredTrack.artist
-                        ? (e) => {
-                            if (
-                              e.key === 'Enter' ||
-                              e.key === ' '
-                            ) {
-                              e.preventDefault()
-                              void goArtistByName(
-                                featuredTrack.artist,
-                              )
-                            }
-                          }
-                        : undefined
-                    }
-                  >
-                    {featuredTrack.artist || brandLabel}
-                  </p>
-                  <div className="rh-home-hero__signals">
-                    <span>
-                      <Icon name="radio" size={14} />
-                      {t('redesign.home.heroSignalRadio')}
-                    </span>
-                    <HeroFreshnessSignal
-                      trackId={featuredTrack.id}
-                      newLabel={t('redesign.home.freshnessNew')}
-                      familiarLabel={t(
-                        'redesign.home.freshnessFamiliar',
-                      )}
-                      rediscoveryLabel={t(
-                        'redesign.home.freshnessRediscovery',
-                      )}
-                    />
-                  </div>
-                  <div className="rh-home-hero__actions">
-                    <MotionPress
-                      variant="primary"
-                      onClick={() => {
-                        void handlePlay(featuredTrack)
-                      }}
-                    >
-                      <Icon name="play" size={18} />
-                      <span>{t('redesign.home.heroPlay')}</span>
-                    </MotionPress>
-                    <MotionPress
-                      variant="ghost"
-                      onClick={() => {
-                        void handleStartRadioFromHomeRecommendations(
-                          'home_start_radio',
-                        )
-                      }}
-                    >
-                      <Icon name="radio" size={18} />
-                      <span>{t('redesign.home.heroRadio')}</span>
-                    </MotionPress>
-                  </div>
-                </div>
-                {heroQueueTracks.length >= 2 && (
-                  <div className="rh-home-hero-queue">
-                    <div className="rh-home-hero-queue__head">
-                      <Icon name="queue" size={14} />
-                      <span>{t('redesign.home.heroQueueTitle')}</span>
-                    </div>
-                    <div className="rh-home-hero-queue__list">
-                      {heroQueueTracks.map((tr) => (
-                        <button
-                          key={tr.id}
-                          type="button"
-                          className="rh-home-hero-queue__item"
-                          onClick={() => {
-                            void handlePlay(tr)
-                          }}
-                          title={[tr.title, tr.artist]
-                            .filter(Boolean)
-                            .join(' — ')}
-                        >
-                          <div className="rh-home-hero-queue__cover">
-                            {coverUrl(tr.cover_key) ? (
-                              <img
-                                src={coverUrl(tr.cover_key)!}
-                                alt=""
-                                width={44}
-                                height={44}
-                                loading="lazy"
-                                decoding="async"
-                              />
-                            ) : (
-                              <Icon name="music" size={18} />
-                            )}
-                          </div>
-                          <div className="rh-home-hero-queue__meta">
-                            <span className="rh-home-hero-queue__title">
-                              {tr.title ||
-                                t('redesign.home.untitled')}
-                            </span>
-                            {tr.artist && (
-                              <span className="rh-home-hero-queue__artist">
-                                {tr.artist}
-                              </span>
-                            )}
-                          </div>
-                          <span
-                            className="rh-home-hero-queue__play"
-                            aria-hidden
-                          >
-                            <Icon name="play" size={12} />
-                          </span>
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-                )}
+              )}
+              <span className="dh-hero__play" aria-hidden>
+                <Icon name="play" size={20} />
+              </span>
+            </button>
+            <div className="dh-hero__copy">
+              <span className="dh-hero__eyebrow">
+                {featuredEyebrow}
+              </span>
+              <h2 className="dh-hero__title">
+                {featuredTrack.title ||
+                  t('redesign.home.untitled')}
+              </h2>
+              {featuredTrack.artist && (
+                <p
+                  className={
+                    desktopFine
+                      ? 'dh-hero__artist dh-hero__artist--nav'
+                      : 'dh-hero__artist'
+                  }
+                  onClick={
+                    desktopFine && featuredTrack.artist
+                      ? () => {
+                          void goArtistByName(
+                            featuredTrack.artist,
+                          )
+                        }
+                      : undefined
+                  }
+                >
+                  {featuredTrack.artist}
+                </p>
+              )}
+              <div className="dh-hero__actions">
+                <MotionPress
+                  className="dh-btn dh-btn--primary"
+                  onClick={() => {
+                    void handlePlay(featuredTrack)
+                  }}
+                >
+                  <Icon name="play" size={16} />
+                  <span>{t('redesign.home.heroPlay')}</span>
+                </MotionPress>
+                <MotionPress
+                  className="dh-btn dh-btn--secondary"
+                  onClick={() => {
+                    void handleStartRadioFromHomeRecommendations(
+                      'home_start_radio',
+                    )
+                  }}
+                >
+                  <Icon name="radio" size={16} />
+                  <span>{t('redesign.home.heroRadio')}</span>
+                </MotionPress>
               </div>
-            </AmbientStage>
-          </div>
+            </div>
+          </article>
         ) : loadingFeatured ? (
-          <div className="rh-home-hero--skeleton">
-            <SkeletonBlock className="home-featured__skeleton-copy" />
-            <SkeletonBlock className="home-featured__skeleton-cover" />
+          <div className="dh-hero" aria-hidden>
+            <div className="dh-skel dh-skel--hero" />
+            <div className="dh-hero__copy" style={{ gap: 12 }}>
+              <div
+                className="dh-skel dh-skel--line"
+                style={{ width: 80 }}
+              />
+              <div
+                className="dh-skel dh-skel--line-lg"
+                style={{ width: '70%' }}
+              />
+              <div
+                className="dh-skel dh-skel--line"
+                style={{ width: '40%' }}
+              />
+            </div>
           </div>
         ) : null}
 
@@ -1287,272 +1125,152 @@ export function HomeView({ onOpenArtist }: HomeViewProps) {
           }}
         />
 
-        <div className="rh-home-station-card">
-          <div className="rh-home-station-card__wave" aria-hidden>
-            {Array.from({ length: 12 }).map((_, i) => (
-              <span key={i} />
-            ))}
-          </div>
-          <div className="rh-home-station-card__copy">
-            <span className="rh-home-station-card__eyebrow">
-              {t('redesign.home.stationEyebrow')}
-            </span>
-            <h2 className="rh-home-station-card__title">
-              {t('redesign.home.stationTitle')}
-            </h2>
-            <p className="rh-home-station-card__hint">
-              {t('redesign.home.stationHint')}
-            </p>
-          </div>
-          <div className="rh-home-station-card__actions">
-            <MotionPress
-              variant="primary"
-              className="rh-home-station-card__primary"
-              onClick={() => {
-                void handleStartRadioFromHomeRecommendations(
-                  'home_start_radio',
-                )
-              }}
-            >
-              <Icon name="radio" size={18} />
-              <span>{t('redesign.home.stationStart')}</span>
-            </MotionPress>
-            <MotionPress
-              variant="ghost"
-              className="rh-home-station-card__ghost"
-              onClick={() => navigate('/search')}
-            >
-              <Icon name="search" size={18} />
-            </MotionPress>
-          </div>
-        </div>
-
         {sections === null ? (
-          <div className="rh-home-block">
-            <div className="rh-home-section-head">
-              <span className="rh-home-section-head__title">
-                {t('redesign.home.sectionContinue')}
-              </span>
-            </div>
-            <div className="rh-home-skel-row home-skeleton-row">
+          <section className="dh-section">
+            <DhSectionHead
+              title={t('redesign.home.sectionContinue')}
+              moreLabel={t('redesign.home.more')}
+            />
+            <div className="dh-scroller" aria-hidden>
               {[1, 2, 3, 4].map((i) => (
-                <SkeletonBlock
-                  key={i}
-                  className="home-skeleton-tile"
-                />
+                <div key={i} className="dh-skel dh-skel--tile" />
               ))}
             </div>
-          </div>
+          </section>
         ) : (
           topSlotSection && (
-            <HomeTrackSnapSection
+            <DhTileRow
               title={resolveSectionTitle(topSlotSection, t)}
               tracks={topSlotSection.tracks}
               onPlay={handlePlay}
               moreLabel={t('redesign.home.more')}
-              snapAria={resolveSectionTitle(topSlotSection, t)}
+              ariaLabel={resolveSectionTitle(topSlotSection, t)}
             />
           )
         )}
-
-        <section className="rh-home-discovery-band">
-        <div className="rh-home-cluster-intro">
-          <span className="rh-home-cluster-intro__eyebrow">
-            {t('redesign.home.discoveryEyebrow')}
-          </span>
-          <h2 className="rh-home-cluster-intro__title">
-            {t('redesign.home.discoveryTitle')}
-          </h2>
-          <p className="rh-home-cluster-intro__hint">
-            {t('redesign.home.discoveryHint')}
-          </p>
-        </div>
-        {genreMixes === null ? (
-          <div ref={genreMixesSentinelRef}>
-            <div className="rh-home-section-head">
-              <span className="rh-home-section-head__title">
-                {t('redesign.home.sectionGenreMixes')}
-              </span>
-            </div>
-            <div className="rh-home-skel-row home-skeleton-row">
-              {[1, 2, 3].map((i) => (
-                <SkeletonBlock
-                  key={i}
-                  className="home-skeleton-mix"
-                />
-              ))}
-            </div>
-          </div>
-        ) : genreMixes.length > 0 ? (
-          <>
-            <div className="rh-home-section-head">
-              <span className="rh-home-section-head__title">
-                {t('redesign.home.sectionGenreMixes')}
-              </span>
-            </div>
-            <HorizontalSnap
-              items={genreMixes}
-              renderItem={(mix) => (
-                <HomeGenreMixCard
-                  mix={mix}
-                  onPlay={handlePlayAll}
-                  onOpen={() =>
-                    navigate(
-                      `/genre-mix/${encodeURIComponent(mix.genre)}`,
-                    )
-                  }
-                  countLabel={genreTrackCount(mix.tracks.length)}
-                  listenAria={t('redesign.home.mixPlayAll')}
-                />
-              )}
-              pageDots
-              parallax={false}
-              showArrows="never"
-              className="rh-home-h-snap rh-home-genre-snap"
-              ariaLabel={t('redesign.home.sectionGenreMixes')}
-            />
-          </>
-        ) : null}
 
         {promoHero && promoHero.length > 0 && (
-          <PromotionHero
-            items={promoHero}
-            onSelect={handlePromotionSelect}
-          />
-        )}
-
-        {promoSection && promoSection.length > 0 && (
-          <PromotionSection
-            items={promoSection}
-            surface="section"
-            title={t('redesign.home.sectionPromoted', 'Рекомендуем')}
-            onSelect={handlePromotionSelect}
-          />
-        )}
-
-        </section>
-
-        <section className="rh-home-social-band">
-        <div className="rh-home-cluster-intro">
-          <span className="rh-home-cluster-intro__eyebrow">
-            {t('redesign.home.socialEyebrow')}
-          </span>
-          <h2 className="rh-home-cluster-intro__title">
-            {t('redesign.home.socialTitle')}
-          </h2>
-          <p className="rh-home-cluster-intro__hint">
-            {t('redesign.home.socialHint')}
-          </p>
-        </div>
-        {recentlyPlayed === null ? (
-          <div>
-            <div className="rh-home-section-head">
-              <span className="rh-home-section-head__title">
-                {t('redesign.home.sectionRecent')}
-              </span>
-            </div>
-            <div className="rh-home-skel-row home-skeleton-row">
-              {[1, 2, 3, 4].map((i) => (
-                <SkeletonBlock
-                  key={i}
-                  className="home-skeleton-tile"
-                />
-              ))}
-            </div>
+          <div className="dh-promo">
+            <PromotionHero
+              items={promoHero}
+              onSelect={handlePromotionSelect}
+            />
           </div>
-        ) : (() => {
-          const continueIds = new Set(
-            (sectionMap.get('continue')?.tracks ?? []).map(
-              (tr) => tr.id,
-            ),
-          )
-          const recent = recentlyPlayed.filter(
-            (tr) => !continueIds.has(tr.id),
-          )
-          if (recent.length === 0) return null
-          return (
-            <HomeTrackSnapSection
-              title={t('redesign.home.sectionRecent')}
-              tracks={recent}
-              onPlay={handlePlay}
+        )}
+
+        {genreMixes === null ? (
+          <section
+            ref={genreMixesSentinelRef}
+            className="dh-section"
+          >
+            <DhSectionHead
+              title={t('redesign.home.sectionGenreMixes')}
               moreLabel={t('redesign.home.more')}
-              snapAria={t('redesign.home.sectionRecent')}
             />
-          )
-        })()}
-
-        {followedArtists === null ? (
-          <div ref={followedArtistsSentinelRef}>
-            <div className="rh-home-section-head">
-              <span className="rh-home-section-head__title">
-                {t('redesign.home.sectionSubscriptions')}
-              </span>
-            </div>
-            <div className="rh-home-skel-row">
-              {[1, 2, 3, 4, 5].map((i) => (
-                <SkeletonBlock
-                  key={i}
-                  className="home-skeleton-chip"
-                />
+            <div className="dh-scroller" aria-hidden>
+              {[1, 2, 3].map((i) => (
+                <div key={i} className="dh-skel dh-skel--tile" />
               ))}
             </div>
-          </div>
-        ) : followedArtists.length > 0 ? (
-          <>
-            <div className="rh-home-section-head">
-              <span className="rh-home-section-head__title">
-                {t('redesign.home.sectionSubscriptions')}
-              </span>
-            </div>
-            <HorizontalSnap
-              items={chunk(followedArtists, 4)}
-              renderItem={(page) => (
-                <div className="rh-home-artist-page">
-                  {page.map((artist) => {
-                    const src = coverUrl(artist.image_key)
-                    return (
-                      <button
-                        key={artist.id}
-                        type="button"
-                        className="rh-home-artist-chip"
-                        onClick={() => {
-                          if (onOpenArtist) {
-                            onOpenArtist(artist.id)
-                            return
-                          }
-                          navigate(
-                            `/search?q=${encodeURIComponent(artist.name)}`,
-                          )
-                        }}
-                        title={artist.name}
-                      >
-                        <div className="rh-home-artist-chip__avatar">
-                          <HomeArtistAvatar src={src} />
-                        </div>
-                        <span className="rh-home-artist-chip__name">
-                          {artist.name}
-                        </span>
-                      </button>
-                    )
-                  })}
-                </div>
-              )}
-              pageDots
-              parallax={false}
-              showArrows="never"
-              className="rh-home-h-snap rh-home-artist-snap"
-              ariaLabel={t('redesign.home.sectionSubscriptions')}
+          </section>
+        ) : genreMixes.length > 0 ? (
+          <section
+            className="dh-section"
+            aria-label={t('redesign.home.sectionGenreMixes')}
+          >
+            <DhSectionHead
+              title={t('redesign.home.sectionGenreMixes')}
+              moreLabel={t('redesign.home.more')}
             />
-          </>
+            <div className="dh-scroller" role="list">
+              {genreMixes.map((mix) => (
+                <div role="listitem" key={mix.genre}>
+                  <DhMixCard
+                    mix={mix}
+                    countLabel={genreTrackCount(mix.tracks.length)}
+                    onOpen={() =>
+                      navigate(
+                        `/genre-mix/${encodeURIComponent(
+                          mix.genre,
+                        )}`,
+                      )
+                    }
+                    onPlay={handlePlayAll}
+                    listenAria={t('redesign.home.mixPlayAll')}
+                  />
+                </div>
+              ))}
+            </div>
+          </section>
         ) : null}
 
-        </section>
+        {filteredRecent === null ? (
+          <section className="dh-section">
+            <DhSectionHead
+              title={t('redesign.home.sectionRecent')}
+              moreLabel={t('redesign.home.more')}
+            />
+            <div className="dh-scroller" aria-hidden>
+              {[1, 2, 3, 4].map((i) => (
+                <div key={i} className="dh-skel dh-skel--tile" />
+              ))}
+            </div>
+          </section>
+        ) : filteredRecent.length > 0 ? (
+          <DhTileRow
+            title={t('redesign.home.sectionRecent')}
+            tracks={filteredRecent}
+            onPlay={handlePlay}
+            moreLabel={t('redesign.home.more')}
+            ariaLabel={t('redesign.home.sectionRecent')}
+          />
+        ) : null}
+
+        {followedArtists === null ? (
+          <section
+            ref={followedArtistsSentinelRef}
+            className="dh-section"
+          >
+            <DhSectionHead
+              title={t('redesign.home.sectionSubscriptions')}
+              moreLabel={t('redesign.home.more')}
+            />
+            <div className="dh-scroller" aria-hidden>
+              {[1, 2, 3, 4, 5].map((i) => (
+                <div
+                  key={i}
+                  className="dh-skel dh-skel--avatar"
+                />
+              ))}
+            </div>
+          </section>
+        ) : followedArtists.length > 0 ? (
+          <section
+            className="dh-section"
+            aria-label={t('redesign.home.sectionSubscriptions')}
+          >
+            <DhSectionHead
+              title={t('redesign.home.sectionSubscriptions')}
+              moreLabel={t('redesign.home.more')}
+            />
+            <div className="dh-scroller" role="list">
+              {followedArtists.map((artist) => (
+                <div role="listitem" key={artist.id}>
+                  <DhArtistChip
+                    artist={artist}
+                    onOpen={handleOpenArtist}
+                  />
+                </div>
+              ))}
+            </div>
+          </section>
+        ) : null}
 
         {sections &&
-          HOME_TRACK_SECTIONS.filter(
+          HOME_LAZY_SECTIONS.filter(
             ({ key }) => key !== topSlotKey,
           ).map(({ key, morePath }) => (
-            <HomeLazyTrackSection
+            <DhLazyTileRow
               key={key}
               sectionKey={key}
               initialSection={sectionMap.get(key) ?? null}
@@ -1569,37 +1287,43 @@ export function HomeView({ onOpenArtist }: HomeViewProps) {
         {(sections === null || sections.length === 0) &&
           fallbackTracks !== null &&
           fallbackTracks.length > 0 && (
-          <HomeTrackSnapSection
-            title={t('redesign.home.sectionTracks')}
-            tracks={fallbackTracks}
-            onPlay={handlePlay}
-            moreLabel={t('redesign.home.more')}
-            snapAria={t('redesign.home.sectionTracks')}
-          />
+            <DhTileRow
+              title={t('redesign.home.sectionTracks')}
+              tracks={fallbackTracks}
+              onPlay={handlePlay}
+              moreLabel={t('redesign.home.more')}
+              ariaLabel={t('redesign.home.sectionTracks')}
+            />
+          )}
+
+        {promoSection && promoSection.length > 0 && (
+          <div className="dh-promo">
+            <PromotionSection
+              items={promoSection}
+              surface="section"
+              title={t(
+                'redesign.home.sectionPromoted',
+                'Рекомендуем',
+              )}
+              onSelect={handlePromotionSelect}
+            />
+          </div>
         )}
 
-        {sections &&
-          sections.length === 0 &&
-          fallbackTracks !== null &&
-          fallbackTracks.length === 0 &&
-          recentlyPlayed !== null &&
-          recentlyPlayed.length === 0 &&
-          genreMixes !== null &&
-          followedArtists !== null && (
-          <div className="rh-home-empty">
-            <div className="rh-home-empty__icon" aria-hidden>
+        {allEmpty && (
+          <div className="dh-empty">
+            <div className="dh-empty__icon" aria-hidden>
               <Icon name="music" size={28} />
             </div>
-            <div className="rh-home-empty__title">
+            <div className="dh-empty__title">
               {t('redesign.home.emptyTitle')}
             </div>
-            <div className="rh-home-empty__hint">
+            <p className="dh-empty__hint">
               {t('redesign.home.emptyHint')}
-            </div>
-            <div className="rh-home-empty__actions">
+            </p>
+            <div className="dh-empty__actions">
               <MotionPress
-                variant="primary"
-                className="rh-home-empty__cta"
+                className="dh-btn dh-btn--primary"
                 onClick={() => {
                   void handleStartFirstSession()
                 }}
@@ -1608,16 +1332,14 @@ export function HomeView({ onOpenArtist }: HomeViewProps) {
                 <span>{t('redesign.home.emptyStart')}</span>
               </MotionPress>
               <MotionPress
-                variant="ghost"
-                className="rh-home-empty__alt"
+                className="dh-btn dh-btn--secondary"
                 onClick={() => navigate('/radio')}
               >
                 <Icon name="radio" size={16} />
                 <span>{t('redesign.home.emptyRadio')}</span>
               </MotionPress>
               <MotionPress
-                variant="ghost"
-                className="rh-home-empty__alt"
+                className="dh-btn dh-btn--ghost"
                 onClick={() => navigate('/search')}
               >
                 <Icon name="search" size={16} />
