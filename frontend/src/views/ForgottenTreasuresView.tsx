@@ -34,6 +34,7 @@ export function ForgottenTreasuresView() {
     null,
   )
   const [loading, setLoading] = useState(true)
+  const [loadError, setLoadError] = useState(false)
   const [shareOpen, setShareOpen] = useState(false)
   const [shareChats, setShareChats] = useState<ChatListItem[]>([])
   const [shareLoading, setShareLoading] = useState(false)
@@ -45,10 +46,14 @@ export function ForgottenTreasuresView() {
 
   const load = useCallback(() => {
     setLoading(true)
+    setLoadError(false)
     api
       .getForgottenTreasuresPlaylist(50)
-      .then(setData)
-      .catch(() =>
+      .then((next) => {
+        setData(next)
+      })
+      .catch(() => {
+        setLoadError(true)
         setData({
           tracks: [],
           generated_at: '',
@@ -56,8 +61,8 @@ export function ForgottenTreasuresView() {
           score_version: '',
           min_like_age_days: 21,
           silence_days: 14,
-        }),
-      )
+        })
+      })
       .finally(() => setLoading(false))
   }, [])
 
@@ -226,7 +231,16 @@ export function ForgottenTreasuresView() {
       >
         <TrackList
           tracks={tracks}
-          emptyMessage={t('forgottenTreasures.empty')}
+          emptyMessage={
+            loadError
+              ? t('forgottenTreasures.loadError')
+              : t('forgottenTreasures.empty')
+          }
+          emptyCta={
+            loadError
+              ? { label: t('forgottenTreasures.retry'), onClick: load }
+              : undefined
+          }
         />
       </m.div>
 

@@ -32,6 +32,7 @@ export function WeeklyMixView() {
   const { shuffleOn } = usePlayerMeta()
   const [data, setData] = useState<WeeklyPlaylistResponse | null>(null)
   const [loading, setLoading] = useState(true)
+  const [loadError, setLoadError] = useState(false)
   const [shareOpen, setShareOpen] = useState(false)
   const [shareChats, setShareChats] = useState<ChatListItem[]>([])
   const [shareLoading, setShareLoading] = useState(false)
@@ -42,17 +43,21 @@ export function WeeklyMixView() {
 
   const load = useCallback(() => {
     setLoading(true)
+    setLoadError(false)
     api
       .getWeeklyPlaylist()
-      .then(setData)
-      .catch(() =>
+      .then((next) => {
+        setData(next)
+      })
+      .catch(() => {
+        setLoadError(true)
         setData({
           internal_tracks: [],
           external_tracks: [],
           generated_at: '',
           expires_at: '',
-        }),
-      )
+        })
+      })
       .finally(() => setLoading(false))
   }, [])
 
@@ -204,7 +209,14 @@ export function WeeklyMixView() {
       >
         <TrackList
           tracks={internalTracks}
-          emptyMessage={t('weeklyMix.empty')}
+          emptyMessage={
+            loadError ? t('weeklyMix.loadError') : t('weeklyMix.empty')
+          }
+          emptyCta={
+            loadError
+              ? { label: t('weeklyMix.retry'), onClick: load }
+              : undefined
+          }
         />
       </m.div>
 

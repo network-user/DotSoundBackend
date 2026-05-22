@@ -30,6 +30,7 @@ import {
 import { MotionPress } from '@/components/ui/MotionPress'
 import { MorphIcon } from '@/components/ui/MorphIcon'
 import { BeatPulse } from '@/components/ui/BeatPulse'
+import { HeartBurst } from '@/components/ui/HeartBurst'
 import { SpectrumMicroBars } from '@/components/ui/SpectrumMicroBars'
 import { SharedCover } from '@/components/ui/SharedCover'
 import { useMatchMedia } from '@/hooks/useMatchMedia'
@@ -651,6 +652,10 @@ export function PlayerBar() {
               <MorphIcon
                 name="heart"
                 filled={liked}
+                size={18}
+              />
+              <HeartBurst
+                active={likeBurst}
                 size={18}
               />
             </MotionPress>

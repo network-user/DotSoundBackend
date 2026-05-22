@@ -961,6 +961,33 @@
   min-width: 0;
 }
 
+.rh-radio-session-stats {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.rh-radio-session-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 26px;
+  padding: 0 10px;
+  border: 1px solid color-mix(in srgb, var(--glass-edge) 78%, transparent);
+  border-radius: var(--r-pill);
+  background: rgba(255, 255, 255, 0.055);
+  color: var(--text-secondary);
+  font-size: var(--fs-12);
+  line-height: 1;
+  white-space: nowrap;
+}
+
+.rh-radio-session-chip svg {
+  flex: 0 0 auto;
+  color: var(--text);
+}
+
 .rh-radio-live-chip {
   display: inline-flex;
   align-items: center;

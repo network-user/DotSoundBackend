@@ -285,6 +285,7 @@ export function TrackCardSheet({
   const [videoReady, setVideoReady] =
     useState(false)
   const [videoBusy, setVideoBusy] = useState(false)
+  const [videoFailed, setVideoFailed] = useState(false)
   const [videoStatusMessage, setVideoStatusMessage] =
     useState<string | null>(null)
   const [videoStatusKind, setVideoStatusKind] =
@@ -304,6 +305,24 @@ export function TrackCardSheet({
     useRef<AbortController | null>(null)
   const videoCancelRequestedRef = useRef(false)
   const videoPlaybackErrorShownRef = useRef(false)
+  const videoRetryCountRef = useRef(0)
+  const videoRetryTimerRef = useRef<number | null>(null)
+  const videoStalledTimerRef = useRef<number | null>(null)
+  const VIDEO_MAX_RETRIES = 2
+  const VIDEO_RETRY_BACKOFF_MS = [500, 2000]
+  const VIDEO_STALLED_TIMEOUT_MS = 2500
+  const clearVideoRetryTimer = useCallback(() => {
+    if (videoRetryTimerRef.current !== null) {
+      window.clearTimeout(videoRetryTimerRef.current)
+      videoRetryTimerRef.current = null
+    }
+  }, [])
+  const clearVideoStalledTimer = useCallback(() => {
+    if (videoStalledTimerRef.current !== null) {
+      window.clearTimeout(videoStalledTimerRef.current)
+      videoStalledTimerRef.current = null
+    }
+  }, [])
   const [extrasOpen, setExtrasOpen] = useState(false)
   const [streamOverrideDraft, setStreamOverrideDraft] =
     useState('')
@@ -427,34 +446,70 @@ export function TrackCardSheet({
 
   const handleVideoCanPlay = useCallback(() => {
     videoPlaybackErrorShownRef.current = false
+    videoRetryCountRef.current = 0
+    clearVideoRetryTimer()
+    clearVideoStalledTimer()
     setVideoReady(true)
+    setVideoFailed(false)
     setVideoStatusKind('info')
     setVideoStatusPhase('idle')
     setVideoStatusMessage(null)
-  }, [])
+  }, [clearVideoRetryTimer, clearVideoStalledTimer])
 
   const handleVideoPlaybackError = useCallback(() => {
+    clearVideoStalledTimer()
     setVideoReady(false)
+    const attempt = videoRetryCountRef.current
+    if (attempt < VIDEO_MAX_RETRIES) {
+      const delay =
+        VIDEO_RETRY_BACKOFF_MS[
+          Math.min(attempt, VIDEO_RETRY_BACKOFF_MS.length - 1)
+        ]
+      videoRetryCountRef.current = attempt + 1
+      clearVideoRetryTimer()
+      videoRetryTimerRef.current = window.setTimeout(() => {
+        videoRetryTimerRef.current = null
+        const el = videoRef.current
+        if (el) {
+          try {
+            el.load()
+          } catch {
+            // ignore
+          }
+        }
+      }, delay)
+      return
+    }
     if (videoPlaybackErrorShownRef.current) {
       return
     }
     videoPlaybackErrorShownRef.current = true
-    const message = t('trackSheet.videoPlaybackFailed')
-    setVideoStatusKind('error')
-    setVideoStatusPhase('error')
-    setVideoStatusMessage(message)
-    showIsland({
-      kind: 'error',
-      title: message,
-      durationMs: 4500,
+    const el = videoRef.current
+    console.warn('[trackcard.video] playback failed', {
+      src: el?.currentSrc || el?.src || null,
+      networkState: el?.networkState,
+      errorCode: el?.error?.code,
     })
-  }, [t])
+    setVideoFailed(true)
+  }, [clearVideoRetryTimer, clearVideoStalledTimer])
+
+  const handleVideoStalled = useCallback(() => {
+    clearVideoStalledTimer()
+    videoStalledTimerRef.current = window.setTimeout(() => {
+      videoStalledTimerRef.current = null
+      const el = videoRef.current
+      if (!el || el.readyState >= 3) return
+      handleVideoPlaybackError()
+    }, VIDEO_STALLED_TIMEOUT_MS)
+  }, [clearVideoStalledTimer, handleVideoPlaybackError])
 
   useEffect(
     () => () => {
       clearVideoPoll()
+      clearVideoRetryTimer()
+      clearVideoStalledTimer()
     },
-    [clearVideoPoll],
+    [clearVideoPoll, clearVideoRetryTimer, clearVideoStalledTimer],
   )
 
   useEffect(() => {
@@ -534,10 +589,14 @@ export function TrackCardSheet({
       setCoverBusy(false)
       setVideoReady(false)
       setVideoBusy(false)
+      setVideoFailed(false)
       setVideoStatusKind('info')
       setVideoStatusPhase('idle')
       setVideoStatusMessage(null)
       videoPlaybackErrorShownRef.current = false
+      videoRetryCountRef.current = 0
+      clearVideoRetryTimer()
+      clearVideoStalledTimer()
       clearVideoPoll()
       setTrackInfo(null)
       setTrackInfoRefreshing(false)
@@ -556,7 +615,11 @@ export function TrackCardSheet({
     setShowEdit(false)
     setShowLyrics(readLyricsVisiblePreference())
     setVideoReady(false)
+    setVideoFailed(false)
     videoPlaybackErrorShownRef.current = false
+    videoRetryCountRef.current = 0
+    clearVideoRetryTimer()
+    clearVideoStalledTimer()
     const currentVideoStatus =
       track.video_processing_status ?? null
     const currentVideoFailure =
@@ -1608,7 +1671,7 @@ export function TrackCardSheet({
             )}
           </div>
         )}
-        {hasActiveVideo && (
+        {hasActiveVideo && !videoFailed && (
           <>
             <video
               ref={videoRef}
@@ -1623,6 +1686,8 @@ export function TrackCardSheet({
               onCanPlay={handleVideoCanPlay}
               onLoadedData={handleVideoCanPlay}
               onError={handleVideoPlaybackError}
+              onStalled={handleVideoStalled}
+              onWaiting={handleVideoStalled}
             />
             <div className="tcs-video-gradient" />
             {hasPipSupport() && (
@@ -1657,7 +1722,21 @@ export function TrackCardSheet({
           </>
         )}
 
-        {hasActiveVideo && !videoReady && (
+        {hasActiveVideo && videoFailed && coverSrc && (
+          <>
+            <img
+              className="tcs-video-bg tcs-video-fallback"
+              src={coverSrc}
+              srcSet={coverSrcSetAttr}
+              sizes="100vw"
+              alt=""
+              aria-hidden="true"
+            />
+            <div className="tcs-video-gradient" />
+          </>
+        )}
+
+        {hasActiveVideo && !videoFailed && !videoReady && (
           <div
             className="tcs-video-standby"
             {...(desktopFineNav ? {} : tcsNavSwipe)}
@@ -1675,7 +1754,7 @@ export function TrackCardSheet({
         )}
 
         {hasActiveVideo &&
-          videoReady &&
+          (videoReady || videoFailed) &&
           !showLyricsPanel && (
             <div
               className="tcs-video-spacer"

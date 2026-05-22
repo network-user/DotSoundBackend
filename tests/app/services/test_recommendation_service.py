@@ -313,6 +313,37 @@ async def test_get_radio_guard_uses_last_queue(
     )
 
 
+async def test_get_radio_guard_honors_exclude_ids(
+    session: AsyncSession,
+) -> None:
+    mock_redis = AsyncMock()
+    mock_redis.set = AsyncMock(return_value=None)
+    mock_redis.get = AsyncMock(
+        return_value=json.dumps([11, 12])
+    )
+    mock_tracks = [
+        SimpleNamespace(id=11),
+        SimpleNamespace(id=12),
+    ]
+
+    with patch(
+        f"{_MOD}.get_redis_client",
+        return_value=mock_redis,
+    ):
+        svc = RecommendationService(session)
+        svc._load_radio_session = AsyncMock(return_value=[])
+        svc._rec_repo.get_tracks_by_ids = AsyncMock(
+            return_value=mock_tracks
+        )
+        out = await svc.get_radio(
+            seed_track_id=5,
+            user_id=77,
+            exclude_ids=[11],
+        )
+
+    assert [t.id for t in out] == [12]
+
+
 async def test_get_radio_guard_filters_recent_playback_failures(
     session: AsyncSession,
 ) -> None:

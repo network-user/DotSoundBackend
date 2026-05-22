@@ -226,6 +226,325 @@
 
 /* Group section reuses existing .profile-actions-group__title */
 
+/* Public profile route --------------------------------------- */
+
+.rp-public-profile__content {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  padding-bottom: calc(28px + var(--nav-h) + var(--player-h));
+}
+
+.rp-public-profile__loading,
+.rp-public-profile__empty {
+  min-height: 220px;
+  display: grid;
+  place-items: center;
+  gap: 12px;
+  padding: 28px 20px;
+  color: var(--text-secondary);
+  text-align: center;
+}
+
+.rp-public-profile__empty {
+  align-content: center;
+  border: 1px dashed var(--border);
+  border-radius: 14px;
+  margin: 0 20px;
+  background: var(--bg-elevated);
+}
+
+.rp-public-profile__empty p {
+  max-width: 340px;
+  margin: 0;
+  font-size: 14px;
+  line-height: 1.45;
+}
+
+.rp-public-hero {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 14px;
+  align-items: center;
+  margin: 0 20px;
+  padding: 18px;
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  background: var(--bg-elevated);
+}
+
+.rp-public-hero__avatar {
+  width: 82px;
+  height: 82px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  border-radius: 50%;
+  border: 2px solid var(--border);
+  background: var(--bg-card);
+  color: var(--text-secondary);
+}
+
+.rp-public-hero__avatar img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.rp-public-hero__body {
+  min-width: 0;
+}
+
+.rp-public-hero__name {
+  margin: 0;
+  color: var(--text);
+  font-size: 24px;
+  line-height: 1.12;
+  font-weight: 800;
+  overflow-wrap: anywhere;
+}
+
+.rp-public-hero__username {
+  margin: 5px 0 0;
+  color: var(--text-secondary);
+  font-size: 14px;
+  overflow-wrap: anywhere;
+}
+
+.rp-public-hero__actions {
+  grid-column: 1 / -1;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 4px;
+}
+
+.rp-public-follow,
+.rp-public-share {
+  min-height: 42px;
+  flex: 1 1 150px;
+  justify-content: center;
+  gap: 8px;
+  border-radius: 12px !important;
+}
+
+.rp-public-follow[data-active='true'] {
+  border-color: var(--border-hover);
+}
+
+.rp-public-summary {
+  margin: 0 20px;
+}
+
+.rp-public-tabs {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+  margin: 0 20px;
+}
+
+.rp-public-tabs__button {
+  min-height: 42px;
+  justify-content: center;
+  gap: 6px;
+  border-radius: 12px !important;
+  font-size: 13px;
+}
+
+.rp-public-tabs__button span:not(.rp-public-tabs__count) {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.rp-public-tabs__count {
+  min-width: 20px;
+  height: 18px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 6px;
+  border-radius: 999px;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.rp-public-panel {
+  min-height: 180px;
+}
+
+.rp-public-panel .re-tl-root {
+  margin: 0 20px;
+}
+
+.rp-public-load-more {
+  margin: 10px 20px 0;
+}
+
+.rp-public-stats {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  margin: 0 20px;
+}
+
+.rp-public-stats__grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.rp-public-metric {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  grid-template-areas:
+    'icon value'
+    'icon label';
+  align-items: center;
+  column-gap: 10px;
+  min-height: 74px;
+  padding: 14px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--bg-elevated);
+}
+
+.rp-public-metric__icon {
+  grid-area: icon;
+  width: 38px;
+  height: 38px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 11px;
+  color: var(--text);
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+}
+
+.rp-public-metric__value {
+  grid-area: value;
+  color: var(--text);
+  font-size: 19px;
+  font-weight: 800;
+  line-height: 1;
+}
+
+.rp-public-metric__label {
+  grid-area: label;
+  color: var(--text-secondary);
+  font-size: 12px;
+  line-height: 1.2;
+}
+
+.rp-public-top {
+  padding: 16px;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  background: var(--bg-elevated);
+}
+
+.rp-public-top__title {
+  margin: 0 0 12px;
+  color: var(--text);
+  font-size: 15px;
+  font-weight: 800;
+}
+
+.rp-public-top__list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.rp-public-top__row {
+  display: grid;
+  grid-template-columns: 28px minmax(0, 1fr) auto;
+  gap: 10px;
+  align-items: center;
+  min-height: 48px;
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--bg-card);
+}
+
+.rp-public-top__rank {
+  color: var(--text-muted);
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.rp-public-top__name {
+  min-width: 0;
+  color: var(--text);
+  font-size: 14px;
+  font-weight: 700;
+  line-height: 1.25;
+}
+
+.rp-public-top__name small {
+  display: block;
+  margin-top: 2px;
+  color: var(--text-secondary);
+  font-size: 12px;
+  font-weight: 500;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.rp-public-top__plays {
+  color: var(--text-secondary);
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.rp-public-top__empty {
+  margin: 0;
+  color: var(--text-secondary);
+  font-size: 13px;
+  line-height: 1.4;
+}
+
+@media (min-width: 700px) {
+  .rp-public-hero,
+  .rp-public-summary,
+  .rp-public-tabs,
+  .rp-public-stats,
+  .rp-public-panel .re-tl-root,
+  .rp-public-load-more {
+    max-width: 760px;
+    width: calc(100% - 40px);
+    margin-left: auto;
+    margin-right: auto;
+  }
+
+  .rp-public-stats__grid {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 430px) {
+  .rp-public-hero {
+    grid-template-columns: 1fr;
+    justify-items: center;
+    text-align: center;
+  }
+
+  .rp-public-tabs {
+    gap: 6px;
+  }
+
+  .rp-public-tabs__button {
+    padding-inline: 8px !important;
+    font-size: 12px;
+  }
+}
+
 /* ───────────── Subview slide transitions (h) ───────────── */
 
 .rp-subview {

@@ -109,6 +109,8 @@ const CROSSFADE_LEAD_MS = 2000
 // across an OS-imposed network suspension without tripping the
 // in-band refill path.
 const RADIO_BATCH_SIZE = 25
+const RADIO_RECENT_ID_BUFFER = 180
+const RADIO_EXCLUDE_QUERY_LIMIT = 160
 
 type HlsErrorData = {
   type?: unknown
@@ -542,12 +544,17 @@ const _RADIO_STATE_KEY = 'player-radio-state'
 function _saveRadioState(
   mode: boolean,
   seedTrackId: number | null,
+  recentTrackIds: readonly number[] = [],
 ): void {
   try {
     if (mode && seedTrackId != null) {
       sessionStorage.setItem(
         _RADIO_STATE_KEY,
-        JSON.stringify({ mode, seedTrackId }),
+        JSON.stringify({
+          mode,
+          seedTrackId,
+          recentTrackIds: _trimRadioRecentIds(recentTrackIds),
+        }),
       )
     } else {
       sessionStorage.removeItem(_RADIO_STATE_KEY)
@@ -560,6 +567,7 @@ function _saveRadioState(
 function _loadRadioState(): {
   mode: true
   seedTrackId: number
+  recentTrackIds: number[]
 } | null {
   try {
     const raw = sessionStorage.getItem(_RADIO_STATE_KEY)
@@ -567,6 +575,7 @@ function _loadRadioState(): {
     const parsed = JSON.parse(raw) as {
       mode?: boolean
       seedTrackId?: number
+      recentTrackIds?: unknown
     }
     if (
       parsed?.mode === true &&
@@ -574,12 +583,31 @@ function _loadRadioState(): {
       Number.isInteger(parsed.seedTrackId) &&
       parsed.seedTrackId > 0
     ) {
-      return { mode: true, seedTrackId: parsed.seedTrackId }
+      const recentTrackIds = Array.isArray(parsed.recentTrackIds)
+        ? _trimRadioRecentIds(parsed.recentTrackIds)
+        : []
+      return {
+        mode: true,
+        seedTrackId: parsed.seedTrackId,
+        recentTrackIds,
+      }
     }
   } catch {
     /* ignore */
   }
   return null
+}
+
+function _trimRadioRecentIds(ids: Iterable<unknown>): number[] {
+  const out: number[] = []
+  for (const raw of ids) {
+    const id = Number(raw)
+    if (!Number.isInteger(id) || id <= 0) continue
+    const existing = out.indexOf(id)
+    if (existing >= 0) out.splice(existing, 1)
+    out.push(id)
+  }
+  return out.slice(-RADIO_RECENT_ID_BUFFER)
 }
 
 function _cloneTrackForStorage(t: Track): Track {
@@ -780,6 +808,7 @@ function _updateMediaSession(
   audio: HTMLAudioElement,
   onNext: () => void,
   onPrev: () => void,
+  onStop: () => void,
 ) {
   if (!('mediaSession' in navigator)) return
   try {
@@ -809,6 +838,16 @@ function _updateMediaSession(
     _setMediaSessionActionHandler(
       'previoustrack',
       onPrev,
+    )
+    // The Android notification shade renders an explicit "×" /
+    // "stop" button next to play-pause on most Chromium builds. Without
+    // a handler the tap is a no-op (user-reported "× в шторке ничего
+    // не делает"). Wiring it to the player's full ``stop()`` mirrors
+    // Spotify / YT Music: pause audio, tear down HLS, clear the
+    // session so the notification dismisses cleanly.
+    _setMediaSessionActionHandler(
+      'stop',
+      onStop,
     )
     _setMediaSessionActionHandler(
       'seekto',
@@ -1289,6 +1328,33 @@ export function PlayerProvider({
   // of skips can re-await the same network round-trip instead of
   // racing N parallel refills. ``null`` when no refill is pending.
   const radioRefillInFlightRef = useRef<Promise<void> | null>(null)
+  const rememberRadioTrackIds = (
+    ids: Iterable<number | null | undefined>,
+  ) => {
+    const next = _trimRadioRecentIds([
+      ...radioPlayedIdsRef.current,
+      ...ids,
+    ])
+    radioPlayedIdsRef.current = new Set(next)
+    if (radioModeRef.current) {
+      _saveRadioState(
+        true,
+        radioSeedTrackIdRef.current,
+        next,
+      )
+    }
+  }
+  const buildRadioExcludeIds = (
+    ...sources: Array<Iterable<number | null | undefined>>
+  ): number[] => {
+    const merged: Array<number | null | undefined> = [
+      ...radioPlayedIdsRef.current,
+    ]
+    for (const source of sources) {
+      merged.push(...source)
+    }
+    return _trimRadioRecentIds(merged).slice(-RADIO_EXCLUDE_QUERY_LIMIT)
+  }
   const playTrackSlideInjectRef = useRef<1 | -1 | null>(null)
   const playNextInFlightRef = useRef(false)
   const playbackLoadingTrackIdRef = useRef<number | null>(null)
@@ -1421,6 +1487,7 @@ export function PlayerProvider({
       audio,
       () => playNext(),
       () => playPrev(),
+      () => stop(),
     )
   }
 
@@ -1779,8 +1846,19 @@ export function PlayerProvider({
     if (savedRadio) {
       radioModeRef.current = true
       radioSeedTrackIdRef.current = savedRadio.seedTrackId
+      const restoredRecentIds = _trimRadioRecentIds([
+        ...savedRadio.recentTrackIds,
+        saved.track?.id,
+        ...(saved.queue ?? []).map((t) => t.id),
+      ])
+      radioPlayedIdsRef.current = new Set(restoredRecentIds)
       setRadioMode(true)
       setRadioSeedTrackId(savedRadio.seedTrackId)
+      _saveRadioState(
+        true,
+        savedRadio.seedTrackId,
+        restoredRecentIds,
+      )
     }
     if (saved.queue && saved.queue.length > 0) {
       manualQueueRef.current = [...saved.queue]
@@ -2187,6 +2265,7 @@ export function PlayerProvider({
     lastUnavailableFailureRef.current = {}
     radioSessionTimelineRef.current = []
     setRadioSessionTimeline([])
+    radioPlayedIdsRef.current = new Set()
     radioModeRef.current = false
     radioSeedTrackIdRef.current = null
     setRadioMode(false)
@@ -2935,7 +3014,7 @@ export function PlayerProvider({
           track_id: track.id,
           duration_listened: listened,
           total_duration: track.duration_seconds,
-          source_context: 'player',
+          source_context: radioModeRef.current ? 'radio' : 'player',
           last_position: Math.max(
             0,
             Math.floor(audio.currentTime),
@@ -3333,6 +3412,7 @@ export function PlayerProvider({
         audio,
         () => playNext(),
         () => playPrev(),
+        () => stop(),
       )
     }
 
@@ -3441,7 +3521,7 @@ export function PlayerProvider({
             track_id: track.id,
             duration_listened: listened,
             total_duration: track.duration_seconds,
-            source_context: 'player',
+            source_context: radioModeRef.current ? 'radio' : 'player',
             last_position: Math.max(
               0,
               Math.floor(activeEl.currentTime),
@@ -3517,6 +3597,7 @@ export function PlayerProvider({
           idleEl,
           () => playNext(),
           () => playPrev(),
+          () => stop(),
         )
         navigator.mediaSession.playbackState = 'playing'
       } catch {
@@ -3599,6 +3680,7 @@ export function PlayerProvider({
         setQueue([])
         radioSessionTimelineRef.current = []
         setRadioSessionTimeline([])
+        radioPlayedIdsRef.current = new Set()
         radioModeRef.current = false
         radioSeedTrackIdRef.current = null
         setRadioMode(false)
@@ -3628,6 +3710,7 @@ export function PlayerProvider({
           : tail
       manualQueueRef.current = [...nextQueue]
       setQueue([...nextQueue])
+      radioPlayedIdsRef.current = new Set()
       radioModeRef.current = false
       radioSeedTrackIdRef.current = null
       setRadioMode(false)
@@ -3681,6 +3764,7 @@ export function PlayerProvider({
           audio,
           () => playNext(),
           () => playPrev(),
+          () => stop(),
         )
         _pushPositionStateForTrack(audio, newTrack)
         // Force ``playing`` even though ``audio.paused`` is still
@@ -3793,14 +3877,17 @@ export function PlayerProvider({
     const targetVolume =
       audio.volume > 0 ? audio.volume : volume
     // Hard barrier so the previous track cannot bleed into the new
-    // one. We pause+silence synchronously (zero added latency) and
-    // run the cosmetic fade-out *in parallel* with the new src load
-    // so the user does not eat an 80 ms blocking gap on every
-    // switch -- that gap was the "noticeable pause before next
-    // track" the user reported. The fade-out is a no-op for the
-    // perceived audio (we already set volume=0 below) but it makes
-    // the AudioContext meter wind down smoothly for any downstream
-    // analyser visualizers.
+    // one. We pause + cut the WebAudio gain synchronously (zero added
+    // latency) and run the cosmetic fade-out on the audio thread so
+    // it stays smooth even when the screen is off. Driving the cross-
+    // track fade through ``audio.volume`` + ``requestAnimationFrame``
+    // (the previous approach) left the new track at silence until the
+    // user unlocked the phone, because RAF callbacks are frozen while
+    // the document is hidden.
+    const ctxForFade = audioCtxRef.current
+    const activeGainForFade = _getActiveGain()
+    const useGainFade =
+      ctxForFade !== null && activeGainForFade !== null
     const paused = audio.paused
     const previousVolume = audio.volume
     if (!isInjectedAdvance) {
@@ -3810,13 +3897,41 @@ export function PlayerProvider({
         /* ignore */
       }
     }
-    try {
-      audio.volume = 0
-    } catch {
-      /* ignore */
-    }
-    if (!paused && previousVolume > 0) {
-      void _tweenVolume(audio, 0, TRACK_FADE_OUT_MS).catch(() => {})
+    if (useGainFade) {
+      const now = ctxForFade!.currentTime
+      activeGainForFade!.gain.cancelScheduledValues(now)
+      if (!paused && previousVolume > 0) {
+        activeGainForFade!.gain.setValueAtTime(
+          activeGainForFade!.gain.value,
+          now,
+        )
+        activeGainForFade!.gain.linearRampToValueAtTime(
+          0,
+          now + TRACK_FADE_OUT_MS / 1000,
+        )
+      } else {
+        activeGainForFade!.gain.setValueAtTime(0, now)
+      }
+      // Keep ``audio.volume`` at the user's slider value: the gain
+      // node multiplies into the EQ chain, so leaving the element
+      // itself at full volume avoids interaction with the volume
+      // useEffect and with code paths that bypass the fade.
+      if (audio.volume <= 0) {
+        try {
+          audio.volume = targetVolume
+        } catch {
+          /* ignore */
+        }
+      }
+    } else {
+      try {
+        audio.volume = 0
+      } catch {
+        /* ignore */
+      }
+      if (!paused && previousVolume > 0) {
+        void _tweenVolume(audio, 0, TRACK_FADE_OUT_MS).catch(() => {})
+      }
     }
     // Hard reset of the element clock so a residual currentTime from
     // the previous track cannot leak into the new one. Without this,
@@ -3846,6 +3961,32 @@ export function PlayerProvider({
       if (lastTrackIdRef.current !== newTrack.id) return
       const runFade = () => {
         if (lastTrackIdRef.current !== newTrack.id) return
+        const ctx2 = audioCtxRef.current
+        const ag = _getActiveGain()
+        if (useGainFade && ctx2 && ag) {
+          // iOS Safari can suspend the AudioContext while the page
+          // is hidden. Resume it before scheduling the ramp so the
+          // new track is actually audible the moment ``play()``
+          // takes effect.
+          if (ctx2.state === 'suspended') {
+            void ctx2.resume()
+          }
+          if (a.volume <= 0) {
+            try {
+              a.volume = targetVolume
+            } catch {
+              /* ignore */
+            }
+          }
+          const now = ctx2.currentTime
+          ag.gain.cancelScheduledValues(now)
+          ag.gain.setValueAtTime(0, now)
+          ag.gain.linearRampToValueAtTime(
+            1,
+            now + TRACK_FADE_IN_MS / 1000,
+          )
+          return
+        }
         try {
           a.volume = 0
         } catch {
@@ -3870,10 +4011,23 @@ export function PlayerProvider({
       const timeoutId = window.setTimeout(() => {
         a.removeEventListener('canplay', onReady)
         a.removeEventListener('playing', onReady)
-        // Even if the load stalls beyond the cap we must restore the
-        // user-visible volume; otherwise an autoplay block would
-        // leave the slider at 0 and the user would think the player
-        // muted itself.
+        // Safety net if ``canplay`` never fires: snap to an audible
+        // state. Otherwise an autoplay block or stalled load would
+        // leave the user wondering why the player muted itself.
+        const ctx2 = audioCtxRef.current
+        const ag = _getActiveGain()
+        if (useGainFade && ctx2 && ag) {
+          ag.gain.cancelScheduledValues(ctx2.currentTime)
+          ag.gain.setValueAtTime(1, ctx2.currentTime)
+          if (a.volume <= 0) {
+            try {
+              a.volume = targetVolume
+            } catch {
+              /* ignore */
+            }
+          }
+          return
+        }
         try {
           a.volume = targetVolume
         } catch {
@@ -4264,7 +4418,7 @@ export function PlayerProvider({
     radioPlayedIdsRef.current = new Set([seedTrack.id])
     setRadioMode(true)
     setRadioSeedTrackId(seedTrack.id)
-    _saveRadioState(true, seedTrack.id)
+    _saveRadioState(true, seedTrack.id, [seedTrack.id])
 
     // Kick off the seed's stream-URL resolve synchronously with the
     // user gesture. ``playTrack`` below would otherwise eat one more
@@ -4306,16 +4460,18 @@ export function PlayerProvider({
     // background, so "tap Radio" -> "first sound" is bound by the
     // single stream RTT instead of two sequential ones.
     const queuePromise: Promise<void> = api
-      .getRadio(seedTrack.id, RADIO_BATCH_SIZE)
+      .getRadio(
+        seedTrack.id,
+        RADIO_BATCH_SIZE,
+        buildRadioExcludeIds([seedTrack.id]),
+      )
       .then((result) => {
         if (!radioModeRef.current) return
         if (radioSeedTrackIdRef.current !== seedTrack.id) return
         const newTracks = result.tracks.filter(
           (t) => !radioPlayedIdsRef.current.has(t.id),
         )
-        for (const t of newTracks) {
-          radioPlayedIdsRef.current.add(t.id)
-        }
+        rememberRadioTrackIds(newTracks.map((t) => t.id))
         manualQueueRef.current = [...newTracks]
         setQueue([...newTracks])
         try {
@@ -4347,6 +4503,7 @@ export function PlayerProvider({
     consecutiveAutoSkipsRef.current = 0
     radioSessionTimelineRef.current = []
     setRadioSessionTimeline([])
+    radioPlayedIdsRef.current = new Set()
     radioModeRef.current = false
     radioSeedTrackIdRef.current = null
     setRadioMode(false)
@@ -4489,9 +4646,12 @@ export function PlayerProvider({
           radioRefillInFlightRef.current === null
         ) {
           const seedId = radioSeedTrackIdRef.current
-          const excludeIds = Array.from(
-            radioPlayedIdsRef.current,
-          ).slice(-60)
+          const excludeIds = buildRadioExcludeIds(
+            [sessionTrackId],
+            manualQueueRef.current.map((item) => item.id),
+            radioSessionTimelineRef.current.map((item) => item.id),
+            Array.from(unavailableTrackIdsRef.current),
+          )
           const topUp: Promise<void> = api
             .getRadio(seedId, RADIO_BATCH_SIZE, excludeIds)
             .then((result) => {
@@ -4506,13 +4666,7 @@ export function PlayerProvider({
                   ),
               )
               if (fresh.length === 0) return
-              for (const t of fresh) {
-                radioPlayedIdsRef.current.add(t.id)
-              }
-              if (radioPlayedIdsRef.current.size > 80) {
-                const arr = Array.from(radioPlayedIdsRef.current)
-                radioPlayedIdsRef.current = new Set(arr.slice(-80))
-              }
+              rememberRadioTrackIds(fresh.map((t) => t.id))
               manualQueueRef.current = [
                 ...manualQueueRef.current,
                 ...fresh,
@@ -4570,9 +4724,12 @@ export function PlayerProvider({
           }
         }
         const seedId = radioSeedTrackIdRef.current
-        const excludeIds = Array.from(
-          radioPlayedIdsRef.current,
-        ).slice(-60)
+        const excludeIds = buildRadioExcludeIds(
+          [sessionTrackId],
+          manualQueueRef.current.map((item) => item.id),
+          radioSessionTimelineRef.current.map((item) => item.id),
+          Array.from(unavailableTrackIdsRef.current),
+        )
         try {
           const result = await api.getRadio(
             seedId,
@@ -4586,13 +4743,7 @@ export function PlayerProvider({
           )
           if (newTracks.length > 0) {
             const next = newTracks[0]
-            for (const t of newTracks) {
-              radioPlayedIdsRef.current.add(t.id)
-            }
-            if (radioPlayedIdsRef.current.size > 80) {
-              const arr = Array.from(radioPlayedIdsRef.current)
-              radioPlayedIdsRef.current = new Set(arr.slice(-80))
-            }
+            rememberRadioTrackIds(newTracks.map((t) => t.id))
             manualQueueRef.current = newTracks.slice(1)
             setQueue([...manualQueueRef.current])
             return await advance(next)
@@ -4638,12 +4789,19 @@ export function PlayerProvider({
         }
       }
       if (sessionTrackId != null) {
-        const excludeIds = Array.from(
-          new Set([
-            sessionTrackId,
-            ...manualQueueRef.current.map((item) => item.id),
-          ]),
-        ).slice(-60)
+        const excludeIds = radioModeRef.current
+          ? buildRadioExcludeIds(
+              [sessionTrackId],
+              manualQueueRef.current.map((item) => item.id),
+              radioSessionTimelineRef.current.map((item) => item.id),
+              Array.from(unavailableTrackIdsRef.current),
+            )
+          : Array.from(
+              new Set([
+                sessionTrackId,
+                ...manualQueueRef.current.map((item) => item.id),
+              ]),
+            ).slice(-60)
         try {
           const radio = await api.getRadio(
             sessionTrackId,
@@ -4660,9 +4818,7 @@ export function PlayerProvider({
             manualQueueRef.current = fresh.slice(1)
             setQueue([...manualQueueRef.current])
             if (radioModeRef.current) {
-              for (const item of fresh) {
-                radioPlayedIdsRef.current.add(item.id)
-              }
+              rememberRadioTrackIds(fresh.map((item) => item.id))
             }
             prefetchCacheRef.current = {
               forTrackId: next.id,
@@ -5171,6 +5327,7 @@ export function PlayerProvider({
     const timeline = radioSessionTimelineRef.current
     const last = timeline[timeline.length - 1]
     if (last && last.id === track.id) return
+    rememberRadioTrackIds([track.id])
     radioSessionTimelineRef.current = [...timeline, track].slice(-30)
     setRadioSessionTimeline([...radioSessionTimelineRef.current])
   }, [track, radioMode])

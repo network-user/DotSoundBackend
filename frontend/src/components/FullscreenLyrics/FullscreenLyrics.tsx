@@ -1,9 +1,11 @@
 import {
+  useCallback,
   useEffect,
   useRef,
   useState,
   type CSSProperties,
 } from 'react'
+import { AnimatePresence } from 'framer-motion'
 import { useTranslation } from 'react-i18next'
 import { api } from '@/lib/api'
 import { getIsAdmin, getUserId } from '@/lib/telegram'
@@ -18,18 +20,16 @@ import { MorphIcon } from '@/components/ui/MorphIcon'
 import { BeatPulse } from '@/components/ui/BeatPulse'
 import { CoverImage } from '@/components/CoverImage/CoverImage'
 import { useExitTransition } from '@/hooks/useExitTransition'
-import type { LyricsResponse, SyncedLine } from '@/types/api'
+import type { LyricsResponse } from '@/types/api'
+import { m, useReducedMotion } from '@/lib/motion'
 import {
-  m,
-  SPRING_GENTLE,
-  useReducedMotion,
-} from '@/lib/motion'
+  computeLineProgress,
+  findActiveLineIndex,
+  findActiveWordIndex,
+  smoothScrollTop,
+} from '@/lib/lyricsSync'
 
 const KARAOKE_KEY = 'setting-lyrics-karaoke'
-
-function clampPct(value: number): number {
-  return Math.min(100, Math.max(0, value))
-}
 
 function fmt(sec: number) {
   if (!sec || isNaN(sec)) return '0:00'
@@ -42,28 +42,6 @@ function fmt(sec: number) {
 
 function readKaraoke(): boolean {
   return localStorage.getItem(KARAOKE_KEY) === '1'
-}
-
-function activeLineIndex(
-  lines: SyncedLine[],
-  ms: number,
-): number {
-  let idx = -1
-  for (let i = 0; i < lines.length; i++) {
-    if (lines[i].time_ms <= ms) idx = i
-    else break
-  }
-  return idx
-}
-
-function activeWordIndex(line: SyncedLine, ms: number): number {
-  const wts = line.word_times
-  if (!wts || wts.length === 0) return -1
-  for (let i = 0; i < wts.length; i++) {
-    const w = wts[i]
-    if (ms >= w.start_ms && ms < w.start_ms + w.dur_ms) return i
-  }
-  return -1
 }
 
 export type FullscreenLyricsProps = {
@@ -99,8 +77,19 @@ export function FullscreenLyrics({
     useState<string>('original')
   const [activeIdx, setActiveIdx] = useState(-1)
   const [wordIdx, setWordIdx] = useState(-1)
-  const activeRef = useRef<HTMLDivElement>(null)
+  const activeLineNodeRef = useRef<HTMLDivElement | null>(null)
+  const contentRef = useRef<HTMLDivElement | null>(null)
   const rafIdRef = useRef<number | null>(null)
+  const scrollCancelRef = useRef<(() => void) | null>(null)
+  const lineHintRef = useRef<number>(-1)
+  const wordHintRef = useRef<number>(-1)
+
+  const setActiveLineNode = useCallback(
+    (node: HTMLDivElement | null) => {
+      activeLineNodeRef.current = node
+    },
+    [],
+  )
 
   const exit = useExitTransition(
     Boolean(track) && panelOpen,
@@ -160,45 +149,63 @@ export function FullscreenLyrics({
         )
       : null
 
-  const lineProgressPct = (lineIndex: number): number => {
-    const lines = lyrics?.synced_lines
-    if (!lines || lineIndex < 0) return 0
-    const current = lines[lineIndex]
-    const next = lines[lineIndex + 1]
-    const endMs =
-      next?.time_ms ??
-      (duration ? duration * 1000 : current.time_ms + 3500)
-    const spanMs = Math.max(1, endMs - current.time_ms)
-    return clampPct(
-      ((currentTime * 1000 - current.time_ms) / spanMs) * 100,
-    )
-  }
-
-  useEffect(() => {
-    const lines = lyrics?.synced_lines
-    if (
-      !panelOpen ||
-      !isPlaying ||
-      !lines ||
-      lines.length === 0
-    ) {
-      return
-    }
-    let cancelled = false
-    const loop = () => {
-      if (cancelled) return
-      const ms = getPreciseTime() * 1000
-      const nextLine = activeLineIndex(lines, ms)
+  const tickLyrics = useCallback(
+    (ms: number) => {
+      const lines = lyrics?.synced_lines
+      if (!lines || lines.length === 0) return
+      const nextLine = findActiveLineIndex(
+        lines,
+        ms,
+        lineHintRef.current,
+      )
+      lineHintRef.current = nextLine
       setActiveIdx((prev) =>
         prev === nextLine ? prev : nextLine,
       )
-      const nextWord =
-        karaokeActive && nextLine >= 0
-          ? activeWordIndex(lines[nextLine], ms)
-          : -1
+      let nextWord = -1
+      if (karaokeActive && nextLine >= 0) {
+        nextWord = findActiveWordIndex(
+          lines[nextLine].word_times,
+          ms,
+          wordHintRef.current,
+        )
+        wordHintRef.current = nextWord
+      } else {
+        wordHintRef.current = -1
+      }
       setWordIdx((prev) =>
         prev === nextWord ? prev : nextWord,
       )
+      const node = activeLineNodeRef.current
+      if (node && nextLine >= 0) {
+        const durationMs = duration ? duration * 1000 : 0
+        const p = computeLineProgress(
+          lines,
+          nextLine,
+          ms,
+          durationMs,
+        )
+        node.style.setProperty(
+          '--fl-line-progress',
+          `${(p * 100).toFixed(2)}%`,
+        )
+      }
+    },
+    [lyrics, karaokeActive, duration],
+  )
+
+  useEffect(() => {
+    const lines = lyrics?.synced_lines
+    if (!panelOpen || !lines || lines.length === 0) {
+      lineHintRef.current = -1
+      wordHintRef.current = -1
+      return
+    }
+    if (!isPlaying) return
+    let cancelled = false
+    const loop = () => {
+      if (cancelled) return
+      tickLyrics(getPreciseTime() * 1000)
       rafIdRef.current = requestAnimationFrame(loop)
     }
     rafIdRef.current = requestAnimationFrame(loop)
@@ -209,50 +216,34 @@ export function FullscreenLyrics({
         rafIdRef.current = null
       }
     }
-  }, [
-    panelOpen,
-    isPlaying,
-    lyrics,
-    karaokeActive,
-    getPreciseTime,
-  ])
+  }, [panelOpen, isPlaying, lyrics, tickLyrics, getPreciseTime])
 
   useEffect(() => {
     const lines = lyrics?.synced_lines
-    if (!panelOpen || !lines || lines.length === 0) {
-      setActiveIdx(-1)
-      setWordIdx(-1)
-      return
-    }
+    if (!panelOpen || !lines || lines.length === 0) return
     if (isPlaying) return
-    const ms = currentTime * 1000
-    const nextLine = activeLineIndex(lines, ms)
-    setActiveIdx((prev) =>
-      prev === nextLine ? prev : nextLine,
-    )
-    const nextWord =
-      karaokeActive && nextLine >= 0
-        ? activeWordIndex(lines[nextLine], ms)
-        : -1
-    setWordIdx((prev) =>
-      prev === nextWord ? prev : nextWord,
-    )
-  }, [
-    panelOpen,
-    isPlaying,
-    lyrics,
-    karaokeActive,
-    currentTime,
-  ])
+    tickLyrics(currentTime * 1000)
+  }, [panelOpen, isPlaying, lyrics, currentTime, tickLyrics])
 
   useEffect(() => {
-    if (activeRef.current) {
-      activeRef.current.scrollIntoView({
-        behavior: 'smooth',
-        block: 'center',
-      })
+    const container = contentRef.current
+    const node = activeLineNodeRef.current
+    if (!container || !node || activeIdx < 0) return
+    const targetTop =
+      node.offsetTop -
+      container.clientHeight / 2 +
+      node.clientHeight / 2
+    scrollCancelRef.current?.()
+    scrollCancelRef.current = smoothScrollTop(
+      container,
+      targetTop,
+      360,
+      lyricsReduce,
+    )
+    return () => {
+      scrollCancelRef.current?.()
     }
-  }, [activeIdx])
+  }, [activeIdx, lyricsReduce])
 
   if (!exit.mounted || !track) return null
 
@@ -331,6 +322,7 @@ export function FullscreenLyrics({
 
   const content = (
     <div
+      ref={contentRef}
       className={`fl-content${embed ? ' fl-content--embed' : ''}`}
     >
       {loading && <div className="loader" />}
@@ -352,65 +344,82 @@ export function FullscreenLyrics({
         </button>
       )}
 
-      {!loading && lyrics?.synced_lines?.length
-        ? lyrics.synced_lines.map((line, i) => {
-            const isActive = i === activeIdx
-            const isPast = activeIdx > i
-            const lineWordIdx =
-              karaokeActive && isActive ? wordIdx : -1
-            return (
-              <m.div
-                key={i}
-                ref={isActive ? activeRef : null}
-                layout
-                initial={false}
-                animate={
-                  isActive && !lyricsReduce
-                    ? { scale: 1.04, opacity: 1 }
-                    : {
-                        scale: 1,
-                        opacity: isActive ? 1 : 0.55,
-                      }
-                }
-                transition={SPRING_GENTLE}
-                className={`fl-line${
-                  isActive ? ' fl-line-active' : ''
-                }${isPast ? ' fl-line-past' : ''}`}
-                style={
-                  {
-                    ['--fl-line-progress']: `${
-                      isActive ? lineProgressPct(i) : 0
-                    }%`,
-                  } as CSSProperties
-                }
-                aria-current={isActive ? 'true' : undefined}
-                onClick={() =>
-                  handleLineClick(line.time_ms)
-                }
-              >
-                {karaokeActive &&
-                line.word_times &&
-                line.word_times.length > 0 ? (
-                  line.word_times.map((w, j) => (
-                    <span
-                      key={j}
-                      className={`fl-word${j === lineWordIdx ? ' fl-word-active' : ''}${isActive && j < lineWordIdx ? ' fl-word-past' : ''}`}
-                    >
-                      {w.text}{' '}
-                    </span>
-                  ))
-                ) : (
-                  line.text
-                )}
-              </m.div>
-            )
-          })
-        : !loading &&
-          lyrics?.plain_text && (
-            <pre className="fl-plain">
-              {plainTextToRender}
-            </pre>
-          )}
+      <AnimatePresence mode="wait" initial={false}>
+        {!loading && lyrics?.synced_lines?.length ? (
+          <m.div
+            key={`sync-${track.id}-${karaokeActive ? 'k' : 'l'}-${selectedLang}`}
+            className="fl-list"
+            initial={
+              lyricsReduce ? false : { opacity: 0, y: 6 }
+            }
+            animate={{ opacity: 1, y: 0 }}
+            exit={
+              lyricsReduce
+                ? undefined
+                : { opacity: 0, transition: { duration: 0.14 } }
+            }
+            transition={{ duration: 0.22, ease: [0.22, 1, 0.36, 1] }}
+          >
+            {lyrics.synced_lines.map((line, i) => {
+              const isActive = i === activeIdx
+              const isPast = activeIdx > i
+              const lineWordIdx =
+                karaokeActive && isActive ? wordIdx : -1
+              return (
+                <div
+                  key={i}
+                  ref={
+                    isActive
+                      ? setActiveLineNode
+                      : undefined
+                  }
+                  className={`fl-line${
+                    isActive ? ' fl-line-active' : ''
+                  }${isPast ? ' fl-line-past' : ''}`}
+                  aria-current={
+                    isActive ? 'true' : undefined
+                  }
+                  onClick={() =>
+                    handleLineClick(line.time_ms)
+                  }
+                >
+                  {karaokeActive &&
+                  line.word_times &&
+                  line.word_times.length > 0 ? (
+                    line.word_times.map((w, j) => (
+                      <span
+                        key={j}
+                        className={`fl-word${j === lineWordIdx ? ' fl-word-active' : ''}${isActive && j < lineWordIdx ? ' fl-word-past' : ''}`}
+                      >
+                        {w.text}{' '}
+                      </span>
+                    ))
+                  ) : (
+                    line.text
+                  )}
+                </div>
+              )
+            })}
+          </m.div>
+        ) : !loading && lyrics?.plain_text ? (
+          <m.pre
+            key={`plain-${track.id}-${selectedLang}`}
+            className="fl-plain"
+            initial={
+              lyricsReduce ? false : { opacity: 0, y: 6 }
+            }
+            animate={{ opacity: 1, y: 0 }}
+            exit={
+              lyricsReduce
+                ? undefined
+                : { opacity: 0, transition: { duration: 0.14 } }
+            }
+            transition={{ duration: 0.22, ease: [0.22, 1, 0.36, 1] }}
+          >
+            {plainTextToRender}
+          </m.pre>
+        ) : null}
+      </AnimatePresence>
 
       {!loading && !lyrics && (
         <p className="fl-no-lyrics">

@@ -29,12 +29,16 @@
     "hint": "Based on your taste",
     "refreshAria": "Refresh playlist",
     "empty": "Not enough data to build the playlist",
+    "loadError": "Could not load the day playlist",
+    "retry": "Try again",
     "discoveries": "New picks"
   },
   "weeklyMix": {
     "title": "Week playlist",
     "hint": "A weekly blend based on your taste",
     "empty": "Not enough data to build the week playlist",
+    "loadError": "Could not load the week playlist",
+    "retry": "Try again",
     "discoveries": "New picks"
   },
   "userChoice": {
@@ -52,7 +56,9 @@
   "forgottenTreasures": {
     "title": "Forgotten treasures",
     "hint": "Liked a while ago, not played lately — resurfacing favorites",
-    "empty": "No tracks match the “old like + pause” gate yet"
+    "empty": "No tracks match the “old like + pause” gate yet",
+    "loadError": "Could not load forgotten treasures",
+    "retry": "Try again"
   },
   "library": {
     "tabLiked": "Favorites",

@@ -307,6 +307,75 @@
   height: var(--pb-track-h, 4px);
 }
 
+/* Visible thumb appears on hover and press. Hidden by default
+ * to preserve the slim seek-bar aesthetic. */
+#pb-seek-wrap.pb-seek-zone #pb-seek::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 0;
+  height: 0;
+  background: var(--accent, #fff);
+  border-radius: 50%;
+  border: 0;
+  opacity: 0;
+  transition:
+    width var(--dur-fast) var(--ease-out),
+    height var(--dur-fast) var(--ease-out),
+    opacity var(--dur-fast) var(--ease-out);
+}
+
+#pb-seek-wrap.pb-seek-zone #pb-seek::-moz-range-thumb {
+  width: 0;
+  height: 0;
+  background: var(--accent, #fff);
+  border-radius: 50%;
+  border: 0;
+  opacity: 0;
+  transition:
+    width var(--dur-fast) var(--ease-out),
+    height var(--dur-fast) var(--ease-out),
+    opacity var(--dur-fast) var(--ease-out);
+}
+
+#pb-seek-wrap.pb-seek-zone:hover #pb-seek::-webkit-slider-thumb {
+  width: 11px;
+  height: 11px;
+  opacity: 1;
+  box-shadow: 0 0 8px rgba(255, 255, 255, 0.35);
+}
+
+#pb-seek-wrap.pb-seek-zone:hover #pb-seek::-moz-range-thumb {
+  width: 11px;
+  height: 11px;
+  opacity: 1;
+  box-shadow: 0 0 8px rgba(255, 255, 255, 0.35);
+}
+
+#pb-seek-wrap.pb-seek-zone[data-pressing='true'] #pb-seek::-webkit-slider-thumb {
+  width: 14px;
+  height: 14px;
+  opacity: 1;
+  box-shadow: 0 0 12px rgba(255, 255, 255, 0.5);
+}
+
+#pb-seek-wrap.pb-seek-zone[data-pressing='true'] #pb-seek::-moz-range-thumb {
+  width: 14px;
+  height: 14px;
+  opacity: 1;
+  box-shadow: 0 0 12px rgba(255, 255, 255, 0.5);
+}
+
+#pb-seek-wrap.pb-seek-zone[data-pressing='true'] #pb-seek {
+  height: 6px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  #pb-seek-wrap.pb-seek-zone #pb-seek::-webkit-slider-thumb,
+  #pb-seek-wrap.pb-seek-zone #pb-seek::-moz-range-thumb {
+    transition: none;
+  }
+}
+
 #pb-row.pb-row-v2 {
   display: grid;
   grid-template-columns:
@@ -414,6 +483,33 @@
   .icon-btn.pb-like-burst,
   .icon-btn.pb-like-burst::after {
     animation: none;
+  }
+}
+
+/* ---------- HeartBurst particles ---------- */
+
+.heart-burst {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  pointer-events: none;
+  z-index: 1;
+}
+
+.heart-burst__spark {
+  position: absolute;
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  background: currentColor;
+  box-shadow: 0 0 8px currentColor;
+  will-change: transform, opacity;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .heart-burst {
+    display: none;
   }
 }
 

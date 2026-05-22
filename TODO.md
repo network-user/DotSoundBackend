@@ -1,5 +1,130 @@
 # DotSound - TODO Tracker
 
+- [x] **Liked playback queue order: forward-only fallback (2026-05-22)**
+  - Fixed `playFromPaginatedCollection` falling back to the entire
+    loaded list (which includes items shown *above* the clicked track)
+    when the backend queue endpoint returned `next_tracks=[]` (e.g.
+    user clicked the last visible track) or threw. With the old
+    helper, sort=oldest could splice the queue with already-passed
+    older tracks, so auto-advance jumped backwards in the displayed
+    list. The helper now keeps only tracks *after* the clicked one
+    in display order as its fallback context — matching the backend
+    keyset semantics and the user expectation that sequential
+    playback continues in the direction of the displayed sort.
+  - Backend `LikeRepository.list_liked_queue` was already correct;
+    added regression coverage in `tests/app/services/test_like_service_queue.py`
+    for sort=oldest/newest, click-first/middle/last.
+  - Vitest coverage added in `frontend/src/lib/paginatedPlayback.test.ts`
+    for the helper itself (happy path, fallback direction,
+    last-item, throw, empty inputs).
+  - Legal check: queue/transport only — no source-mode, storage,
+    catalog, or playback-claims changed; LEGAL.md and docs/legal/*
+    did not need updates.
+  - Verification: `npx vitest run` (64/64); `tsc --noEmit` clean.
+
+- [x] **Radio anti-repeat and UX polish (2026-05-22)**
+  - Backend radio guard now filters the cached last queue against the
+    current `exclude_ids`, so rapid skip protection cannot return a track
+    the client has already excluded.
+  - Mini App radio persists a bounded recent/reserved track-id window in
+    session storage and restores it after reload together with the saved
+    queue, then sends that wider set on radio refills.
+  - Radio listen events now use `source_context = "radio"` for cleaner
+    telemetry, while normal playback keeps `source_context = "player"`.
+  - Radio screen shows compact session chips for no-repeat state, played
+    count, and queued count.
+  - Legal check: no source-mode, caching, storage, or external playback
+    claims changed; this is queue/exclude transport and UI state only.
+  - Verification: `poetry run pytest
+    tests/app/services/test_recommendation_service.py -k "radio_guard"`;
+    `poetry run ruff check app/services/recommendation_service.py
+    tests/app/services/test_recommendation_service.py`; `npm run build`.
+
+- [x] **Full public user profile route and share deep-links (2026-05-22)**
+  - Added a routed public profile screen at `/profile/:userId` with
+    close/back navigation, avatar/name header, follow/unfollow,
+    profile sharing, and responsive tabs for public uploads, liked
+    tracks, and public author statistics.
+  - Telegram Mini App `startapp=profile_<id>` links now resolve after
+    auth/onboarding into the matching `/profile/<id>` route. The same
+    handler also keeps existing `track_<id>` and `artist_<id>` share
+    payloads routable from Mini App start params.
+  - The profile route respects existing `profile_visibility` and
+    `profile_access`: hidden and followers-only profiles render a
+    limited view until the viewer is allowed. Liked-track list and
+    liked playback queue are guarded by the same profile-access policy.
+  - Liked-tab playback uses the shared paginated playback helper, so
+    starting from a visible liked track can request a wider server queue
+    instead of being limited to the loaded slice.
+  - Build follow-up: completed the already-started Media Session stop
+    handler wiring in `PlayerContext.tsx` by passing `stop()` to the
+    remaining `_updateMediaSession` call; this unblocked TypeScript
+    compilation without reverting the existing player changes.
+  - Legal/privacy check: no UGC/import/playback source-mode claims were
+    changed. Public profile content stays behind the existing
+    `profile_visibility` access model; personal listening-history stats
+    remain private to `/users/me/*`.
+  - Verification: `npm run build`; `poetry run ruff check
+    app/api/v1/likes.py tests/app/api/v1/test_likes.py`; `poetry run
+    mypy app/api/v1/likes.py`; targeted pytest for hidden/followers-only
+    profile stats and liked-list access.
+
+- [x] **Player + nav microinteractions, round 1 (2026-05-22)**
+  - `frontend/src/components/ui/HeartBurst.tsx` — new monochrome
+    particle-burst overlay. Six radial sparks animate outward + fade over
+    460ms using a decel ease; honours `prefers-reduced-motion` (returns
+    null). Pure `currentColor` so the burst inherits the host like-button
+    tint and stays monochrome.
+  - Plugged HeartBurst into `PlayerBar` like-button (reuses existing
+    `likeBurst` state, same 420ms window). Plugged into `TrackCard`
+    like-button with a new `likeBurst` state and `position: relative;
+    overflow: visible` on `.track-card-like` so the sparks aren't clipped.
+  - `components.css`: new `.heart-burst` / `.heart-burst__spark` block.
+  - `mic-off` icon added to `Icon.tsx`. Deliberately NOT registered as a
+    `MorphIcon` pair: the two paths have different subpath counts
+    (3 vs 6) and framer-motion path interpolation glitches on
+    non-isomorphic paths. State switching should use `AnimatePresence`
+    with two `<Icon>` nodes keyed by state instead.
+  - Seek-bar press feedback: `PlayerBarProgress` now tracks a `pressing`
+    state and writes `data-pressing="true"` on `#pb-seek-wrap`. New CSS
+    grows the bar height from 4→6px on press and reveals a thumb circle
+    (0 → 11px on hover → 14px on press) with a soft accent glow.
+    Webkit + Moz selectors covered; transitions disabled under
+    `prefers-reduced-motion`.
+  - BottomNav magnetic indicator audit: existing implementation uses
+    `layoutId="bn-indicator"` with `SPRING_LAYOUT` plus a layered bubble
+    (gradient + inset highlight + ring burst on activate). Already polished
+    — left as-is rather than churn balanced visuals.
+  - Verification: `npx vite build` → built in 37.86s, app-shared bundle
+    +0.73 KB (HeartBurst). Vite dev server boots clean (`ready in 5165ms`,
+    no warnings); modules `main.tsx`, `Icon.tsx`, `HeartBurst.tsx`
+    all transform → HTTP 200. Visual confirmation in browser still
+    pending (cannot screenshot from this environment).
+
+- [x] **Iconography refresh (2026-05-22)**
+  - Rewrote all ~116 SVG paths in `frontend/src/components/Icon/Icon.tsx`
+    to a single optical weight on the 24×24 grid. Strict monochrome rule
+    preserved (no palette changes); the public API of `<Icon>` is unchanged
+    apart from a new optional `strokeWidth` prop that defaults to 2 so all
+    132 call sites keep working.
+  - Notable shape rewrites: `home` (clean roof+body matching `home-fill`
+    exactly), `settings` (centered cog, no inner duplication), `thumbs-down`
+    (proper inverted thumb instead of mirrored thumbs-up), `share` (canonical
+    three-connected-nodes — distinct from `share-arrow`), `mic`, `bell`,
+    `check`, `send`, `shuffle`, `rewind-5` / `forward-5` (added the "5"
+    digit), `speed` (proper speedometer arc+needle), all `source-*` motifs,
+    `airplay-like`, `brain`, `calendar`, `eq`, `edit`, `trash` (with body
+    bevel + handle), `volume-low/high`.
+  - Added `vector-effect="non-scaling-stroke"` on the root `<svg>` so stroke
+    weight remains crisp at any size, matching the existing `MorphIcon`
+    primitive.
+  - Verification: `npx vite build` succeeds (36s, full bundle rebuilds).
+    Pre-existing TS error in `src/store/PlayerContext.tsx:3343`
+    (`_updateMediaSession` 5→4 args mismatch from uncommitted work on
+    `playerAudioHelpers.ts`) is unrelated and still blocks
+    `npm run build`; owner needs to land that fix before the gated build
+    passes again.
+
 - [x] **Storage footprint optimization, round 1 (2026-05-21)**
   - Tightened cover encoding defaults to cut new-upload sizes by ~55%:
     `image_cover_max_size` 800→640, `image_quality` 80→70,

@@ -1,9 +1,10 @@
 import {
+  useCallback,
   useEffect,
   useRef,
   useState,
-  type CSSProperties,
 } from 'react'
+import { AnimatePresence } from 'framer-motion'
 import { useTranslation } from 'react-i18next'
 import { api } from '@/lib/api'
 import { getIsAdmin } from '@/lib/telegram'
@@ -14,12 +15,15 @@ import {
 import { useLyricsTask } from '@/store/lyricsTaskStore'
 import { Icon } from '@/components/Icon/Icon'
 import { MotionPress } from '@/components/ui/MotionPress'
+import { m, useReducedMotion } from '@/lib/motion'
+import {
+  computeLineProgress,
+  findActiveLineIndex,
+  findActiveWordIndex,
+  smoothScrollTop,
+} from '@/lib/lyricsSync'
 import type { LyricsResponse } from '@/types/api'
 import { LyricsEditor } from './LyricsEditor'
-
-function clampPct(value: number): number {
-  return Math.min(100, Math.max(0, value))
-}
 
 interface Props {
   trackId: number
@@ -39,8 +43,9 @@ export function LyricsPanel({
   catalogType,
 }: Props) {
   const { t } = useTranslation()
-  const { currentTime, duration } = usePlayerState()
-  const { seek } = usePlayerActions()
+  const { currentTime, duration, isPlaying } = usePlayerState()
+  const { seek, getPreciseTime } = usePlayerActions()
+  const lyricsReduce = useReducedMotion()
   const [lyrics, setLyrics] =
     useState<LyricsResponse | null>(null)
   const [loading, setLoading] = useState(false)
@@ -66,7 +71,20 @@ export function LyricsPanel({
     const n = raw ? Number(raw) : 0
     return Number.isFinite(n) ? n : 0
   })
-  const activeRef = useRef<HTMLDivElement>(null)
+  const [activeIdx, setActiveIdx] = useState<number>(-1)
+  const [wordIdx, setWordIdx] = useState<number>(-1)
+  const activeLineNodeRef = useRef<HTMLDivElement | null>(null)
+  const contentRef = useRef<HTMLDivElement | null>(null)
+  const rafIdRef = useRef<number | null>(null)
+  const scrollCancelRef = useRef<(() => void) | null>(null)
+  const lineHintRef = useRef<number>(-1)
+  const wordHintRef = useRef<number>(-1)
+  const setActiveLineNode = useCallback(
+    (node: HTMLDivElement | null) => {
+      activeLineNodeRef.current = node
+    },
+    [],
+  )
   const [selectedLang, setSelectedLang] =
     useState<string>('original')
   const [devOpen, setDevOpen] = useState(false)
@@ -171,27 +189,6 @@ export function LyricsPanel({
       .finally(() => setLoading(false))
   }, [trackId, hasLyrics, t, editing])
 
-  const adjustedMs = currentTime * 1000 + offsetMs
-
-  const activeIdx = (() => {
-    if (
-      !showSync ||
-      !lyrics?.synced_lines?.length
-    )
-      return -1
-    let idx = -1
-    for (
-      let i = 0;
-      i < lyrics.synced_lines.length;
-      i++
-    ) {
-      if (lyrics.synced_lines[i].time_ms <= adjustedMs)
-        idx = i
-      else break
-    }
-    return idx
-  })()
-
   const hasWordTimes = !!lyrics?.synced_lines?.some(
     (l) => l.word_times && l.word_times.length > 0,
   )
@@ -212,31 +209,119 @@ export function LyricsPanel({
     showSync &&
     lyrics?.synced_lines?.length &&
     activeIdx < 0
-      ? Math.max(0, lyrics.synced_lines[0].time_ms - adjustedMs)
+      ? Math.max(
+          0,
+          lyrics.synced_lines[0].time_ms -
+            (currentTime * 1000 + offsetMs),
+        )
       : null
 
-  const lineProgressPct = (lineIndex: number): number => {
-    const lines = lyrics?.synced_lines
-    if (!lines || lineIndex < 0) return 0
-    const current = lines[lineIndex]
-    const next = lines[lineIndex + 1]
-    const endMs =
-      next?.time_ms ??
-      (duration ? duration * 1000 : current.time_ms + 3500)
-    const spanMs = Math.max(1, endMs - current.time_ms)
-    return clampPct(
-      ((adjustedMs - current.time_ms) / spanMs) * 100,
-    )
-  }
+  const tickLyrics = useCallback(
+    (ms: number) => {
+      const lines = lyrics?.synced_lines
+      if (!showSync || !lines || lines.length === 0) {
+        setActiveIdx((prev) => (prev === -1 ? prev : -1))
+        setWordIdx((prev) => (prev === -1 ? prev : -1))
+        lineHintRef.current = -1
+        wordHintRef.current = -1
+        return
+      }
+      const adjMs = ms + offsetMs
+      const nextLine = findActiveLineIndex(
+        lines,
+        adjMs,
+        lineHintRef.current,
+      )
+      lineHintRef.current = nextLine
+      setActiveIdx((prev) =>
+        prev === nextLine ? prev : nextLine,
+      )
+      let nextWord = -1
+      if (karaokeActive && nextLine >= 0) {
+        nextWord = findActiveWordIndex(
+          lines[nextLine].word_times,
+          adjMs,
+          wordHintRef.current,
+        )
+        wordHintRef.current = nextWord
+      } else {
+        wordHintRef.current = -1
+      }
+      setWordIdx((prev) =>
+        prev === nextWord ? prev : nextWord,
+      )
+      const node = activeLineNodeRef.current
+      if (node && nextLine >= 0) {
+        const durationMs = duration ? duration * 1000 : 0
+        const p = computeLineProgress(
+          lines,
+          nextLine,
+          adjMs,
+          durationMs,
+        )
+        node.style.setProperty(
+          '--lyrics-line-progress',
+          `${(p * 100).toFixed(2)}%`,
+        )
+      }
+    },
+    [lyrics, showSync, karaokeActive, duration, offsetMs],
+  )
 
   useEffect(() => {
-    if (activeRef.current) {
-      activeRef.current.scrollIntoView({
-        behavior: 'smooth',
-        block: 'center',
-      })
+    const lines = lyrics?.synced_lines
+    if (!showSync || !lines || lines.length === 0) {
+      lineHintRef.current = -1
+      wordHintRef.current = -1
+      return
     }
-  }, [activeIdx])
+    if (!isPlaying) return
+    let cancelled = false
+    const loop = () => {
+      if (cancelled) return
+      tickLyrics(getPreciseTime() * 1000)
+      rafIdRef.current = requestAnimationFrame(loop)
+    }
+    rafIdRef.current = requestAnimationFrame(loop)
+    return () => {
+      cancelled = true
+      if (rafIdRef.current !== null) {
+        cancelAnimationFrame(rafIdRef.current)
+        rafIdRef.current = null
+      }
+    }
+  }, [
+    showSync,
+    isPlaying,
+    lyrics,
+    tickLyrics,
+    getPreciseTime,
+  ])
+
+  useEffect(() => {
+    if (isPlaying) return
+    tickLyrics(currentTime * 1000)
+  }, [isPlaying, currentTime, tickLyrics])
+
+  useEffect(() => {
+    const container = contentRef.current
+    const node = activeLineNodeRef.current
+    if (!container || !node || activeIdx < 0) return
+    const targetTop =
+      node.offsetTop -
+      container.clientHeight / 2 +
+      node.clientHeight / 2
+    scrollCancelRef.current?.()
+    scrollCancelRef.current = smoothScrollTop(
+      container,
+      targetTop,
+      320,
+      lyricsReduce,
+    )
+    return () => {
+      scrollCancelRef.current?.()
+    }
+  }, [activeIdx, lyricsReduce])
 
   useEffect(() => {
     if (devOpen && logEndRef.current) {
@@ -1062,7 +1147,7 @@ export function LyricsPanel({
         </div>
       </div>
 
-      <div className="lyrics-content">
+      <div ref={contentRef} className="lyrics-content">
         {firstLineLeadInMs !== null && firstLineLeadInMs > 250 && (
           <button
             type="button"
@@ -1079,80 +1164,103 @@ export function LyricsPanel({
             </span>
           </button>
         )}
-        {showSync && hasSyncData
-          ? lyrics.synced_lines!.map((line, i) => {
-              const isActive = i === activeIdx
-              const isPast = activeIdx > i
-              let wordIdx = -1
-              if (
-                karaokeActive &&
-                isActive &&
-                line.word_times &&
-                line.word_times.length > 0
-              ) {
-                for (let j = 0; j < line.word_times.length; j++) {
-                  const w = line.word_times[j]
-                  if (
-                    adjustedMs >= w.start_ms &&
-                    adjustedMs < w.start_ms + w.dur_ms
-                  ) {
-                    wordIdx = j
-                    break
-                  }
-                }
+        <AnimatePresence mode="wait" initial={false}>
+          {showSync && hasSyncData ? (
+            <m.div
+              key={`sync-${trackId}-${karaokeActive ? 'k' : 'l'}-${selectedLang}`}
+              className="lyrics-list"
+              initial={
+                lyricsReduce ? false : { opacity: 0, y: 4 }
               }
-              return (
-                <div
-                  key={i}
-                  ref={
-                    isActive ? activeRef : null
-                  }
-                  className={`lyrics-line${
-                    isActive ? ' lyrics-line-active' : ''
-                  }${isPast ? ' lyrics-line-past' : ''}${
-                    (line.confidence ?? 0) < 0.5
-                      ? ' lyrics-line-uncertain'
-                      : ''
-                  }`}
-                  style={
-                    {
-                      ['--lyrics-line-progress']: `${
-                        isActive ? lineProgressPct(i) : 0
-                      }%`,
-                    } as CSSProperties
-                  }
-                  aria-current={isActive ? 'true' : undefined}
-                  onClick={() =>
-                    handleLineClick(line.time_ms)
-                  }
-                  title={
-                    (line.confidence ?? 0) < 0.5
-                      ? 'Таймкод неточный'
-                      : undefined
-                  }
-                >
-                  {karaokeActive &&
-                  line.word_times &&
-                  line.word_times.length > 0 ? (
-                    line.word_times.map((w, j) => (
-                      <span
-                        key={j}
-                        className={`lyrics-word${j === wordIdx ? ' lyrics-word-active' : ''}${isActive && wordIdx >= 0 && j < wordIdx ? ' lyrics-word-past' : ''}`}
-                      >
-                        {w.text}{' '}
-                      </span>
-                    ))
-                  ) : (
-                    line.text
-                  )}
-                </div>
-              )
-            })
-          : (
-              <pre className="lyrics-plain">
-                {plainTextToRender}
-              </pre>
-            )}
+              animate={{ opacity: 1, y: 0 }}
+              exit={
+                lyricsReduce
+                  ? undefined
+                  : {
+                      opacity: 0,
+                      transition: { duration: 0.12 },
+                    }
+              }
+              transition={{
+                duration: 0.2,
+                ease: [0.22, 1, 0.36, 1],
+              }}
+            >
+              {lyrics.synced_lines!.map((line, i) => {
+                const isActive = i === activeIdx
+                const isPast = activeIdx > i
+                const lineWordIdx =
+                  karaokeActive && isActive ? wordIdx : -1
+                return (
+                  <div
+                    key={i}
+                    ref={
+                      isActive
+                        ? setActiveLineNode
+                        : undefined
+                    }
+                    className={`lyrics-line${
+                      isActive ? ' lyrics-line-active' : ''
+                    }${isPast ? ' lyrics-line-past' : ''}${
+                      (line.confidence ?? 0) < 0.5
+                        ? ' lyrics-line-uncertain'
+                        : ''
+                    }`}
+                    aria-current={
+                      isActive ? 'true' : undefined
+                    }
+                    onClick={() =>
+                      handleLineClick(line.time_ms)
+                    }
+                    title={
+                      (line.confidence ?? 0) < 0.5
+                        ? 'Таймкод неточный'
+                        : undefined
+                    }
+                  >
+                    {karaokeActive &&
+                    line.word_times &&
+                    line.word_times.length > 0 ? (
+                      line.word_times.map((w, j) => (
+                        <span
+                          key={j}
+                          className={`lyrics-word${j === lineWordIdx ? ' lyrics-word-active' : ''}${isActive && lineWordIdx >= 0 && j < lineWordIdx ? ' lyrics-word-past' : ''}`}
+                        >
+                          {w.text}{' '}
+                        </span>
+                      ))
+                    ) : (
+                      line.text
+                    )}
+                  </div>
+                )
+              })}
+            </m.div>
+          ) : (
+            <m.pre
+              key={`plain-${trackId}-${selectedLang}`}
+              className="lyrics-plain"
+              initial={
+                lyricsReduce ? false : { opacity: 0, y: 4 }
+              }
+              animate={{ opacity: 1, y: 0 }}
+              exit={
+                lyricsReduce
+                  ? undefined
+                  : {
+                      opacity: 0,
+                      transition: { duration: 0.12 },
+                    }
+              }
+              transition={{
+                duration: 0.2,
+                ease: [0.22, 1, 0.36, 1],
+              }}
+            >
+              {plainTextToRender}
+            </m.pre>
+          )}
+        </AnimatePresence>
       </div>
 
       {(isAdmin || isOwner) && (

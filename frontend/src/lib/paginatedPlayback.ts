@@ -15,6 +15,17 @@ interface PlayFromPaginatedCollectionOptions {
   ) => Promise<readonly Track[]>
 }
 
+function tracksAfterClicked(
+  track: Track,
+  tracks: readonly Track[],
+): Track[] {
+  const idx = tracks.findIndex((t) => t.id === track.id)
+  if (idx < 0) {
+    return tracks.filter((t) => t.id !== track.id)
+  }
+  return tracks.slice(idx + 1)
+}
+
 function withTrackFirst(
   track: Track,
   tracks: readonly Track[],
@@ -35,26 +46,27 @@ export async function playFromPaginatedCollection({
   playTrack,
   loadQueue,
 }: PlayFromPaginatedCollectionOptions): Promise<void> {
-  const fallbackTracks =
+  const loadedAfter =
     loadedTracks && loadedTracks.length > 0
-      ? withTrackFirst(track, loadedTracks)
-      : [track]
+      ? tracksAfterClicked(track, loadedTracks)
+      : []
+  const fallbackContext = withTrackFirst(track, loadedAfter)
 
   if (!loadQueue) {
-    await playTrack(track, { contextTracks: fallbackTracks })
+    await playTrack(track, { contextTracks: fallbackContext })
     return
   }
 
   try {
-    const queueTracks = await loadQueue(track, fallbackTracks)
+    const queueTracks = await loadQueue(track, loadedAfter)
     const contextTracks = withTrackFirst(track, queueTracks)
     await playTrack(track, {
       contextTracks:
         contextTracks.length > 1
           ? contextTracks
-          : fallbackTracks,
+          : fallbackContext,
     })
   } catch {
-    await playTrack(track, { contextTracks: fallbackTracks })
+    await playTrack(track, { contextTracks: fallbackContext })
   }
 }

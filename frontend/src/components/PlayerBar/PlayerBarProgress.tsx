@@ -53,6 +53,7 @@ function PlayerBarSeekInner({
 }: SeekProps) {
   const inputRef = useRef<HTMLInputElement>(null)
   const draggingRef = useRef(false)
+  const [pressing, setPressing] = useState(false)
 
   const writePct = (pct: number) => {
     const clamped = clampPct(pct)
@@ -95,6 +96,7 @@ function PlayerBarSeekInner({
     <div
       id="pb-seek-wrap"
       className="pb-seek-zone rp-player-seek"
+      data-pressing={pressing ? 'true' : undefined}
     >
       <m.input
         ref={inputRef}
@@ -108,12 +110,15 @@ function PlayerBarSeekInner({
         aria-label="Перемотка трека"
         onPointerDown={() => {
           draggingRef.current = true
+          setPressing(true)
         }}
         onPointerUp={() => {
           draggingRef.current = false
+          setPressing(false)
         }}
         onPointerCancel={() => {
           draggingRef.current = false
+          setPressing(false)
         }}
         onChange={(e) =>
           onSeek(Number(e.currentTarget.value))

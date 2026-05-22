@@ -487,10 +487,13 @@ class RecommendationService:
             )
             if isinstance(artist_tracks, list):
                 groups.append(artist_tracks)
-            similar_to_artist_tracks = await self._rec_repo.get_track_similarity_candidates_for_artist_ids(
-                artist_ids,
-                limit=max(50, limit // 2),
-                exclude_ids=ex if ex else None,
+            rec_repo = self._rec_repo
+            similar_to_artist_tracks = (
+                await rec_repo.get_track_similarity_candidates_for_artist_ids(
+                    artist_ids,
+                    limit=max(50, limit // 2),
+                    exclude_ids=ex if ex else None,
+                )
             )
             if isinstance(similar_to_artist_tracks, list):
                 groups.append(similar_to_artist_tracks)
@@ -1285,10 +1288,13 @@ class RecommendationService:
 
         neighbor_ids: list[int] = []
         if seed_artist_ids:
-            neighbor_ids = await self._catalog_repo.get_station_neighbor_track_ids_for_artists(
-                seed_artist_ids,
-                exclude_track_ids=frozenset({seed.id}),
-                limit=120,
+            catalog_repo = self._catalog_repo
+            neighbor_ids = (
+                await catalog_repo.get_station_neighbor_track_ids_for_artists(
+                    seed_artist_ids,
+                    exclude_track_ids=frozenset({seed.id}),
+                    limit=120,
+                )
             )
 
         candidates = await self._rec_repo.get_candidate_tracks_stratified(
@@ -1791,6 +1797,17 @@ class RecommendationService:
                             removed=before_filter - len(tracks),
                             remaining=len(tracks),
                         )
+                    if merged_exclude:
+                        before_exclude = len(tracks)
+                        tracks = [
+                            t for t in tracks if t.id not in merged_exclude
+                        ]
+                        if len(tracks) != before_exclude:
+                            logger.info(
+                                "radio_guard_filtered_excluded",
+                                removed=before_exclude - len(tracks),
+                                remaining=len(tracks),
+                            )
                     if not tracks:
                         guarded = None
                 if guarded:
@@ -2427,7 +2444,8 @@ class RecommendationService:
             "generated_at": now.isoformat(),
             "expires_at": (now + timedelta(seconds=ttl)).isoformat(),
         }
-        await redis.setex(key, ttl, json.dumps(payload))
+        if internal_ids or external_track_ids or payload["global_top_ids"]:
+            await redis.setex(key, ttl, json.dumps(payload))
         return payload
 
     async def get_weekly_playlist(self, user_id: int) -> dict[str, Any]:
@@ -2532,7 +2550,8 @@ class RecommendationService:
             "generated_at": now.isoformat(),
             "expires_at": (now + timedelta(seconds=ttl)).isoformat(),
         }
-        await redis.setex(key, ttl, json.dumps(payload))
+        if internal_ids or external_track_ids:
+            await redis.setex(key, ttl, json.dumps(payload))
         return payload
 
     async def refresh_daily_playlist(self, user_id: int) -> dict[str, Any]:

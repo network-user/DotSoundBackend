@@ -163,6 +163,8 @@ export function RadioView() {
       ? radioSessionTimeline[radioSessionTimeline.length - 2] ?? null
       : null
   const prevCover = prevTrack ? coverUrl(prevTrack.cover_key, 120) : null
+  const playedCount = radioSessionTimeline.length
+  const queuedCount = queue.length
 
   useEffect(() => {
     if (!heroCover || perfLite) {
@@ -350,6 +352,30 @@ export function RadioView() {
               ? t('redesign.home.radioSubtitleOn')
               : t('redesign.home.radioSubtitleIdle')}
           </span>
+          {radioMode ? (
+            <div className="rh-radio-session-stats" aria-live="polite">
+              <span className="rh-radio-session-chip">
+                <Icon name="shield" size={13} />
+                <span>{t('redesign.home.radioNoRepeats')}</span>
+              </span>
+              <span className="rh-radio-session-chip">
+                <Icon name="check" size={13} />
+                <span>
+                  {t('redesign.home.radioPlayedCount', {
+                    count: playedCount,
+                  })}
+                </span>
+              </span>
+              <span className="rh-radio-session-chip">
+                <Icon name="queue" size={13} />
+                <span>
+                  {t('redesign.home.radioQueuedCount', {
+                    count: queuedCount,
+                  })}
+                </span>
+              </span>
+            </div>
+          ) : null}
         </div>
         {radioMode ? (
           <button

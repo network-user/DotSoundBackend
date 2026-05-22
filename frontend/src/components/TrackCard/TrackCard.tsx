@@ -25,6 +25,7 @@ import { LongPressMenu } from '@/components/ui/LongPressMenu'
 import type { LongPressMenuItem } from '@/components/ui/LongPressMenu'
 import { MotionPress } from '@/components/ui/MotionPress'
 import { MorphIcon } from '@/components/ui/MorphIcon'
+import { HeartBurst } from '@/components/ui/HeartBurst'
 import { SharedCover } from '@/components/ui/SharedCover'
 import { BeatPulse } from '@/components/ui/BeatPulse'
 import type { Track } from '@/types/api'
@@ -71,6 +72,7 @@ function TrackCardInner({
   const goArtistByName = useNavigateToArtistByName()
   const [confirmingDelete, setConfirmingDelete] =
     useState(false)
+  const [likeBurst, setLikeBurst] = useState(false)
   const confirmTimerRef = useRef<ReturnType<
     typeof setTimeout
   > | null>(null)
@@ -217,6 +219,13 @@ function TrackCardInner({
 
   const handleLike = async (e: MouseEvent) => {
     e.stopPropagation()
+    if (!liked) {
+      setLikeBurst(true)
+      window.setTimeout(
+        () => setLikeBurst(false),
+        420,
+      )
+    }
     await toggleLike(track.id, track)
   }
 
@@ -409,6 +418,10 @@ function TrackCardInner({
               <MorphIcon
                 name="heart"
                 filled={liked}
+                size={20}
+              />
+              <HeartBurst
+                active={likeBurst}
                 size={20}
               />
             </MotionPress>

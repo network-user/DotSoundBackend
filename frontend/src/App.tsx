@@ -228,6 +228,7 @@ const LibraryView = lazyWithRetry(() => import('@/views/LibraryView').then(m => 
 // const ChatsView = lazyWithRetry(() => import('@/views/ChatsView').then(m => ({ default: m.ChatsView })))
 // const ChatView = lazyWithRetry(() => import('@/views/ChatView').then(m => ({ default: m.ChatView })))
 const ProfileView = lazyWithRetry(() => import('@/views/ProfileView').then(m => ({ default: m.ProfileView })))
+const PublicProfileView = lazyWithRetry(() => import('@/views/PublicProfileView').then(m => ({ default: m.PublicProfileView })))
 const LegalView = lazyWithRetry(() => import('@/views/LegalView').then(m => ({ default: m.LegalView })))
 const LegalDocView = lazyWithRetry(() => import('@/views/LegalDocView').then(m => ({ default: m.LegalDocView })))
 const DailyMixView = lazyWithRetry(() => import('@/views/DailyMixView').then(m => ({ default: m.DailyMixView })))
@@ -406,6 +407,41 @@ function useDeferredRender(
   return render
 }
 
+function getTelegramStartParam(): string | null {
+  const sdkParam = (tg as unknown as {
+    initDataUnsafe?: { start_param?: unknown }
+  })?.initDataUnsafe?.start_param
+  if (typeof sdkParam === 'string' && sdkParam.trim()) {
+    return sdkParam.trim()
+  }
+
+  const nativeParam = (window.Telegram?.WebApp as unknown as {
+    initDataUnsafe?: { start_param?: unknown }
+  } | undefined)?.initDataUnsafe?.start_param
+  if (typeof nativeParam === 'string' && nativeParam.trim()) {
+    return nativeParam.trim()
+  }
+
+  const params = new URLSearchParams(window.location.search)
+  return (
+    params.get('tgWebAppStartParam') ||
+    params.get('startapp') ||
+    params.get('start_param')
+  )
+}
+
+function routeFromTelegramStartParam(param: string): string | null {
+  const match = /^(profile|track|artist)_(\d+)$/.exec(param)
+  if (!match) return null
+  const [, kind, rawId] = match
+  const id = Number(rawId)
+  if (!Number.isInteger(id) || id <= 0) return null
+  if (kind === 'profile') return `/profile/${id}`
+  if (kind === 'track') return `/track/${id}`
+  if (kind === 'artist') return `/artist/${id}`
+  return null
+}
+
 interface LazyOverlaysProps {
   settingsOpen: boolean
   onCloseSettings: () => void
@@ -518,6 +554,7 @@ export function App() {
   >(getConfiguredAdminPanelPath())
   const initCalled = useRef(false)
   const readyEventSent = useRef(false)
+  const startParamHandledRef = useRef<string | null>(null)
 
   const fetchAndApplyAdminPath = async () => {
     try {
@@ -821,6 +858,33 @@ export function App() {
       window.clearTimeout(id)
     }
   }, [isInitialized])
+
+  useEffect(() => {
+    if (
+      !isInitialized ||
+      needsAuth ||
+      needsOnboarding ||
+      needsTutorial
+    ) {
+      return
+    }
+    const param = getTelegramStartParam()
+    if (!param || startParamHandledRef.current === param) {
+      return
+    }
+    const route = routeFromTelegramStartParam(param)
+    if (!route) return
+    startParamHandledRef.current = param
+    if (location.pathname === route) return
+    navigate(route, { replace: location.pathname === '/' })
+  }, [
+    isInitialized,
+    location.pathname,
+    navigate,
+    needsAuth,
+    needsOnboarding,
+    needsTutorial,
+  ])
 
   useEffect(() => {
     let mono = false
@@ -1145,6 +1209,10 @@ export function App() {
           <Route
             path="/chats/:id"
             element={<Navigate to="/" replace />}
+          />
+          <Route
+            path="/profile/:userId"
+            element={<PublicProfileView />}
           />
           <Route
             path="/profile"

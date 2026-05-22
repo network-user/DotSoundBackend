@@ -32,6 +32,7 @@ export function DailyMixView() {
   const { shuffleOn } = usePlayerMeta()
   const [data, setData] = useState<DailyPlaylistResponse | null>(null)
   const [loading, setLoading] = useState(true)
+  const [loadError, setLoadError] = useState(false)
   const [refreshing, setRefreshing] = useState(false)
   const [shareOpen, setShareOpen] = useState(false)
   const [shareChats, setShareChats] = useState<ChatListItem[]>([])
@@ -43,17 +44,21 @@ export function DailyMixView() {
 
   const load = useCallback(() => {
     setLoading(true)
+    setLoadError(false)
     api.getDailyPlaylist()
-      .then(setData)
-      .catch(() =>
+      .then((next) => {
+        setData(next)
+      })
+      .catch(() => {
+        setLoadError(true)
         setData({
           internal_tracks: [],
           external_tracks: [],
           global_top: [],
           generated_at: '',
           expires_at: '',
-        }),
-      )
+        })
+      })
       .finally(() => setLoading(false))
   }, [])
 
@@ -228,7 +233,14 @@ export function DailyMixView() {
       >
         <TrackList
           tracks={internalTracks}
-          emptyMessage={t('dailyMix.empty')}
+          emptyMessage={
+            loadError ? t('dailyMix.loadError') : t('dailyMix.empty')
+          }
+          emptyCta={
+            loadError
+              ? { label: t('dailyMix.retry'), onClick: load }
+              : undefined
+          }
         />
       </m.div>
 
