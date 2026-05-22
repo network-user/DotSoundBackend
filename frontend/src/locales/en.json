@@ -424,6 +424,7 @@
       "idsPlaceholder": "101\n102\n103",
       "enqueueDone": "Queued {{enqueued}} jobs (requested {{requested}}, skipped {{skipped}}).",
       "loadFailed": "Failed to load queue",
+      "migrationRequired": "Database migration required: run alembic upgrade head (revision 0119 — request_align_existing_text)",
       "statQueued": "Queued: {{count}}",
       "statRunning": "Running: {{count}}",
       "statCandidates": "Eligible backlog: {{count}}",

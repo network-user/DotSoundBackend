@@ -17,7 +17,7 @@ import {
 const SHORTCUTS = [
   {
     id: 'daily',
-    icon: 'calendar',
+    icon: 'flame',
     labelKey: 'home.dayPlaylistTitle',
     route: '/daily-mix',
   },
@@ -184,24 +184,30 @@ export function LibraryView() {
         </MotionPress>
       </div>
 
-      <div className="rd-lib-shortcuts">
-        {SHORTCUTS.map((s) => (
-          <MotionPress
-            key={s.id}
-            variant="subtle"
-            haptic="selection"
-            className="rd-lib-shortcut"
-            aria-label={t(s.labelKey)}
-            onClick={() => navigate(s.route)}
-          >
-            <div className="rd-lib-shortcut__icon" aria-hidden>
-              <Icon name={s.icon} size={20} />
-            </div>
-            <span className="rd-lib-shortcut__label">
-              {t(s.labelKey)}
-            </span>
-          </MotionPress>
-        ))}
+      <div className="rd-lib-shortcuts-wrap">
+        <p className="rd-lib-shortcuts-eyebrow">
+          {t('redesign.library.shortcutsEyebrow')}
+        </p>
+        <div className="rd-lib-shortcuts">
+          {SHORTCUTS.map((s) => (
+            <MotionPress
+              key={s.id}
+              variant="subtle"
+              haptic="selection"
+              className={`rd-lib-shortcut rd-lib-shortcut--${s.id}`}
+              aria-label={t(s.labelKey)}
+              onClick={() => navigate(s.route)}
+            >
+              <div className="rd-lib-shortcut__glow" aria-hidden />
+              <div className="rd-lib-shortcut__icon" aria-hidden>
+                <Icon name={s.icon} size={22} />
+              </div>
+              <span className="rd-lib-shortcut__label">
+                {t(s.labelKey)}
+              </span>
+            </MotionPress>
+          ))}
+        </div>
       </div>
 
       <div

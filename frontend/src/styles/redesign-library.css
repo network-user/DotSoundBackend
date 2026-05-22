@@ -467,6 +467,28 @@
   transition: transform 220ms var(--ease-out);
 }
 
+.rd-pl-cover-fallback {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-secondary);
+  background: linear-gradient(
+    135deg,
+    rgba(255, 255, 255, 0.06) 0%,
+    rgba(255, 255, 255, 0.02) 100%
+  );
+}
+
+.rd-pl-cover--hero-empty {
+  background: linear-gradient(
+    135deg,
+    rgba(255, 255, 255, 0.07) 0%,
+    rgba(255, 255, 255, 0.02) 100%
+  );
+}
+
 .rd-pl-cover-hero-wrap {
   display: flex;
   flex-direction: column;
@@ -1194,53 +1216,104 @@
 
 /* ─── Library quick-access shortcuts ─────────────── */
 
+.rd-lib-shortcuts-wrap {
+  padding: var(--space-1) var(--space-4) var(--space-2);
+}
+
+.rd-lib-shortcuts-eyebrow {
+  margin: 0 0 var(--space-2);
+  font-size: var(--fs-11);
+  font-weight: 700;
+  letter-spacing: var(--ls-widest, 0.09em);
+  text-transform: uppercase;
+  color: var(--text-secondary);
+}
+
 .rd-lib-shortcuts {
   display: grid;
-  grid-template-columns: repeat(2, 1fr);
+  grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: var(--space-2);
-  padding: var(--space-2) var(--space-4) var(--space-1);
 }
 
 .rd-lib-shortcut {
+  position: relative;
+  overflow: hidden;
   display: flex;
-  align-items: center;
+  flex-direction: column;
+  align-items: flex-start;
+  justify-content: space-between;
   gap: var(--space-3);
-  padding: var(--space-3) var(--space-3);
-  border-radius: var(--r-lg);
-  border: 1px solid var(--border-subtle);
-  background: var(--surface-glass, rgba(255, 255, 255, 0.05));
+  padding: var(--space-3);
+  border-radius: var(--r-xl, 14px);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.04);
+  min-height: 82px;
   text-align: left;
-  min-height: 52px;
+  cursor: pointer;
   transition:
     background var(--dur-fast) var(--ease-out),
-    border-color var(--dur-fast) var(--ease-out);
+    border-color var(--dur-fast) var(--ease-out),
+    transform 180ms var(--ease-out);
+}
+
+.rd-lib-shortcut__glow {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 0;
+  background: linear-gradient(
+    160deg,
+    rgba(255, 255, 255, 0.07) 0%,
+    transparent 55%
+  );
 }
 
 .rd-lib-shortcut__icon {
+  position: relative;
+  z-index: 1;
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 32px;
-  height: 32px;
+  width: 36px;
+  height: 36px;
   border-radius: var(--r-md);
-  background: color-mix(in srgb, var(--accent) 14%, transparent);
-  color: var(--accent, var(--text));
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  color: var(--text);
   flex-shrink: 0;
+  transition: background var(--dur-fast) var(--ease-out);
 }
 
 .rd-lib-shortcut__label {
-  font-size: var(--fs-13);
-  font-weight: 600;
+  position: relative;
+  z-index: 1;
+  width: 100%;
+  font-size: var(--fs-11);
+  font-weight: 700;
   color: var(--text);
-  letter-spacing: var(--ls-snug);
-  line-height: var(--lh-tight);
+  letter-spacing: 0;
+  line-height: 1.25;
+  display: -webkit-box;
+  overflow: hidden;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow-wrap: anywhere;
 }
 
 @media (hover: hover) and (pointer: fine) {
   .rd-lib-shortcut:hover {
     background: rgba(255, 255, 255, 0.08);
     border-color: rgba(255, 255, 255, 0.18);
+    transform: translateY(-2px);
   }
+
+  .rd-lib-shortcut:hover .rd-lib-shortcut__icon {
+    background: rgba(255, 255, 255, 0.14);
+  }
+}
+
+.rd-lib-shortcut:active {
+  transform: scale(0.97);
 }
 
 /* ─── Add-track trigger button ────────────────────── */
@@ -1827,54 +1900,13 @@
   line-height: 1;
 }
 
+#view-library .rd-lib-shortcuts-wrap {
+  padding: var(--space-2) var(--space-4) var(--space-2);
+}
+
 #view-library .rd-lib-shortcuts {
-  display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: var(--space-2);
-  padding: var(--space-2) var(--space-4);
-}
-
-#view-library .rd-lib-shortcut {
-  min-width: 0;
-  min-height: 68px;
-  display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: var(--space-2);
-  padding: var(--space-2);
-  border-radius: 8px;
-  border: 1px solid transparent;
-  background: transparent;
-  color: var(--text-secondary);
-}
-
-#view-library .rd-lib-shortcut__icon {
-  width: 30px;
-  height: 30px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  flex-shrink: 0;
-  border-radius: 8px;
-  border: 1px solid var(--border-subtle);
-  background: rgba(255, 255, 255, 0.045);
-  color: var(--text);
-}
-
-#view-library .rd-lib-shortcut__label {
-  width: 100%;
-  min-width: 0;
-  display: -webkit-box;
-  overflow: hidden;
-  color: var(--text);
-  font-size: var(--fs-12);
-  font-weight: 700;
-  line-height: 1.2;
-  letter-spacing: 0;
-  -webkit-box-orient: vertical;
-  -webkit-line-clamp: 2;
-  overflow-wrap: anywhere;
 }
 
 #view-library .rd-lib-tabs {
@@ -1922,8 +1954,7 @@
 }
 
 @media (hover: hover) and (pointer: fine) {
-  #view-library .rd-lib-now:hover,
-  #view-library .rd-lib-shortcut:hover {
+  #view-library .rd-lib-now:hover {
     border-color: rgba(255, 255, 255, 0.18);
     background: rgba(255, 255, 255, 0.075);
   }
@@ -1940,6 +1971,10 @@
 
   #view-library .rd-lib-shortcuts {
     grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  #view-library .rd-lib-shortcut {
+    min-height: 76px;
   }
 }
 

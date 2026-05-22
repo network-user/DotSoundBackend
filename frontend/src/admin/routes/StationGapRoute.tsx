@@ -123,6 +123,8 @@ export function StationGapRoute() {
         include_sync_disabled: includeSyncDisabled || undefined,
       }),
     placeholderData: keepPreviousData,
+    staleTime: 60_000,
+    refetchOnWindowFocus: false,
   })
 
   const resyncMutation = useMutation({

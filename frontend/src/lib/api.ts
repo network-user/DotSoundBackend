@@ -420,6 +420,10 @@ async function request<T>(path: string, opts: RequestInit = {}): Promise<T> {
   }
 }
 
+export function trackVideoProxyPath(trackId: number): string {
+  return `/api/v1/tracks/${trackId}/video`
+}
+
 export const api = {
   getTracks(params?: {
     q?: string

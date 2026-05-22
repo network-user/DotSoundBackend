@@ -2581,6 +2581,13 @@ body.ds-perf-lite .tcs-cover-waveform canvas {
   z-index: 0;
   font-size: 72px;
 }
+.tcs-video-stage {
+  position: relative;
+  z-index: 1;
+  min-height: 35dvh;
+  overflow: hidden;
+  border-radius: var(--radius-xl) var(--radius-xl) 0 0;
+}
 .tcs-video-bg {
   position: absolute;
   inset: 0;
@@ -2588,7 +2595,52 @@ body.ds-perf-lite .tcs-cover-waveform canvas {
   height: 100%;
   object-fit: cover;
   z-index: 0;
-  border-radius: var(--radius-xl) var(--radius-xl) 0 0;
+  border-radius: inherit;
+  opacity: 0;
+  transition: opacity 320ms var(--ease-out);
+}
+.tcs-video-bg.is-ready {
+  opacity: 1;
+}
+.tcs-video-chip {
+  position: absolute;
+  top: max(10px, env(safe-area-inset-top, 0px));
+  left: max(12px, env(safe-area-inset-left, 0px));
+  z-index: 4;
+  width: 28px;
+  height: 28px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  background: rgba(10, 10, 12, 0.62);
+  color: rgba(255, 255, 255, 0.88);
+  -webkit-backdrop-filter: blur(10px);
+  backdrop-filter: blur(10px);
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.28);
+  pointer-events: none;
+}
+.tcs-video-chip--floating {
+  position: absolute;
+  top: max(56px, calc(env(safe-area-inset-top, 0px) + 56px));
+  left: max(16px, env(safe-area-inset-left, 0px));
+  z-index: 9;
+}
+.tcs-video-chip.is-busy svg {
+  animation: tcsVideoStatusPulse 1.1s ease-in-out infinite;
+}
+.tcs-video-chip.is-error {
+  border-color: rgba(255, 107, 107, 0.45);
+  background: rgba(70, 22, 22, 0.78);
+  color: #ffd5d5;
+}
+.tcs-video-active .tcs-sheet-mood-bg {
+  opacity: 0.08;
+}
+.tcs-video-stage .tcs-pip-btn {
+  top: max(10px, env(safe-area-inset-top, 0px));
+  right: max(12px, env(safe-area-inset-right, 0px));
 }
 .tcs-pip-btn {
   position: absolute;
@@ -2839,9 +2891,8 @@ body.ds-perf-lite .tcs-video-pulse {
   min-height: 35dvh;
 }
 
-.tcs-video-bg {
-  opacity: 0.94;
-  filter: saturate(0.92) contrast(1.04);
+.tcs-video-stage .tcs-video-bg.is-ready {
+  filter: saturate(1.02) contrast(1.03);
   animation: tcsVideoReveal 420ms var(--ease-out) both;
 }
 
@@ -4911,6 +4962,11 @@ html.le-lyrics-sync-open body {
 .auth-microcopy--muted {
   color: var(--text-muted);
   margin-top: 6px;
+}
+.auth-microcopy a {
+  color: inherit;
+  text-decoration: underline;
+  text-underline-offset: 2px;
 }
 .auth-link {
   color: var(--text);

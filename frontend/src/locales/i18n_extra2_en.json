@@ -8,6 +8,8 @@
       "tabLyrics": "Lyrics",
       "tabQueue": "Queue",
       "seekAria": "Seek",
+      "seekBack10Aria": "Rewind 10 seconds",
+      "seekForward10Aria": "Fast forward 10 seconds",
       "prevAria": "Previous track",
       "nextAria": "Next track",
       "playAria": "Play",

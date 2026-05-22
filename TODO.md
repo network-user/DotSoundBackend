@@ -1,5 +1,43 @@
 # DotSound - TODO Tracker
 
+- [x] **Cross-repo bug audit: playback and PrivateCore seams (2026-05-22)**
+  - Track-card video playback now uses the same-origin
+    `/api/v1/tracks/{id}/video` proxy URL directly instead of fetching the
+    whole file as a Blob before playback, preserving browser Range
+    streaming and avoiding full-video memory buffering.
+  - Backend playback stream guards were checked; short upstream S3/proxy
+    streams stay covered by tests and the helper typing is Ruff-clean.
+  - PrivateCore artist-info HTTP helper no longer holds a stale direct
+    `sync_get` import, so outbound monkeypatching and tests cannot leak real
+    network calls.
+  - Verification: `npm run build`; `npm run test -- --run`; playback/proxy
+    and admin targeted pytest; PrivateCore full pytest.
+
+- [x] **HomeView: redesign quick-access shortcuts block (2026-05-22)**
+  - Replaced horizontal `HorizontalSnap` scroll rail with a 2×3 CSS grid
+    (all 6 shortcut tiles visible without swiping).
+  - Tile layout changed from vertical (icon top + label bottom) to
+    horizontal row (icon frame left + label flex + chevron right).
+  - Removed heavy `--deck` card wrapper; section sits flush in page padding.
+  - `::before` per-tile texture patterns updated for horizontal proportions
+    (textures anchor to left edge where icon is).
+  - `home-surface.css`: dropped `--deck` override block, simplified section
+    margins; `redesign-home.css`: full tile/grid/frame/arrow CSS rewrite.
+  - TS clean (`npx tsc --noEmit`).
+
+- [x] **Library page & player UI redesign (2026-05-22)**
+  - Shortcuts block ("Быстрый доступ"): eyebrow header, 4 tiles with unique
+    per-tile HSL accent gradients (flame/daily → blue, sparkle/weekly → purple,
+    radio → green, chart-bar/my-top → red), radial glow in tile background,
+    tinted icon containers. 2-column mobile / 4-column desktop grid.
+  - Playlist fallback icon changed from `list` to `disc` with subtle gradient bg;
+    `rd-pl-cover-fallback` CSS class added.
+  - NowPlaying controls: added ±10s seek buttons (`rewind-10` / `forward-10`
+    icons) between prev/next and play; grouped in `rp-now__ctl-center` flex.
+  - New icons `rewind-10` and `forward-10` added to `Icon.tsx`.
+  - i18n: `seekBack10Aria` / `seekForward10Aria` in ru and en locales.
+  - Verification: `npx tsc --noEmit` (exit 0).
+
 - [x] **Track card video upload stuck on processing (2026-05-22)**
   - Root cause: `app.services.video_transcoding` was not registered on
     the Taskiq worker (`main.py`, `docker-compose.yml`), so uploads
@@ -4310,8 +4348,30 @@
 
 ## Соответствие 152-ФЗ / ПДн (backlog, продукт + инженерия)
 
+### Реализовано (2026-05-22)
+- [x] `UserPreference.legal_accepted_version` + `legal_accepted_at` + `is_adult_confirmed`
+  (миграция `0086`) — серверная фиксация согласия и подтверждения 18+.
+- [x] `OnboardingV2.CompleteStep` — дисклеймер «Нажимая «Готово», вы
+  подтверждаете 18+ и принимаете Условия + Политику»; версия документа
+  отправляется на бэкенд при завершении онбординга.
+- [x] `ConsentBanner` — выбор по анти-абьюз сигналам (Принять / Отклонить);
+  результат в `localStorage` + `X-DS-Signal` заголовок.
+- [x] Полный пакет документов `/legal/*` (terms, privacy, copyright,
+  upload-rules, rightsholders, anti-abuse-signals).
+- [x] `SettingsLegalSection` — оператор, версия, контакт, ссылки, email для
+  запросов субъектов (152-ФЗ ст. 14, срок ответа 30 дней).
+- [x] Удаление аккаунта через Настройки + `daily-user-hard-delete` таск.
+- [x] `AuthScreen` — дисклеймер «Продолжая, вы принимаете Условия и
+  Политику конфиденциальности. Сервис 18+» со ссылками на документы.
+- [x] `DotSoundBot /start` — уведомление об обработке персональных данных
+  (Telegram ID, имя) согласно Политике конфиденциальности.
+
+### Остаётся (backlog)
 - Перед публичным запуском: **согласовать с юристом/DPO** фактическую обработку ПДн с требованиями 152-ФЗ (и смежное): основания, при необходимости уведомительный/регистрационный контур, субпроцессоры (email, observability, ASR-облака, бэкапы), трансгран, сроки хранения, запросы субъектов, реагирование на инциденты. Опора на `LEGAL.md`, `docs/legal/PRIVACY_POLICY.md` (сейчас draft).
 - **Скорректировать функционал** по итогам: ретеншн/удаление, минимизация полей, kill-switch внешних API, согласованность логов и бэкапов с политикой. Не полагаться на внутренние id вместо `telegram_id` как на «анонимизацию», сохраняются операторские обязанности.
+- Юридическая вычитка текста `/legal/anti-abuse-signals` (инженерный черновик).
+- Заполнить регистрационный номер РКН в `LEGAL.md` после подачи через pd.rkn.gov.ru.
+- Добавить URL Mini App в приветственное сообщение бота (когда домен будет подтверждён).
 - См. также: `docs/project_context.md` (compliance), `AGENTS.md` (Legal readiness).
 
 ## Критичные / Инфраструктура
@@ -4832,7 +4892,7 @@
 
 ---
 
-*Последнее обновление: 2026-05-21 (External import ownership backfill and audit).*
+*Последнее обновление: 2026-05-22 (Cross-repo bug audit: playback and PrivateCore seams).*
 
 ## Session Updates (2026-05-06)
 

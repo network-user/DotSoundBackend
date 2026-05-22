@@ -8,7 +8,11 @@
 } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useNavigate } from 'react-router-dom'
-import { api, getApiErrorMessage } from '@/lib/api'
+import {
+  api,
+  getApiErrorMessage,
+  trackVideoProxyPath,
+} from '@/lib/api'
 import {
   getInternalUserId,
   getIsAdmin,
@@ -217,6 +221,9 @@ export function TrackCardSheet({
   const slidePresence = useTrackSlidePresence()
   const [isCoarsePointer, setIsCoarsePointer] = useState(false)
   const videoRef = useRef<HTMLVideoElement>(null)
+  const videoSrc = track?.video_key
+    ? trackVideoProxyPath(track.id)
+    : null
 
   const handleSheetDragEnd = useCallback(
     (_: unknown, info: PanInfo) => {
@@ -516,6 +523,33 @@ export function TrackCardSheet({
     },
     [clearVideoPoll, clearVideoRetryTimer, clearVideoStalledTimer],
   )
+
+  useEffect(() => {
+    if (
+      !isCardOpen ||
+      !track?.video_key ||
+      !videoEnabled
+    ) {
+      setVideoReady(false)
+      setVideoFailed(false)
+      return
+    }
+    setVideoReady(false)
+    setVideoFailed(false)
+  }, [
+    isCardOpen,
+    track?.id,
+    track?.video_key,
+    videoEnabled,
+  ])
+
+  useEffect(() => {
+    const el = videoRef.current
+    if (!el || !videoSrc) {
+      return
+    }
+    void el.play().catch(() => {})
+  }, [videoSrc])
 
   useEffect(() => {
     if (
@@ -1528,9 +1562,6 @@ export function TrackCardSheet({
   const coverSrcSetAttr = coverKey
     ? coverSrcSet(coverKey, coverVer)
     : undefined
-  const videoSrc = track.video_key
-    ? `/api/v1/tracks/${track.id}/video`
-    : null
   const internalId = getInternalUserId()
   const isOwner =
     internalId !== null &&
@@ -1542,7 +1573,7 @@ export function TrackCardSheet({
   const disliked = isDisliked(track.id)
 
   const hasActiveVideo =
-    !!videoSrc && videoEnabled
+    Boolean(track.video_key) && videoEnabled
   const videoProcessing =
     videoBusy ||
     isVideoProcessingStatus(track.video_processing_status)
@@ -1563,18 +1594,15 @@ export function TrackCardSheet({
   const videoStatusIsError =
     videoStatusKind === 'error' ||
     mappedVideoFailure != null
+  const showVideoStatusChip =
+    videoStatusIsBusy || videoStatusIsError
+  const showFloatingVideoChip =
+    showVideoStatusChip && !hasActiveVideo
   const videoStatusIconName = videoStatusIsError
     ? 'alert-triangle'
     : videoStatusIsBusy
       ? 'clock'
       : 'video'
-  const videoFeedbackClassName = [
-    'tcs-video-feedback',
-    videoStatusIsError ? 'is-error' : '',
-    videoStatusIsBusy ? 'is-busy' : '',
-  ]
-    .filter(Boolean)
-    .join(' ')
   const videoEditStatusClassName = [
     'tcs-video-status',
     videoStatusIsError ? 'is-error' : '',
@@ -1605,7 +1633,7 @@ export function TrackCardSheet({
       onClick={handleBackdrop}
     >
       <m.div
-        className={`tcs-sheet re-tcs-sheet${hasActiveVideo ? ' tcs-video-mode' : ''}${exit.cls}`}
+        className={`tcs-sheet re-tcs-sheet${hasActiveVideo ? ' tcs-video-mode' : ''}${videoReady && hasActiveVideo ? ' tcs-video-active' : ''}${exit.cls}`}
         ref={sheetRef}
         drag={reduce || isCoarsePointer ? false : 'y'}
         dragConstraints={{ top: 0, bottom: 0 }}
@@ -1658,116 +1686,114 @@ export function TrackCardSheet({
           key={track.id}
           className="tcs-track-content"
         >
-        {videoStatusText && (
+        {showFloatingVideoChip && (
           <div
-            className={videoFeedbackClassName}
-            role={videoStatusIsError ? 'alert' : 'status'}
-            aria-live={videoStatusIsError ? 'assertive' : 'polite'}
+            className={`tcs-video-chip tcs-video-chip--floating${videoStatusIsError ? ' is-error' : ''}${videoStatusIsBusy ? ' is-busy' : ''}`}
+            role={
+              videoStatusIsError ? 'alert' : 'status'
+            }
+            aria-live={
+              videoStatusIsError ? 'assertive' : 'polite'
+            }
+            title={videoStatusText ?? undefined}
+            aria-label={videoStatusText ?? undefined}
           >
             <Icon
               name={videoStatusIconName}
-              size={18}
+              size={14}
             />
-            <span>{videoStatusText}</span>
-            {videoStatusIsBusy && (
-              <span
-                className="tcs-video-feedback-meter"
-                aria-hidden="true"
-              />
-            )}
           </div>
         )}
-        {hasActiveVideo && !videoFailed && (
-          <>
-            <video
-              ref={videoRef}
-              className="tcs-video-bg"
-              src={videoSrc}
-              autoPlay
-              loop
-              muted
-              playsInline
-              preload="auto"
-              poster={coverSrc ?? undefined}
-              onCanPlay={handleVideoCanPlay}
-              onLoadedData={handleVideoCanPlay}
-              onError={handleVideoPlaybackError}
-              onStalled={handleVideoStalled}
-              onWaiting={handleVideoStalled}
-            />
-            <div className="tcs-video-gradient" />
-            {hasPipSupport() && (
-              <button
-                type="button"
-                className="tcs-pip-btn"
-                onClick={async () => {
-                  const v = videoRef.current
-                  if (!v) return
-                  try {
-                    if (
-                      document.pictureInPictureElement
-                    ) {
-                      await document.exitPictureInPicture()
-                    } else {
-                      await v.requestPictureInPicture()
-                    }
-                  } catch {
-                    showIsland({
-                      kind: 'toast',
-                      title: t('trackSheet.pipUnavailable'),
-                      durationMs: 3000,
-                    })
-                  }
-                }}
-                aria-label={t('trackSheet.pipAria')}
-                title={t('trackSheet.pipTitle')}
-              >
-                <Icon name="pip" size={16} />
-              </button>
-            )}
-          </>
-        )}
-
-        {hasActiveVideo && videoFailed && coverSrc && (
-          <>
-            <img
-              className="tcs-video-bg tcs-video-fallback"
-              src={coverSrc}
-              srcSet={coverSrcSetAttr}
-              sizes="100vw"
-              alt=""
-              aria-hidden="true"
-            />
-            <div className="tcs-video-gradient" />
-          </>
-        )}
-
-        {hasActiveVideo && !videoFailed && !videoReady && (
+        {hasActiveVideo && (
           <div
-            className="tcs-video-standby"
+            className="tcs-video-stage"
             {...(desktopFineNav ? {} : tcsNavSwipe)}
             style={tcsNavSwipeTouchStyle}
           >
-            <Icon
-              name="video"
-              size={32}
-              className="tcs-video-pulse"
-            />
-            <span className="tcs-video-standby-label">
-              {t('trackSheet.videoLoading')}
-            </span>
+            {hasActiveVideo && !videoFailed && (
+              <video
+                ref={videoRef}
+                className={`tcs-video-bg${videoReady ? ' is-ready' : ''}`}
+                src={videoSrc ?? undefined}
+                autoPlay
+                loop
+                muted
+                playsInline
+                preload="auto"
+                onCanPlay={handleVideoCanPlay}
+                onLoadedData={handleVideoCanPlay}
+                onPlaying={handleVideoCanPlay}
+                onError={handleVideoPlaybackError}
+                onStalled={handleVideoStalled}
+                onWaiting={handleVideoStalled}
+              />
+            )}
+            {hasActiveVideo && videoFailed && coverSrc && (
+              <img
+                className="tcs-video-bg tcs-video-fallback is-ready"
+                src={coverSrc}
+                srcSet={coverSrcSetAttr}
+                sizes="100vw"
+                alt=""
+                aria-hidden="true"
+              />
+            )}
+            {hasActiveVideo && (
+              <div className="tcs-video-gradient" />
+            )}
+            {showVideoStatusChip && (
+              <div
+                className={`tcs-video-chip${videoStatusIsError ? ' is-error' : ''}${videoStatusIsBusy ? ' is-busy' : ''}`}
+                role={
+                  videoStatusIsError ? 'alert' : 'status'
+                }
+                aria-live={
+                  videoStatusIsError
+                    ? 'assertive'
+                    : 'polite'
+                }
+                title={videoStatusText ?? undefined}
+                aria-label={videoStatusText ?? undefined}
+              >
+                <Icon
+                  name={videoStatusIconName}
+                  size={14}
+                />
+              </div>
+            )}
+            {hasActiveVideo &&
+              videoReady &&
+              hasPipSupport() && (
+                <button
+                  type="button"
+                  className="tcs-pip-btn"
+                  onClick={async () => {
+                    const v = videoRef.current
+                    if (!v) return
+                    try {
+                      if (
+                        document.pictureInPictureElement
+                      ) {
+                        await document.exitPictureInPicture()
+                      } else {
+                        await v.requestPictureInPicture()
+                      }
+                    } catch {
+                      showIsland({
+                        kind: 'toast',
+                        title: t('trackSheet.pipUnavailable'),
+                        durationMs: 3000,
+                      })
+                    }
+                  }}
+                  aria-label={t('trackSheet.pipAria')}
+                  title={t('trackSheet.pipTitle')}
+                >
+                  <Icon name="pip" size={16} />
+                </button>
+              )}
           </div>
         )}
-
-        {hasActiveVideo &&
-          (videoReady || videoFailed) &&
-          !showLyricsPanel && (
-            <div
-              className="tcs-video-spacer"
-              {...(desktopFineNav ? {} : tcsNavSwipe)}
-              style={tcsNavSwipeTouchStyle}
-            />
-          )}
 
         {!hasActiveVideo && !showLyricsPanel && (
           <div

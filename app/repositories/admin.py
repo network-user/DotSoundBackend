@@ -106,9 +106,12 @@ class AdminRepository:
         )
 
     def _synced_lines_present(self) -> ColumnElement[bool]:
-        return and_(
-            TrackLyrics.synced_lines.isnot(None),
-            func.json_array_length(TrackLyrics.synced_lines) > 0,
+        return (
+            func.coalesce(
+                func.json_array_length(TrackLyrics.synced_lines),
+                0,
+            )
+            > 0
         )
 
     def _apply_track_list_filters(

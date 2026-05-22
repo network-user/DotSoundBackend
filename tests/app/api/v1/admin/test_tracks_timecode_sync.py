@@ -272,3 +272,35 @@ async def test_timecode_sync_queue_since_hours_filter(
     assert recent.status_code == 200
     ids = {j["id"] for j in recent.json()["recent"]}
     assert "lj_timecode_old" not in ids
+
+
+async def test_timecode_sync_queue_reports_missing_migration(
+    client: AsyncClient,
+    db_session: AsyncSession,
+) -> None:
+    from sqlalchemy.exc import ProgrammingError
+
+    admin = await create_test_user(client, 131099)
+    headers = await admin_bearer_for_user(
+        client, db_session, user_id=admin["id"]
+    )
+    orig = Exception(
+        'column "request_align_existing_text" of relation '
+        '"lyrics_jobs" does not exist'
+    )
+    with patch(
+        "app.repositories.admin_lyrics_timecode_sync."
+        "AdminLyricsTimecodeSyncRepository.list_align_jobs",
+        new_callable=AsyncMock,
+        side_effect=ProgrammingError(
+            "SELECT",
+            {},
+            orig,
+        ),
+    ):
+        response = await client.get(
+            "/api/v1/admin/tracks/lyrics-timecode-sync/queue",
+            headers=headers,
+        )
+    assert response.status_code == 503
+    assert response.json()["detail"] == "migration_0119_required"

@@ -173,28 +173,16 @@
 }
 
 .rh-home--refresh .rh-home-shortcuts {
-  margin-bottom: var(--rh-home-gap);
-}
-
-.rh-home--refresh .rh-home-shortcuts--deck {
-  padding: var(--space-4) 0;
+  padding: 0;
   margin: 0 var(--rh-home-pad) var(--rh-home-gap);
-  border-radius: var(--r-lg);
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  background:
-    linear-gradient(
-      180deg,
-      rgba(255, 255, 255, 0.05),
-      rgba(255, 255, 255, 0.015)
-    );
 }
 
-.rh-home--refresh .rh-home-shortcuts--deck .rh-home-shortcuts__intro {
-  padding-inline: var(--space-4);
+.rh-home--refresh .rh-home-shortcuts__head {
+  padding-inline: 0;
 }
 
-.rh-home--refresh .rh-home-shortcuts--deck .rh-home-shortcuts-snap .h-snap__track {
-  padding-inline: var(--space-4);
+.rh-home--refresh .rh-home-shortcuts-grid {
+  padding: 0;
 }
 
 .rh-home--refresh .rh-home-block {

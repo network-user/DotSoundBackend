@@ -170,6 +170,39 @@ class LyricsTimecodeSyncPriorityRequest(BaseModel):
     bump_next: bool = False
 
 
+class LyricsTimecodeSyncJobOut(BaseModel):
+    id: str
+    track_id: int
+    track_title: str | None = None
+    track_artist: str | None = None
+    status: str
+    profile: str
+    queue_priority: int
+    current_tier: str | None = None
+    error: str | None = None
+    attempts: int
+    created_at: datetime | None = None
+    started_at: datetime | None = None
+    finished_at: datetime | None = None
+    duration_ms: int | None = None
+    progress_id: str | None = None
+    request_with_sync: bool
+
+
+class LyricsTimecodeSyncOverviewResponse(BaseModel):
+    filters: dict[str, str | int | None]
+    candidate_count: int
+    counts: dict[str, int]
+    running: LyricsTimecodeSyncJobOut | None = None
+    next: LyricsTimecodeSyncJobOut | None = None
+    queued: list[LyricsTimecodeSyncJobOut] = Field(
+        default_factory=list
+    )
+    recent: list[LyricsTimecodeSyncJobOut] = Field(
+        default_factory=list
+    )
+
+
 class GenreMoodBatchPromptRequest(BaseModel):
     track_ids: list[int] = Field(default_factory=list, max_length=200)
     search: str | None = Field(default=None, max_length=128)

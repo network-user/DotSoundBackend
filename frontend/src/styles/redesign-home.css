@@ -2230,11 +2230,10 @@
 }
 
 .rh-home-shortcuts {
-  margin: 0 0 var(--space-6);
-  padding-bottom: var(--space-2);
+  margin: 0 0 var(--space-5);
 }
 
-.rh-home-shortcuts__intro {
+.rh-home-shortcuts__head {
   display: grid;
   gap: 4px;
   padding: 0 var(--space-4) var(--space-3);
@@ -2251,51 +2250,40 @@
 .rh-home-shortcuts__title {
   margin: 0;
   color: var(--text);
-  font-size: var(--fs-22);
+  font-size: var(--fs-20);
   line-height: 1.15;
-  font-weight: 700;
+  font-weight: 800;
   letter-spacing: var(--ls-tight);
 }
 
-.rh-home-shortcuts-snap {
-  margin-bottom: 0;
-}
-
-.rh-home-shortcuts-snap .h-snap__track {
-  gap: var(--space-3);
-  padding-inline: var(--space-4);
-  scroll-padding-inline: var(--space-4);
-}
-
-.rh-home-shortcuts-snap .h-snap__item {
-  flex: 0 0 auto;
-  width: max-content;
-  max-width: none;
+.rh-home-shortcuts-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: var(--space-2);
+  padding: 0 var(--space-4);
 }
 
 .rh-home-shortcut {
   position: relative;
   display: flex;
-  flex-direction: column;
+  flex-direction: row;
   align-items: center;
-  gap: var(--space-2);
-  width: 108px;
-  min-height: 118px;
-  padding: var(--space-3) var(--space-2);
+  gap: var(--space-3);
+  width: 100%;
+  min-height: 64px;
+  padding: var(--space-3);
   border-radius: var(--r-lg);
-  border: 1px solid rgba(255, 255, 255, 0.10);
+  border: 1px solid rgba(255, 255, 255, 0.09);
   background:
     radial-gradient(
-      120% 120% at 0% 0%,
-      rgba(255, 255, 255, 0.10) 0%,
-      rgba(255, 255, 255, 0.02) 42%,
-      transparent 72%
+      ellipse 120% 100% at 0% 50%,
+      rgba(255, 255, 255, 0.07) 0%,
+      transparent 65%
     ),
-    rgba(255, 255, 255, 0.028);
+    rgba(255, 255, 255, 0.025);
   box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.10),
-    inset 0 -1px 0 rgba(0, 0, 0, 0.20),
-    0 6px 18px rgba(0, 0, 0, 0.28);
+    inset 0 1px 0 rgba(255, 255, 255, 0.09),
+    0 4px 12px rgba(0, 0, 0, 0.22);
   overflow: hidden;
   isolation: isolate;
   transition:
@@ -2308,25 +2296,25 @@
   content: '';
   position: absolute;
   inset: 0;
-  opacity: 0.16;
+  opacity: 0.14;
   pointer-events: none;
   z-index: -1;
 }
 
 .rh-home-shortcut--mix-daily::before {
   background:
-    radial-gradient(circle at 22% 18%, #fff 0 1px, transparent 2px),
-    radial-gradient(circle at 78% 24%, #fff 0 1px, transparent 2px),
-    linear-gradient(135deg, transparent 40%, rgba(255, 255, 255, 0.12) 100%);
+    radial-gradient(circle at 12% 50%, #fff 0 1px, transparent 2px),
+    radial-gradient(circle at 28% 28%, #fff 0 0.8px, transparent 1.5px),
+    linear-gradient(90deg, rgba(255, 255, 255, 0.10) 0%, transparent 60%);
 }
 
 .rh-home-shortcut--mix-weekly::before {
   background:
     repeating-radial-gradient(
-      circle at 50% 38%,
-      transparent 0 7px,
-      rgba(255, 255, 255, 0.14) 7px 8px,
-      transparent 8px 16px
+      circle at 10% 50%,
+      transparent 0 5px,
+      rgba(255, 255, 255, 0.18) 5px 6px,
+      transparent 6px 12px
     );
 }
 
@@ -2334,99 +2322,105 @@
   background:
     linear-gradient(
       90deg,
-      transparent 0 18%,
-      rgba(255, 255, 255, 0.10) 18% 22%,
-      transparent 22% 38%,
-      rgba(255, 255, 255, 0.08) 38% 42%,
-      transparent 42% 58%,
-      rgba(255, 255, 255, 0.12) 58% 62%,
-      transparent 62% 100%
+      rgba(255, 255, 255, 0.12) 0 14%,
+      transparent 14% 26%,
+      rgba(255, 255, 255, 0.09) 26% 38%,
+      transparent 38% 50%,
+      rgba(255, 255, 255, 0.07) 50% 60%,
+      transparent 60% 100%
     );
 }
 
 .rh-home-shortcut--mix-trending::before {
   background:
     linear-gradient(
-      125deg,
-      transparent 35%,
-      rgba(255, 255, 255, 0.14) 50%,
-      transparent 65%
+      105deg,
+      transparent 30%,
+      rgba(255, 255, 255, 0.16) 50%,
+      transparent 70%
     );
 }
 
 .rh-home-shortcut--mix-forgotten::before {
   background:
-    radial-gradient(circle, rgba(255, 255, 255, 0.16) 1px, transparent 1.5px);
-  background-size: 10px 10px;
-  mask-image: radial-gradient(circle at 50% 50%, #000, transparent 72%);
-  -webkit-mask-image: radial-gradient(circle at 50% 50%, #000, transparent 72%);
+    radial-gradient(circle, rgba(255, 255, 255, 0.18) 1px, transparent 1.5px);
+  background-size: 8px 8px;
+  mask-image: linear-gradient(90deg, #000 0%, transparent 50%);
+  -webkit-mask-image: linear-gradient(90deg, #000 0%, transparent 50%);
 }
 
 .rh-home-shortcut--mix-personal::before {
   background:
-    radial-gradient(circle at 18% 28%, rgba(255, 255, 255, 0.18) 0 2px, transparent 3px),
-    radial-gradient(circle at 72% 22%, rgba(255, 255, 255, 0.14) 0 1.5px, transparent 2.5px),
-    radial-gradient(circle at 84% 68%, rgba(255, 255, 255, 0.12) 0 1px, transparent 2px);
+    radial-gradient(circle at 10% 50%, rgba(255, 255, 255, 0.20) 0 2px, transparent 3px),
+    radial-gradient(circle at 22% 25%, rgba(255, 255, 255, 0.14) 0 1.5px, transparent 2.5px),
+    radial-gradient(circle at 18% 75%, rgba(255, 255, 255, 0.12) 0 1px, transparent 2px);
 }
 
 .rh-home-shortcut__frame {
+  flex-shrink: 0;
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 52px;
-  height: 52px;
-  border-radius: 14px;
-  border: 1px solid rgba(255, 255, 255, 0.14);
+  width: 40px;
+  height: 40px;
+  border-radius: 11px;
+  border: 1px solid rgba(255, 255, 255, 0.13);
   background:
     linear-gradient(
-      180deg,
-      rgba(255, 255, 255, 0.18) 0%,
+      160deg,
+      rgba(255, 255, 255, 0.16) 0%,
       rgba(255, 255, 255, 0.04) 100%
     );
   box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.24),
-    inset 0 -1px 0 rgba(0, 0, 0, 0.22),
-    0 4px 10px rgba(0, 0, 0, 0.28);
-}
-
-.rh-home-shortcut__glyph {
-  display: flex;
-  align-items: center;
-  justify-content: center;
+    inset 0 1px 0 rgba(255, 255, 255, 0.22),
+    inset 0 -1px 0 rgba(0, 0, 0, 0.18),
+    0 3px 8px rgba(0, 0, 0, 0.24);
   color: var(--text);
 }
 
 .rh-home-shortcut__label {
-  width: 100%;
-  font-size: var(--fs-12);
+  flex: 1;
+  min-width: 0;
+  font-size: var(--fs-13);
   font-weight: 650;
   line-height: var(--lh-tight);
   letter-spacing: var(--ls-snug);
   color: var(--text);
-  text-align: center;
-  display: -webkit-box;
-  -webkit-line-clamp: 2;
-  -webkit-box-orient: vertical;
+  text-align: left;
+  white-space: nowrap;
   overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.rh-home-shortcut__arrow {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-secondary);
+  opacity: 0.5;
 }
 
 .rh-home-shortcut:active {
   transform: scale(0.985);
-  border-color: rgba(255, 255, 255, 0.20);
+  border-color: rgba(255, 255, 255, 0.18);
 }
 
 @media (hover: hover) and (pointer: fine) {
   .rh-home-shortcut:hover {
-    transform: translateY(-2px);
-    border-color: rgba(255, 255, 255, 0.18);
+    transform: translateY(-1px);
+    border-color: rgba(255, 255, 255, 0.16);
     background:
       radial-gradient(
-        120% 120% at 0% 0%,
-        rgba(255, 255, 255, 0.14) 0%,
-        rgba(255, 255, 255, 0.03) 44%,
-        transparent 74%
+        ellipse 120% 100% at 0% 50%,
+        rgba(255, 255, 255, 0.10) 0%,
+        transparent 65%
       ),
-      rgba(255, 255, 255, 0.04);
+      rgba(255, 255, 255, 0.038);
+  }
+
+  .rh-home-shortcut:hover .rh-home-shortcut__arrow {
+    opacity: 0.75;
   }
 }
 

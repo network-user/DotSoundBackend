@@ -942,7 +942,7 @@ async def admin_import_artist_by_sc_url(
     "/station-gap",
     response_model=AdminStationGapResponse,
 )
-@limiter.limit("30/minute")
+@limiter.limit("120/minute")
 async def admin_artists_station_gap(
     request: Request,
     min_tracks: int = Query(10, ge=0, le=200),

@@ -424,6 +424,7 @@
       "idsPlaceholder": "101\n102\n103",
       "enqueueDone": "В очередь: {{enqueued}} (запрошено {{requested}}, пропущено {{skipped}}).",
       "loadFailed": "Не удалось загрузить очередь",
+      "migrationRequired": "Нужна миграция БД: выполните alembic upgrade head (ревизия 0119 — request_align_existing_text)",
       "statQueued": "В очереди: {{count}}",
       "statRunning": "В работе: {{count}}",
       "statCandidates": "Ожидают постановки: {{count}}",

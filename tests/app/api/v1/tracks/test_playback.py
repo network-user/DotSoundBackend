@@ -304,7 +304,7 @@ async def test_video_proxy_supports_range_requests(
     )
     assert r.content == video_chunk
     assert r.headers["content-range"] == "bytes 0-3/104"
-    assert r.headers["content-length"] == str(len(video_chunk))
+    assert "content-length" not in r.headers
     assert (
         r.headers["cache-control"]
         == "public, max-age=31536000, immutable"
@@ -549,6 +549,22 @@ async def test_http_proxy_range_get_uses_streaming_egress_pool() -> None:
     finally:
         _settings.streaming_proxy_out_urls = original
         pool.reset_for_tests()
+
+
+async def test_asserted_body_stream_raises_on_short_s3_read() -> None:
+    from app.api.v1.tracks import playback as mod
+
+    async def _short() -> AsyncIterator[bytes]:
+        yield b"ab"
+
+    with pytest.raises(RuntimeError, match="s3_upstream_stream_short"):
+        async for _ in mod._asserted_body_stream(
+            _short(),
+            expected_bytes=5,
+            event_short="s3_upstream_stream_short",
+            file_key="audio/x.mp3",
+        ):
+            pass
 
 
 async def test_soundcloud_hls_stream_and_audio_redirect(

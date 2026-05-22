@@ -266,6 +266,27 @@ export function AuthScreen({
           {t('auth.loginEmail')}
         </MotionPress>
         <p className="auth-microcopy auth-microcopy--muted">
+          Продолжая, вы принимаете{' '}
+          <a
+            href={`${import.meta.env.BASE_URL}legal/terms`}
+            target="_blank"
+            rel="noopener noreferrer"
+          >
+            Условия использования
+          </a>
+          {' и '}
+          <a
+            href={
+              `${import.meta.env.BASE_URL}legal/privacy`
+            }
+            target="_blank"
+            rel="noopener noreferrer"
+          >
+            Политику конфиденциальности
+          </a>
+          . Сервис 18+.
+        </p>
+        <p className="auth-microcopy auth-microcopy--muted">
           {t('auth.afterLogin')}
         </p>
         {error && (

@@ -2,7 +2,7 @@
 
 from collections.abc import Sequence
 from datetime import UTC, datetime, timedelta
-from typing import Any, Literal
+from typing import Any, Literal, NoReturn
 
 import structlog
 from fastapi import (
@@ -18,6 +18,7 @@ from fastapi import (
 )
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.config import settings
 from app.core.rate_limit import limiter
 from app.dependencies import (
     get_db,
@@ -74,6 +75,7 @@ from .schemas import (
     LyricsBatchPromptResponse,
     LyricsTimecodeSyncEnqueueRequest,
     LyricsTimecodeSyncEnqueueResponse,
+    LyricsTimecodeSyncOverviewResponse,
     LyricsTimecodeSyncPriorityRequest,
     SinglePromptResponse,
     TrackContextResponse,
@@ -84,6 +86,53 @@ router = APIRouter()
 logger: structlog.stdlib.BoundLogger = structlog.get_logger(__name__)
 
 _MAX_COVER_BYTES = 5 * 1024 * 1024
+
+
+def _timecode_sync_schema_missing(exc: BaseException) -> bool:
+    parts = [str(exc).lower()]
+    orig = getattr(exc, "orig", None)
+    if orig is not None:
+        parts.append(str(orig).lower())
+    cause = getattr(exc, "__cause__", None)
+    if cause is not None:
+        parts.append(str(cause).lower())
+    combined = " ".join(parts)
+    return "request_align_existing_text" in combined and (
+        "undefinedcolumn" in combined
+        or "does not exist" in combined
+        or "no such column" in combined
+    )
+
+
+def _raise_timecode_sync_http(
+    exc: Exception,
+    *,
+    operation: str,
+) -> NoReturn:
+    if _timecode_sync_schema_missing(exc):
+        logger.error(
+            "admin_timecode_sync_schema_missing",
+            operation=operation,
+            migration_revision="0119",
+        )
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="migration_0119_required",
+        ) from exc
+    detail = "timecode_sync_internal_error"
+    if settings.debug:
+        detail = f"{detail}: {type(exc).__name__}: {exc}"
+    logger.exception(
+        "admin_timecode_sync_failed",
+        operation=operation,
+        error_type=type(exc).__name__,
+    )
+    raise HTTPException(
+        status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+        detail=detail,
+    ) from exc
+
+
 _ALLOWED_COVER_CT = frozenset(
     {
         "image/jpeg",
@@ -1044,6 +1093,7 @@ async def admin_batch_lyrics_import(
 
 @router.get(
     "/tracks/lyrics-timecode-sync/queue",
+    response_model=LyricsTimecodeSyncOverviewResponse,
     summary="[Admin] Timecode-align job queue snapshot",
 )
 async def admin_lyrics_timecode_sync_queue(
@@ -1059,15 +1109,35 @@ async def admin_lyrics_timecode_sync_queue(
     ),
     session: AsyncSession = Depends(get_db),
     admin: User = Depends(require_admin_session),
-) -> dict[str, Any]:
+) -> LyricsTimecodeSyncOverviewResponse:
     since: datetime | None = None
     if since_hours is not None:
         since = datetime.now(UTC) - timedelta(hours=int(since_hours))
     requested_by = admin.id if mine else None
-    return await AdminLyricsTimecodeSyncService(session).get_overview(
-        requested_by_user_id=requested_by,
-        since=since,
-    )
+    try:
+        out = await AdminLyricsTimecodeSyncService(
+            session
+        ).get_overview(
+            requested_by_user_id=requested_by,
+            since=since,
+        )
+    except HTTPException:
+        raise
+    except Exception as exc:
+        _raise_timecode_sync_http(exc, operation="queue")
+    try:
+        return LyricsTimecodeSyncOverviewResponse.model_validate(
+            out
+        )
+    except Exception as exc:
+        logger.exception(
+            "admin_timecode_sync_response_invalid",
+            error_type=type(exc).__name__,
+        )
+        _raise_timecode_sync_http(
+            exc,
+            operation="queue_response",
+        )
 
 
 @router.post(
@@ -1090,12 +1160,17 @@ async def admin_lyrics_timecode_sync_enqueue(
             status_code=400,
             detail="track_ids_or_enqueue_all_required",
         )
-    out = await AdminLyricsTimecodeSyncService(session).enqueue(
-        admin,
-        track_ids=body.track_ids or None,
-        enqueue_all_unsynced=body.enqueue_all_unsynced,
-        limit=body.limit,
-    )
+    try:
+        out = await AdminLyricsTimecodeSyncService(session).enqueue(
+            admin,
+            track_ids=body.track_ids or None,
+            enqueue_all_unsynced=body.enqueue_all_unsynced,
+            limit=body.limit,
+        )
+    except HTTPException:
+        raise
+    except Exception as exc:
+        _raise_timecode_sync_http(exc, operation="enqueue")
     return LyricsTimecodeSyncEnqueueResponse(**out)
 
 
@@ -1126,6 +1201,10 @@ async def admin_lyrics_timecode_sync_priority(
             status_code=400,
             detail=str(exc),
         ) from exc
+    except HTTPException:
+        raise
+    except Exception as exc:
+        _raise_timecode_sync_http(exc, operation="priority")
     if not out:
         raise HTTPException(status_code=404, detail="job_not_found")
     return out
@@ -1140,9 +1219,14 @@ async def admin_lyrics_timecode_sync_cancel(
     session: AsyncSession = Depends(get_db),
     _admin: User = Depends(require_admin_session),
 ) -> dict[str, Any]:
-    out = await AdminLyricsTimecodeSyncService(session).cancel_job(
-        job_id
-    )
+    try:
+        out = await AdminLyricsTimecodeSyncService(
+            session
+        ).cancel_job(job_id)
+    except HTTPException:
+        raise
+    except Exception as exc:
+        _raise_timecode_sync_http(exc, operation="cancel")
     if out is None:
         raise HTTPException(status_code=404, detail="job_not_found")
     return out

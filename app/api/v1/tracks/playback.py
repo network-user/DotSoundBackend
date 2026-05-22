@@ -1,5 +1,6 @@
 """Track playback endpoints — stream URL, play count, cover, single track."""
 
+import asyncio
 import contextlib
 import json
 import time
@@ -311,6 +312,52 @@ def _get_audio_proxy_client(proxy_url: str | None) -> httpx.AsyncClient:
     return client
 
 
+def _proxy_expected_body_bytes(
+    *,
+    content_range: str | None,
+    content_length_header: str | None,
+) -> int | None:
+    if content_length_header:
+        try:
+            parsed = int(content_length_header.strip())
+            if parsed >= 0:
+                return parsed
+        except ValueError:
+            pass
+    if not content_range:
+        return None
+    try:
+        span, _total = content_range.split("/", 1)
+        start_s, end_s = span.replace("bytes ", "").split("-", 1)
+        return int(end_s) - int(start_s) + 1
+    except (ValueError, AttributeError):
+        return None
+
+
+async def _asserted_body_stream(
+    source: AsyncIterator[bytes],
+    *,
+    expected_bytes: int | None,
+    event_short: str,
+    **log_ctx: object,
+) -> AsyncIterator[bytes]:
+    sent = 0
+    try:
+        async for chunk in source:
+            sent += len(chunk)
+            yield chunk
+        if expected_bytes is not None and sent < expected_bytes:
+            logger.warning(
+                event_short,
+                bytes_sent=sent,
+                expected_bytes=expected_bytes,
+                **log_ctx,
+            )
+            raise RuntimeError(event_short)
+    except asyncio.CancelledError:
+        raise
+
+
 async def _http_proxy_range_get(
     request: Request,
     stream_url: str,
@@ -506,16 +553,44 @@ async def _http_proxy_range_get(
     if cr := resp.headers.get("content-range"):
         out_h["Content-Range"] = cr
 
+    expected_body_bytes = _proxy_expected_body_bytes(
+        content_range=out_h.get("Content-Range"),
+        content_length_header=resp.headers.get("content-length"),
+    )
+
     async def body_iter() -> AsyncIterator[bytes]:
         upstream_error = False
+        sent = 0
         try:
             async for chunk in resp.aiter_bytes(65536):
+                sent += len(chunk)
                 yield chunk
+            if (
+                expected_body_bytes is not None
+                and sent < expected_body_bytes
+            ):
+                upstream_error = True
+                logger.warning(
+                    "proxy_upstream_stream_short",
+                    bytes_sent=sent,
+                    expected_bytes=expected_body_bytes,
+                    streaming_egress=(
+                        streaming_decision.egress_name
+                        if streaming_decision
+                        else None
+                    ),
+                    outbound_proxied=bool(out_proxy),
+                )
+                raise RuntimeError("proxy_upstream_stream_short")
+        except asyncio.CancelledError:
+            raise
         except httpx.HTTPError as exc:
             upstream_error = True
             logger.warning(
                 "proxy_upstream_stream_interrupted",
                 error=str(exc),
+                bytes_sent=sent,
+                expected_bytes=expected_body_bytes,
                 streaming_egress=(
                     streaming_decision.egress_name
                     if streaming_decision
@@ -523,6 +598,7 @@ async def _http_proxy_range_get(
                 ),
                 outbound_proxied=bool(out_proxy),
             )
+            raise
         finally:
             if streaming_decision is not None:
                 from app.services.streaming_egress_pool import (
@@ -735,7 +811,6 @@ async def _stream_s3_audio_object(
         )
 
     headers = dict(base_headers)
-    headers["Content-Length"] = str(meta.content_length)
     if meta.content_range:
         headers["Content-Range"] = meta.content_range
 
@@ -745,7 +820,12 @@ async def _stream_s3_audio_object(
         else status.HTTP_200_OK
     )
     return StreamingResponse(
-        body_iter,
+        _asserted_body_stream(
+            body_iter,
+            expected_bytes=meta.content_length,
+            event_short="s3_upstream_stream_short",
+            file_key=file_key,
+        ),
         status_code=http_status,
         media_type=meta.content_type or fallback_media_type,
         headers=headers,
@@ -1539,7 +1619,6 @@ async def video_proxy(
     headers: dict[str, str] = {
         "Accept-Ranges": meta.accept_ranges or "bytes",
         "Cache-Control": _video_cache_control(video_key),
-        "Content-Length": str(meta.content_length),
     }
     if meta.content_range:
         headers["Content-Range"] = meta.content_range
@@ -1554,7 +1633,12 @@ async def video_proxy(
         else status.HTTP_200_OK
     )
     return StreamingResponse(
-        body_iter,
+        _asserted_body_stream(
+            body_iter,
+            expected_bytes=meta.content_length,
+            event_short="s3_upstream_stream_short",
+            file_key=video_key,
+        ),
         status_code=http_status,
         media_type=_video_media_type(video_key, meta.content_type),
         headers=headers,

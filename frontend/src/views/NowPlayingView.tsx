@@ -94,6 +94,7 @@ export function NowPlayingView() {
     openCard,
     toggleShuffle,
     toggleRepeat,
+    getPreciseTime,
   } = usePlayerActions()
   const desktopFineNav = useDesktopFinePointer()
   const goArtistByName = useNavigateToArtistByName()
@@ -571,28 +572,72 @@ export function NowPlayingView() {
           >
             <Icon name="skip-back" size={28} />
           </MotionPress>
-          <MotionPress
-            variant="icon"
-            className="rp-now__ctl-play"
-            ariaLabel={
-              isPlaying
-                ? t('redesign.player.pauseAria')
-                : t('redesign.player.playAria')
-            }
-            haptic="medium"
-            onClick={() => togglePlay()}
-          >
-            <BeatPulse
-              bpm={tabBpm}
-              active={isPlaying}
+          <div className="rp-now__ctl-center">
+            <MotionPress
+              variant="icon"
+              ariaLabel={t(
+                'redesign.player.seekBack10Aria',
+              )}
+              haptic="light"
+              className="rp-now__ctl-seek10"
+              onClick={() => {
+                const t0 = getPreciseTime()
+                seek(
+                  Math.max(
+                    0,
+                    duration > 0
+                      ? ((t0 - 10) / duration) * 100
+                      : 0,
+                  ),
+                )
+              }}
             >
-              <MorphIcon
-                name="play"
-                filled={isPlaying}
-                size={28}
-              />
-            </BeatPulse>
-          </MotionPress>
+              <Icon name="rewind-10" size={26} />
+            </MotionPress>
+            <MotionPress
+              variant="icon"
+              className="rp-now__ctl-play"
+              ariaLabel={
+                isPlaying
+                  ? t('redesign.player.pauseAria')
+                  : t('redesign.player.playAria')
+              }
+              haptic="medium"
+              onClick={() => togglePlay()}
+            >
+              <BeatPulse
+                bpm={tabBpm}
+                active={isPlaying}
+              >
+                <MorphIcon
+                  name="play"
+                  filled={isPlaying}
+                  size={28}
+                />
+              </BeatPulse>
+            </MotionPress>
+            <MotionPress
+              variant="icon"
+              ariaLabel={t(
+                'redesign.player.seekForward10Aria',
+              )}
+              haptic="light"
+              className="rp-now__ctl-seek10"
+              onClick={() => {
+                const t0 = getPreciseTime()
+                seek(
+                  Math.min(
+                    100,
+                    duration > 0
+                      ? ((t0 + 10) / duration) * 100
+                      : 0,
+                  ),
+                )
+              }}
+            >
+              <Icon name="forward-10" size={26} />
+            </MotionPress>
+          </div>
           <MotionPress
             variant="icon"
             ariaLabel={t(

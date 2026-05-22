@@ -10,6 +10,7 @@ import type { ColumnDef } from '@tanstack/react-table'
 import { MotionPress } from '@/components/ui/MotionPress'
 import {
   adminApi,
+  AdminApiError,
   type LyricsTimecodeSyncJob,
 } from '../lib/adminApi'
 import { DataTable } from '../components/widgets/DataTable'
@@ -476,6 +477,19 @@ export function TimecodeSyncRoute() {
           {queue.isError && (
             <p className="admin-error" role="alert">
               {t('admin.timecodeSync.loadFailed')}
+              {queue.error instanceof AdminApiError && (
+                <>
+                  {' '}
+                  <span className="admin-card__sub">
+                    {queue.error.detail ===
+                    'migration_0119_required'
+                      ? t(
+                          'admin.timecodeSync.migrationRequired',
+                        )
+                      : queue.error.detail}
+                  </span>
+                </>
+              )}
             </p>
           )}
           <section className="admin-card">

@@ -1070,10 +1070,10 @@ export function PlaylistsView({
             />
           ) : (
             <div
-              className="rd-pl-cover rd-pl-cover-hero-img"
+              className="rd-pl-cover rd-pl-cover-hero-img rd-pl-cover--hero-empty"
               aria-hidden
             >
-              <Icon name="list" size={40} />
+              <Icon name="disc" size={48} />
             </div>
           )}
           {canEditSelected ? (
@@ -1608,7 +1608,9 @@ export function PlaylistsView({
                         loading="lazy"
                       />
                     ) : (
-                      <Icon name="list" size={36} />
+                      <div className="rd-pl-cover-fallback" aria-hidden>
+                        <Icon name="disc" size={32} />
+                      </div>
                     )}
                   </div>
                   <div className="rd-pl-info">
@@ -1707,7 +1709,9 @@ export function PlaylistsView({
                         loading="lazy"
                       />
                     ) : (
-                      <Icon name="list" size={36} />
+                      <div className="rd-pl-cover-fallback" aria-hidden>
+                        <Icon name="disc" size={32} />
+                      </div>
                     )}
                   </div>
                   <div className="rd-pl-info">

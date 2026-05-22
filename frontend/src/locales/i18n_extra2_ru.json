@@ -8,6 +8,8 @@
       "tabLyrics": "Текст",
       "tabQueue": "Очередь",
       "seekAria": "Перемотка",
+      "seekBack10Aria": "Назад на 10 секунд",
+      "seekForward10Aria": "Вперёд на 10 секунд",
       "prevAria": "Предыдущий трек",
       "nextAria": "Следующий трек",
       "playAria": "Воспроизвести",

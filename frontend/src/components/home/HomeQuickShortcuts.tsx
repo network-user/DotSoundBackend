@@ -2,7 +2,7 @@ import { memo, useCallback } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useNavigate } from 'react-router-dom'
 import { HomeMixShortcutIcon } from '@/components/home/HomeMixShortcutIcon'
-import { HorizontalSnap } from '@/components/ui/HorizontalSnap'
+import { Icon } from '@/components/Icon/Icon'
 import { MotionPress } from '@/components/ui/MotionPress'
 import {
   HOME_QUICK_VISIBLE_COUNT,
@@ -30,11 +30,12 @@ function ShortcutTile({
       onClick={() => onActivate(item.path)}
     >
       <span className="rh-home-shortcut__frame" aria-hidden>
-        <span className="rh-home-shortcut__glyph">
-          <HomeMixShortcutIcon id={item.shortcutIcon} size={24} />
-        </span>
+        <HomeMixShortcutIcon id={item.shortcutIcon} size={22} />
       </span>
       <span className="rh-home-shortcut__label">{label}</span>
+      <span className="rh-home-shortcut__arrow" aria-hidden>
+        <Icon name="chevron-right" size={14} />
+      </span>
     </MotionPress>
   )
 }
@@ -59,10 +60,10 @@ export const HomeQuickShortcuts = memo(function HomeQuickShortcuts({
 
   return (
     <section
-      className="rh-home-shortcuts rh-home-shortcuts--deck"
+      className="rh-home-shortcuts"
       aria-label={t('redesign.home.shortcutsAria')}
     >
-      <div className="rh-home-shortcuts__intro">
+      <div className="rh-home-shortcuts__head">
         <span className="rh-home-shortcuts__eyebrow">
           {t('redesign.home.shortcutsEyebrow')}
         </span>
@@ -70,20 +71,16 @@ export const HomeQuickShortcuts = memo(function HomeQuickShortcuts({
           {t('redesign.home.shortcutsTitle')}
         </h2>
       </div>
-      <HorizontalSnap
-        items={tiles}
-        renderItem={(item) => (
+      <div className="rh-home-shortcuts-grid">
+        {tiles.map((item) => (
           <ShortcutTile
+            key={item.path}
             item={item}
             label={t(`redesign.home.${item.labelKey}`)}
             onActivate={handleActivate}
           />
-        )}
-        showArrows="never"
-        parallax={false}
-        className="rh-home-shortcuts-snap"
-        ariaLabel={t('redesign.home.shortcutsAria')}
-      />
+        ))}
+      </div>
     </section>
   )
 })

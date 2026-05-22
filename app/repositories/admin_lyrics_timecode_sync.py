@@ -110,7 +110,11 @@ class AdminLyricsTimecodeSyncRepository:
 
     async def max_queued_align_priority(self) -> int:
         result = await self._session.execute(
-            select(func.coalesce(func.max(LyricsJob.queue_priority), 0)).where(
+            select(
+                func.coalesce(func.max(LyricsJob.queue_priority), 0)
+            )
+            .select_from(LyricsJob)
+            .where(
                 LyricsJob.request_align_existing_text.is_(True),
                 LyricsJob.status == "queued",
             )

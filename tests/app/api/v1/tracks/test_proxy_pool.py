@@ -129,6 +129,40 @@ class _MultiChunkResp:
         return None
 
 
+class _Short206Resp:
+    status_code = 206
+    headers: dict[str, str] = {
+        "content-type": "audio/mpeg",
+        "content-range": "bytes 0-99/1000",
+        "content-length": "100",
+    }
+
+    async def aiter_bytes(self, _: int) -> AsyncIterator[bytes]:
+        yield b"short"
+
+    async def aclose(self) -> None:
+        return None
+
+
+def test_proxy_expected_body_bytes_from_range() -> None:
+    from app.api.v1.tracks import playback as mod
+
+    assert (
+        mod._proxy_expected_body_bytes(
+            content_range="bytes 10-19/500",
+            content_length_header=None,
+        )
+        == 10
+    )
+    assert (
+        mod._proxy_expected_body_bytes(
+            content_range=None,
+            content_length_header="42",
+        )
+        == 42
+    )
+
+
 def _make_fake_client(resp: object) -> SimpleNamespace:
     return SimpleNamespace(
         build_request=lambda *a, **kw: object(),
@@ -196,12 +230,45 @@ async def test_body_iter_reports_fail_on_upstream_http_error() -> None:
             detail_error="error",
             proxy_service="soundcloud",
         )
-        async for _ in resp.body_iterator:
-            pass
+        with pytest.raises(httpx.ReadError):
+            async for _ in resp.body_iterator:
+                pass
 
     mock_finish.assert_called_once()
     finish_kwargs = mock_finish.call_args.kwargs
     assert finish_kwargs["ok"] is False
+
+
+async def test_body_iter_raises_on_short_206_body() -> None:
+    from app.api.v1.tracks import playback as mod
+    from app.services.streaming_egress_pool import (
+        get_streaming_egress_pool,
+    )
+
+    fake_client = _make_fake_client(_Short206Resp())
+    pool = get_streaming_egress_pool()
+    pool.reset_for_tests()
+
+    with (
+        patch(
+            "app.api.v1.tracks.playback.httpx.AsyncClient",
+            return_value=fake_client,
+        ),
+        patch.object(pool, "finish", wraps=pool.finish) as mock_finish,
+    ):
+        resp = await mod._http_proxy_range_get(
+            SimpleNamespace(headers={}),  # type: ignore[arg-type]
+            "https://media.sndcdn.com/x.mp3",
+            detail_fail="fail",
+            detail_error="error",
+            proxy_service="soundcloud",
+        )
+        with pytest.raises(RuntimeError, match="proxy_upstream_stream_short"):
+            async for _ in resp.body_iterator:
+                pass
+
+    mock_finish.assert_called_once()
+    assert mock_finish.call_args.kwargs["ok"] is False
 
 
 async def test_body_iter_does_not_penalise_on_client_disconnect() -> None:

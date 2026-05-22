@@ -62,12 +62,28 @@ class AdminLyricsTimecodeSyncService:
         requested_by_user_id: int | None = None,
         since: datetime | None = None,
     ) -> dict[str, Any]:
-        jobs = await self._repo.list_align_jobs(
-            limit=250,
-            requested_by_user_id=requested_by_user_id,
-            since=since,
-        )
-        candidates = await self._repo.count_unsynced_candidates()
+        try:
+            jobs = await self._repo.list_align_jobs(
+                limit=250,
+                requested_by_user_id=requested_by_user_id,
+                since=since,
+            )
+        except Exception as exc:
+            logger.exception(
+                "admin_timecode_sync_list_jobs_failed",
+                requested_by_user_id=requested_by_user_id,
+                since=since.isoformat() if since else None,
+                error_type=type(exc).__name__,
+            )
+            raise
+        try:
+            candidates = await self._repo.count_unsynced_candidates()
+        except Exception as exc:
+            logger.exception(
+                "admin_timecode_sync_count_candidates_failed",
+                error_type=type(exc).__name__,
+            )
+            raise
         running = next(
             (j for j in jobs if j.status == "running"),
             None,
