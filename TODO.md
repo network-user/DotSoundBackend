@@ -1,5 +1,50 @@
 # DotSound - TODO Tracker
 
+- [x] **Radio anti-clumping + explicit follow + station-neighbor retrieval (2026-05-23)**
+  - PrivateCore `build_radio_queue` (`recommendation_engine.py`): seed-lock
+    больше не сортирует объединённый пул по score (что собирало familiars в
+    голове), а круговым обходом `unseen → favorite → similar → rediscovery`
+    интерливит классы с первого трека. В основном цикле добавлен anti-run
+    guard `max_consecutive_same_class` (default 2) — не больше двух треков
+    одного freshness-класса подряд, с двух-уровневой деградацией (сначала
+    отпускаем class-run, потом artist-cooldown).
+  - `RadioTuning.max_consecutive_same_class` добавлен с нормализацией в
+    `normalize_radio_tuning`.
+  - `UserPrefs.followed_artist_ids` — новое поле, отдельное от смешанного
+    `preferred_artist_ids`. `score_tracks_for_user` теперь даёт явный
+    `follow_s * 0.10` бонус (плюс `_artist_score` приоритетит follow). Веса
+    `genre/artist` чуть перебалансированы (0.24→0.22, 0.27→0.22) — общая
+    нормировка сохранена.
+  - `build_radio_queue` принимает `station_neighbor_track_ids` и прокидывает
+    в оба `select_similar_tracks` (similar + unseen_pool) — пересечения по
+    «станциям» артистов сида теперь работают и для радио.
+  - PrivateCore helper `interleave_personalized_by_familiarity` — для feed-
+    рекомендаций (Home «Для вас»), круговой round-robin seen/unseen с
+    `novelty_target` (default 0.35).
+  - Backend `_build_user_prefs` пробрасывает `followed_artist_ids` явно.
+  - Backend `get_radio` собирает station neighbors сида через существующий
+    `ArtistCatalogRepository.get_station_neighbor_track_ids_for_artists` и
+    отдаёт `frozenset` в `build_radio_queue`.
+  - Backend `get_home_sections` секция `personalized` — теперь через
+    `interleave_personalized_by_familiarity(scored, listened_ids,
+    target_size=20)`, а не топ-N по score.
+  - Тесты: `test_build_user_prefs_merges_behavioral_taste` расширен на
+    `followed_artist_ids`. Новые:
+    `test_get_radio_passes_station_neighbor_track_ids`,
+    `test_interleave_personalized_by_familiarity_avoids_clumping`,
+    `test_interleave_personalized_handles_only_unseen`,
+    `test_followed_artist_boost_outranks_learned_only`,
+    `test_build_radio_queue_no_long_class_run`.
+  - Проверки: ruff clean на `app/services/recommendation_service.py`,
+    `tests/app/services/test_recommendation_service.py`,
+    `recommendation_engine.py`; smoke-проверка функций PrivateCore напрямую
+    (интерлив `[1,2,7,3,4,8,5,6,9,10]`, radio classes
+    `[unseen,familiar,unseen,familiar,unseen,unseen,familiar,...]`).
+  - Кеш-инвалидация при деплое: `rec:radio:*` и `rec:home:*` в Redis
+    (TTL 30 мин / 10 мин), иначе пользователи будут видеть старые
+    клампленные очереди до истечения TTL.
+  - Требует sync-релиз DotSoundPrivateCore (новый kwarg + новое поле).
+
 - [x] **Cross-repo bug audit: playback and PrivateCore seams (2026-05-22)**
   - Track-card video playback now uses the same-origin
     `/api/v1/tracks/{id}/video` proxy URL directly instead of fetching the

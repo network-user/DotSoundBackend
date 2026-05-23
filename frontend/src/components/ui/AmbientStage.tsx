@@ -62,6 +62,31 @@ export function AmbientStage({
 
   const tones = palette?.tones ?? FALLBACK_TONES
 
+  if (perfLite) {
+    return (
+      <div
+        className={['ambient-stage', className]
+          .filter(Boolean)
+          .join(' ')}
+      >
+        <div
+          className="ambient-stage__layers"
+          aria-hidden="true"
+        >
+          <div
+            className="ambient-layer ambient-layer--a"
+            style={{
+              background: `radial-gradient(80% 70% at 50% 30%, ${tones[0]} 0%, ${tones[2]} 65%, transparent 100%)`,
+            }}
+          />
+        </div>
+        <div className="ambient-stage__content">
+          {children}
+        </div>
+      </div>
+    )
+  }
+
   return (
     <div
       className={['ambient-stage', className]

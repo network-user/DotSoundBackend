@@ -12,7 +12,7 @@
   --dh-overlay: rgba(0, 0, 0, 0.45);
   --dh-radius: 10px;
   --dh-radius-lg: 14px;
-  --dh-tile-size: 156px;
+  --dh-tile-size: 116px;
   --dh-ease: cubic-bezier(0.32, 0.72, 0, 1);
   --dh-dur: 220ms;
   position: relative;
@@ -29,14 +29,14 @@
   .dh-home {
     --dh-pad: 28px;
     --dh-gap: 40px;
-    --dh-tile-size: 184px;
+    --dh-tile-size: 140px;
   }
 }
 
 @media (min-width: 1200px) {
   .dh-home {
     --dh-pad: 40px;
-    --dh-tile-size: 196px;
+    --dh-tile-size: 148px;
   }
 }
 
@@ -58,8 +58,7 @@
   border-bottom: 1px solid transparent;
   transition:
     background var(--dh-dur) var(--dh-ease),
-    border-color var(--dh-dur) var(--dh-ease),
-    backdrop-filter var(--dh-dur) var(--dh-ease);
+    border-color var(--dh-dur) var(--dh-ease);
 }
 
 .dh-topbar.is-stuck {
@@ -442,7 +441,7 @@
 
 .dh-scroller {
   display: flex;
-  gap: 14px;
+  gap: 12px;
   overflow-x: auto;
   overflow-y: hidden;
   padding: 4px var(--dh-pad);
@@ -464,7 +463,7 @@
 
 @media (min-width: 768px) {
   .dh-scroller {
-    gap: 18px;
+    gap: 14px;
   }
 }
 
@@ -473,7 +472,7 @@
 .dh-tile {
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 8px;
   width: var(--dh-tile-size);
   background: none;
   border: none;
@@ -562,7 +561,7 @@
 
 .dh-tile__title {
   margin: 0;
-  font-size: 14px;
+  font-size: 13px;
   font-weight: 510;
   letter-spacing: -0.012em;
   line-height: 1.3;
@@ -574,7 +573,7 @@
 
 .dh-tile__artist {
   margin: 0;
-  font-size: 13px;
+  font-size: 12px;
   font-weight: 400;
   letter-spacing: -0.005em;
   line-height: 1.3;
@@ -597,7 +596,7 @@
 .dh-mix {
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 8px;
   width: var(--dh-tile-size);
   background: none;
   border: none;
@@ -662,7 +661,7 @@
 
 .dh-mix__title {
   margin: 0;
-  font-size: 14px;
+  font-size: 13px;
   font-weight: 590;
   letter-spacing: -0.012em;
   line-height: 1.3;
@@ -675,7 +674,7 @@
 
 .dh-mix__count {
   margin: 0;
-  font-size: 13px;
+  font-size: 12px;
   font-weight: 400;
   letter-spacing: -0.005em;
   line-height: 1.3;
@@ -727,8 +726,8 @@
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 10px;
-  width: 96px;
+  gap: 8px;
+  width: 72px;
   background: none;
   border: none;
   padding: 0;
@@ -745,8 +744,8 @@
 
 .dh-artist__avatar {
   position: relative;
-  width: 88px;
-  height: 88px;
+  width: 64px;
+  height: 64px;
   border-radius: 50%;
   overflow: hidden;
   background: var(--surface);
@@ -780,13 +779,13 @@
 }
 
 .dh-artist__name {
-  font-size: 13px;
+  font-size: 12px;
   font-weight: 510;
   letter-spacing: -0.005em;
   line-height: 1.25;
   color: var(--text);
   text-align: center;
-  max-width: 96px;
+  max-width: 72px;
   overflow: hidden;
   text-overflow: ellipsis;
   display: -webkit-box;
@@ -927,8 +926,8 @@
 }
 
 .dh-skel--avatar {
-  width: 88px;
-  height: 88px;
+  width: 64px;
+  height: 64px;
   border-radius: 50%;
 }
 

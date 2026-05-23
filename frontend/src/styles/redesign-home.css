@@ -30,8 +30,7 @@
   border-bottom: 1px solid transparent;
   transition:
     background var(--dur-med) var(--ease-soft),
-    border-color var(--dur-med) var(--ease-soft),
-    backdrop-filter var(--dur-med) var(--ease-soft);
+    border-color var(--dur-med) var(--ease-soft);
 }
 
 .rh-home-header.is-stuck {

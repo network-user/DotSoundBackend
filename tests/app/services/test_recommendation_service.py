@@ -4,7 +4,14 @@ from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
-from dotsound_private_core.services.recommendation_engine import UserPrefs
+from dotsound_private_core.services.recommendation_engine import (
+    ScoredTrack,
+    TrackFeatures,
+    UserPrefs,
+    build_radio_queue,
+    interleave_personalized_by_familiarity,
+    score_tracks_for_user,
+)
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.services.recommendation_service import (
@@ -115,6 +122,7 @@ async def test_build_user_prefs_merges_behavioral_taste(
 
     assert prefs.preferred_genres == ["ambient", "rock"]
     assert prefs.preferred_artist_ids == [7, 99, 42]
+    assert prefs.followed_artist_ids == [99]
     assert prefs.behavior_genre_weights["rock"] == 1.0
     assert prefs.behavior_artist_weights[42] == 1.0
     svc._catalog_repo.get_similar_artist_recommendation_signals.assert_awaited_once_with(
@@ -650,3 +658,202 @@ async def test_get_genre_mixes_cache_hit_uses_single_batch_fetch(
     assert len(result) == 2
     assert [t.id for t in result[0]["tracks"]] == [1, 2]
     assert [t.id for t in result[1]["tracks"]] == [3, 4]
+
+
+async def test_get_radio_passes_station_neighbor_track_ids(
+    session: AsyncSession,
+) -> None:
+    seed = SimpleNamespace(
+        id=5,
+        access_mode="internal_stream",
+        file_key="seed.mp3",
+        hls_manifest_key=None,
+        playback_suppressed_until=None,
+        playback_recovery_failed_at=None,
+        genre=None,
+    )
+    candidate = SimpleNamespace(
+        id=21,
+        access_mode="internal_stream",
+        file_key="c.mp3",
+        hls_manifest_key=None,
+        playback_suppressed_until=None,
+        playback_recovery_failed_at=None,
+    )
+    feat_seed = SimpleNamespace(track_id=5)
+    feat_candidate = SimpleNamespace(track_id=21)
+    scored = [SimpleNamespace(track_id=21)]
+
+    mock_track_repo = AsyncMock()
+    mock_track_repo.get_by_id = AsyncMock(return_value=seed)
+
+    mock_artist_repo = AsyncMock()
+    mock_artist_repo.get_track_artists = AsyncMock(
+        return_value=[SimpleNamespace(id=900)]
+    )
+
+    captured: dict[str, object] = {}
+
+    def fake_build_radio_queue(
+        _seed: object,
+        _history: list[object],
+        _candidates: list[object],
+        _queue_size: int,
+        **kwargs: object,
+    ) -> list[object]:
+        captured["station_neighbor_track_ids"] = kwargs.get(
+            "station_neighbor_track_ids"
+        )
+        return scored
+
+    with (
+        patch(
+            "app.repositories.track.TrackRepository",
+            return_value=mock_track_repo,
+        ),
+        patch(
+            "app.repositories.artist.ArtistRepository",
+            return_value=mock_artist_repo,
+        ),
+        patch(
+            f"{_MOD}.build_radio_queue",
+            side_effect=fake_build_radio_queue,
+        ),
+    ):
+        svc = RecommendationService(session)
+        svc._rec_repo.get_candidate_tracks = AsyncMock(
+            return_value=[candidate]
+        )
+        svc._rec_repo.get_track_similarity_candidates = AsyncMock(
+            return_value=[]
+        )
+        svc._embedding_repo.find_neighbors = AsyncMock(return_value=[])
+        svc._catalog_repo.get_station_neighbor_track_ids_for_artists = (
+            AsyncMock(return_value=[101, 102, 103])
+        )
+        svc._tracks_to_features = AsyncMock(
+            return_value=[feat_seed, feat_candidate]
+        )
+
+        result = await svc.get_radio(seed_track_id=5, user_id=None)
+
+    assert [t.id for t in result] == [21]
+    svc._catalog_repo.get_station_neighbor_track_ids_for_artists.assert_awaited_once_with(
+        [900],
+        exclude_track_ids=frozenset({5}),
+        limit=200,
+    )
+    assert captured["station_neighbor_track_ids"] == frozenset(
+        {101, 102, 103}
+    )
+
+
+def test_interleave_personalized_by_familiarity_avoids_clumping() -> None:
+    scored = [
+        ScoredTrack(track_id=i, score=1.0 - i * 0.01)
+        for i in range(1, 11)
+    ]
+    listened = {1, 2, 3, 4, 5, 6}
+
+    out = interleave_personalized_by_familiarity(
+        scored, listened, target_size=10, novelty_target=0.35
+    )
+
+    ids = [s.track_id for s in out]
+    assert set(ids) == {i for i in range(1, 11)}
+    assert ids[0] in listened
+    unseen_positions = [
+        idx for idx, tid in enumerate(ids) if tid not in listened
+    ]
+    assert unseen_positions
+    assert unseen_positions[0] <= 3
+
+
+def test_interleave_personalized_handles_only_unseen() -> None:
+    scored = [
+        ScoredTrack(track_id=i, score=1.0 - i * 0.01)
+        for i in range(1, 6)
+    ]
+    out = interleave_personalized_by_familiarity(
+        scored, set(), target_size=5
+    )
+    assert [s.track_id for s in out] == [1, 2, 3, 4, 5]
+
+
+def test_build_radio_queue_no_long_class_run() -> None:
+    seed = TrackFeatures(
+        track_id=1,
+        genre="rock",
+        artist_ids=[100],
+    )
+
+    def _feat(tid: int, artist: int) -> TrackFeatures:
+        return TrackFeatures(
+            track_id=tid,
+            genre="rock",
+            artist_ids=[artist],
+            play_count=10,
+        )
+
+    familiar_pool = [_feat(tid, 200 + tid) for tid in range(10, 20)]
+    unseen_pool = [_feat(tid, 300 + tid) for tid in range(50, 60)]
+
+    queue = build_radio_queue(
+        seed,
+        listen_history=[],
+        candidates=familiar_pool,
+        queue_size=12,
+        unseen_candidates=unseen_pool,
+        liked_track_ids={tid for tid in range(10, 15)},
+    )
+
+    assert len(queue) > 0
+    classes: list[str] = []
+    for row in queue:
+        reasons = set(row.reason.split(",")) if row.reason else set()
+        if "unseen" in reasons:
+            classes.append("unseen")
+        elif "like" in reasons or "fav" in reasons:
+            classes.append("familiar")
+        elif "rediscovery" in reasons:
+            classes.append("rediscovery")
+        else:
+            classes.append("similar")
+
+    run = 1
+    for prev, curr in zip(classes, classes[1:], strict=False):
+        if prev == curr:
+            run += 1
+            assert run <= 3, (
+                f"freshness-class run too long: {classes}"
+            )
+        else:
+            run = 1
+
+
+def test_followed_artist_boost_outranks_learned_only() -> None:
+    followed = UserPrefs(
+        followed_artist_ids=[100],
+        preferred_artist_ids=[100, 200],
+    )
+    learned_only = UserPrefs(
+        preferred_artist_ids=[200],
+    )
+
+    track_followed = TrackFeatures(
+        track_id=1, genre="rock", artist_ids=[100]
+    )
+    track_learned = TrackFeatures(
+        track_id=2, genre="rock", artist_ids=[200]
+    )
+
+    scored_followed = score_tracks_for_user(
+        followed, [], [track_followed]
+    )
+    scored_learned = score_tracks_for_user(
+        learned_only, [], [track_learned]
+    )
+
+    assert scored_followed[0].score > scored_learned[0].score
+    assert "follow" in scored_followed[0].reason
+    assert "follow" not in scored_learned[0].reason

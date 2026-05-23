@@ -153,8 +153,8 @@ const DhTile = memo(function DhTile({ track, onPlay }: DhTileProps) {
           <img
             src={src}
             alt=""
-            width={196}
-            height={196}
+            width={148}
+            height={148}
             loading="lazy"
             decoding="async"
             onError={() => setCoverFailed(true)}
@@ -346,8 +346,8 @@ const DhArtistChip = memo(function DhArtistChip({
           <img
             src={src}
             alt=""
-            width={88}
-            height={88}
+            width={64}
+            height={64}
             loading="lazy"
             decoding="async"
             onError={() => setFailed(true)}

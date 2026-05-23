@@ -234,14 +234,32 @@
 
 html.ds-perf-lite,
 body.ds-perf-lite {
-  --glass-blur-soft: blur(4px);
-  --glass-blur-medium: blur(8px);
-  --glass-blur-strong: blur(12px);
-  --glass-saturate: saturate(110%);
-  --glass-backdrop-fixed: blur(8px) saturate(110%);
-  --glass-backdrop-fixed-player: blur(8px) saturate(110%)
-    brightness(1.02);
+  --glass-blur-soft: none;
+  --glass-blur-medium: none;
+  --glass-blur-strong: none;
+  --glass-saturate: none;
+  --glass-backdrop-fixed: none;
+  --glass-backdrop-fixed-player: none;
   --glass-noise-opacity: 0;
+}
+
+body.ds-perf-lite,
+body.ds-perf-lite *,
+body.ds-perf-lite *::before,
+body.ds-perf-lite *::after {
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+}
+
+@media (pointer: coarse), (prefers-reduced-data: reduce),
+  (prefers-reduced-transparency: reduce) {
+  html,
+  html *,
+  html *::before,
+  html *::after {
+    backdrop-filter: none !important;
+    -webkit-backdrop-filter: none !important;
+  }
 }
 
 /* Palette: strictly monochrome. The colour tokens defined in
@@ -265,13 +283,12 @@ body.ds-perf-lite {
 
 @media (prefers-reduced-data: reduce), (pointer: coarse) {
   :root {
-    --glass-blur-soft: blur(4px);
-    --glass-blur-medium: blur(8px);
-    --glass-blur-strong: blur(12px);
-    --glass-saturate: saturate(110%);
-    --glass-backdrop-fixed: blur(8px) saturate(110%);
-    --glass-backdrop-fixed-player: blur(8px) saturate(110%)
-      brightness(1.02);
+    --glass-blur-soft: none;
+    --glass-blur-medium: none;
+    --glass-blur-strong: none;
+    --glass-saturate: none;
+    --glass-backdrop-fixed: none;
+    --glass-backdrop-fixed-player: none;
     --glass-noise-opacity: 0;
   }
 }

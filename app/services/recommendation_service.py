@@ -23,6 +23,7 @@ from dotsound_private_core.services.recommendation_engine import (
     build_genre_mixes,
     build_radio_queue,
     build_weekly_mix,
+    interleave_personalized_by_familiarity,
     merge_hybrid_playlist,
     normalize_artist_taste_weights,
     normalize_genre_taste_weights,
@@ -436,6 +437,7 @@ class RecommendationService:
             UserPrefs(
                 preferred_genres=preferred_genres,
                 preferred_artist_ids=merged_artist_ids,
+                followed_artist_ids=list(followed_artist_ids),
                 similar_artist_ids=similar_artist_ids,
                 similar_artist_weights=similar_artist_weights,
                 behavior_genre_weights=behavior_genre_weights,
@@ -798,10 +800,19 @@ class RecommendationService:
         if candidates:
             features = await self._tracks_to_features(candidates)
             scored = score_tracks_for_user(user_prefs, history, features)
-            scored_ids = [s.track_id for s in scored[:20]]
+            listened_ids = await self._rec_repo.get_listened_track_ids(
+                user_id
+            )
+            interleaved = interleave_personalized_by_familiarity(
+                scored,
+                listened_ids,
+                target_size=20,
+            )
             track_map = {t.id: t for t in candidates}
             for_you = [
-                track_map[tid] for tid in scored_ids if tid in track_map
+                track_map[s.track_id]
+                for s in interleaved
+                if s.track_id in track_map
             ]
             if for_you:
                 sections.append(
@@ -1988,6 +1999,22 @@ class RecommendationService:
         if user_id:
             history = await self._build_listen_history(user_id)
 
+        from app.repositories.artist import ArtistRepository
+
+        artist_repo = ArtistRepository(self._session)
+        seed_artists = await artist_repo.get_track_artists(seed.id)
+        seed_artist_ids = [a.id for a in seed_artists]
+        station_neighbor_ids: list[int] = []
+        if seed_artist_ids:
+            station_neighbor_ids = (
+                await self._catalog_repo
+                .get_station_neighbor_track_ids_for_artists(
+                    seed_artist_ids,
+                    exclude_track_ids=frozenset({seed.id}),
+                    limit=200,
+                )
+            )
+
         rerank_enabled, rerank_lambda = await self._load_diversity_rerank(
             user_id=user_id
         )
@@ -1998,6 +2025,11 @@ class RecommendationService:
             queue_size,
             unseen_candidates=unseen_features,
             tuning=radio_tuning,
+            station_neighbor_track_ids=(
+                frozenset(station_neighbor_ids)
+                if station_neighbor_ids
+                else None
+            ),
             liked_track_ids=(
                 user_prefs.liked_track_ids if user_prefs else None
             ),
