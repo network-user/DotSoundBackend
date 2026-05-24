@@ -10,7 +10,7 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Any
 
-from sqlalchemy import and_, cast, desc, func, or_, select, update
+from sqlalchemy import and_, case, cast, desc, func, or_, select, update
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.sql import Select
@@ -110,10 +110,11 @@ class AdminRepository:
         dialect = self._session.get_bind().dialect.name
         if dialect == "postgresql":
             synced = cast(TrackLyrics.synced_lines, JSONB)
+            is_array = func.jsonb_typeof(synced) == "array"
             return and_(
                 TrackLyrics.synced_lines.isnot(None),
-                func.jsonb_typeof(synced) == "array",
-                func.jsonb_array_length(synced) > 0,
+                is_array,
+                case((is_array, func.jsonb_array_length(synced)), else_=0) > 0,
             )
         return (
             func.coalesce(

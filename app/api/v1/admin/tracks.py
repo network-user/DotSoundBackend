@@ -97,10 +97,13 @@ def _timecode_sync_schema_missing(exc: BaseException) -> bool:
     if cause is not None:
         parts.append(str(cause).lower())
     combined = " ".join(parts)
-    return "request_align_existing_text" in combined and (
+    if "request_align_existing_text" not in combined:
+        return False
+    return (
         "undefinedcolumn" in combined
         or "does not exist" in combined
         or "no such column" in combined
+        or "unknown column" in combined
     )
 
 

@@ -1,5 +1,15 @@
 # DotSound - TODO Tracker
 
+- [x] **Fix admin timecode-sync queue internal error (2026-05-24)**
+  - PostgreSQL candidate/resync counts no longer call
+    `jsonb_array_length` on non-array `synced_lines` values; CASE-guarded
+  expression prevents queue snapshot 500s when resync counters scan legacy
+  rows.
+  - Timecode job serialization coerces nullable legacy queue fields before
+    Pydantic validation; migration-missing detection accepts more DB errors.
+  - Verification: `pytest tests/app/api/v1/admin/test_tracks_timecode_sync.py
+    tests/app/repositories/test_admin_synced_lines.py`.
+
 - [x] **Lyrics line-level resync quality and admin force-resync (2026-05-24)**
   - Admin timecode sync now supports missing-timecode alignment and
     forced resync for tracks that already have synced lines but need
