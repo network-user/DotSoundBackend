@@ -3,7 +3,7 @@ import uuid
 import structlog
 from dotsound_private_core import censor_text
 from fastapi import HTTPException, status
-from sqlalchemy import select, update
+from sqlalchemy import update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.lyrics import TrackLyrics
@@ -12,6 +12,7 @@ from app.models.lyrics_translation import (
 )
 from app.models.track import Track
 from app.repositories.lyrics import LyricsRepository
+from app.repositories.lyrics_job import LyricsJobRepository
 from app.repositories.track import TrackRepository
 from app.repositories.user import UserRepository
 from app.services.lyrics_state import has_nonempty_synced_lines
@@ -284,9 +285,7 @@ class LyricsService:
             has_existing_text=bool(existing_text),
             has_existing_sync=existing_has_sync,
         )
-        skip_reason = (
-            "existing_text_needs_timing" if skip_tiers else None
-        )
+        skip_reason = "existing_text_needs_timing" if skip_tiers else None
         urgent_remote_sync = bool(
             with_sync and (track.file_key or getattr(track, "sc_url", None))
         )
@@ -371,6 +370,7 @@ class LyricsService:
         bypass_cache: bool = False,
         profile: str = "catalog_only",
         force_sync_existing_text: bool = False,
+        force_resync_existing_sync: bool = False,
     ) -> str | None:
         from app.models.lyrics_job import LyricsJob
         from app.services.compute_router import (
@@ -406,7 +406,7 @@ class LyricsService:
             with_sync
             and force_sync_existing_text
             and existing_text
-            and not existing_has_sync
+            and (not existing_has_sync or force_resync_existing_sync)
         )
         if existing_text and not sync_existing_text:
             logger.debug(
@@ -421,7 +421,7 @@ class LyricsService:
                 set_cached_lyrics_result,
             )
 
-            bypass_cache = False
+            bypass_cache = bool(force_resync_existing_sync)
             try:
                 await set_cached_lyrics_result(
                     track.artist or "",
@@ -451,14 +451,9 @@ class LyricsService:
             )
             return None
 
-        busy = (
-            await self._session.execute(
-                select(LyricsJob.id).where(
-                    LyricsJob.track_id == track_id,
-                    LyricsJob.status.in_(("queued", "running")),
-                )
-            )
-        ).scalar_one_or_none()
+        busy = await LyricsJobRepository(
+            self._session
+        ).active_job_id_for_track(track_id)
         if busy is not None:
             logger.debug(
                 "lyrics_background_skip_active_job",
@@ -495,7 +490,9 @@ class LyricsService:
                 has_existing_sync=False,
             )
             skip_reason = (
-                "existing_text_needs_timing" if skip_tiers else None
+                "existing_sync_resync"
+                if force_resync_existing_sync
+                else "existing_text_needs_timing" if skip_tiers else None
             )
 
         active_tier = await start_cascade(

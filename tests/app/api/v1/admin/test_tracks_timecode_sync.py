@@ -48,6 +48,30 @@ async def _unsynced_track(
     return int(track.id)
 
 
+async def _synced_track(
+    db_session: AsyncSession,
+    *,
+    title: str,
+    uploader_id: int,
+) -> int:
+    track_id = await _unsynced_track(
+        db_session,
+        title=title,
+        uploader_id=uploader_id,
+    )
+    row = (
+        await db_session.execute(
+            select(TrackLyrics).where(TrackLyrics.track_id == track_id)
+        )
+    ).scalar_one()
+    row.synced_lines = [
+        {"time_ms": 10_000, "text": "line one"},
+        {"time_ms": 30_000, "text": "line two"},
+    ]
+    await db_session.commit()
+    return track_id
+
+
 @patch(
     "app.services.lyrics_cascade.start_cascade",
     new_callable=AsyncMock,
@@ -110,9 +134,8 @@ async def test_timecode_sync_enqueue_and_queue(
     assert q.status_code == 200
     snapshot = q.json()
     assert snapshot["counts"]["queued"] >= 1
-    assert any(
-        j["id"] == job_id for j in snapshot["queued"]
-    )
+    assert "candidate_counts" in snapshot
+    assert any(j["id"] == job_id for j in snapshot["queued"])
 
     pri = await client.patch(
         f"/api/v1/admin/tracks/lyrics-timecode-sync/jobs/{job_id}/priority",
@@ -129,6 +152,75 @@ async def test_timecode_sync_enqueue_and_queue(
     )
     assert bump.status_code == 200
     assert bump.json()["queue_priority"] >= 42
+
+
+@patch(
+    "app.services.lyrics_cascade.start_cascade",
+    new_callable=AsyncMock,
+    return_value="remote_whisper",
+)
+@patch(
+    "app.services.compute_router.get_routing_mode",
+    new_callable=AsyncMock,
+    return_value="auto",
+)
+@patch(
+    "app.services.lyrics_worker.set_cached_lyrics_result",
+    new_callable=AsyncMock,
+)
+@patch(
+    "app.services.lyrics_worker.set_lyrics_progress",
+    new_callable=AsyncMock,
+)
+async def test_timecode_sync_force_resync_existing_timecodes(
+    _progress: AsyncMock,
+    _cache: AsyncMock,
+    _routing: AsyncMock,
+    _cascade: AsyncMock,
+    client: AsyncClient,
+    db_session: AsyncSession,
+) -> None:
+    admin = await create_test_user(client, 131006)
+    headers = await admin_bearer_for_user(
+        client, db_session, user_id=admin["id"]
+    )
+    track_id = await _synced_track(
+        db_session,
+        title="Resync Existing",
+        uploader_id=admin["id"],
+    )
+
+    enq = await client.post(
+        "/api/v1/admin/tracks/lyrics-timecode-sync/enqueue",
+        headers=headers,
+        json={
+            "track_ids": [track_id],
+            "mode": "resync_existing",
+            "limit": 10,
+        },
+    )
+
+    assert enq.status_code == 200
+    body = enq.json()
+    assert body["enqueued"] == 1
+    job = (
+        await db_session.execute(
+            select(LyricsJob).where(LyricsJob.id == body["job_ids"][0])
+        )
+    ).scalar_one()
+    assert job.request_align_existing_text is True
+    assert job.request_bypass_cache is True
+
+    q = await client.get(
+        "/api/v1/admin/tracks/lyrics-timecode-sync/queue",
+        headers=headers,
+    )
+    assert q.status_code == 200
+    queued = q.json()["queued"]
+    assert any(
+        item["id"] == job.id and item["sync_mode"] == "resync_existing"
+        for item in queued
+    )
 
 
 @patch(
@@ -225,8 +317,7 @@ async def test_timecode_sync_cancel_align_job(
     await db_session.commit()
 
     res = await client.post(
-        "/api/v1/admin/tracks/lyrics-timecode-sync/jobs/"
-        f"{job.id}/cancel",
+        "/api/v1/admin/tracks/lyrics-timecode-sync/jobs/" f"{job.id}/cancel",
         headers=headers,
         json={},
     )

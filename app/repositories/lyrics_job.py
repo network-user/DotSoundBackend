@@ -25,3 +25,16 @@ class LyricsJobRepository:
             .limit(limit)
         )
         return list(result.scalars().all())
+
+    async def active_job_id_for_track(
+        self,
+        track_id: int,
+    ) -> str | None:
+        result = await self._session.execute(
+            select(LyricsJob.id).where(
+                LyricsJob.track_id == track_id,
+                LyricsJob.status.in_(("queued", "running")),
+            )
+        )
+        row = result.scalar_one_or_none()
+        return str(row) if row is not None else None

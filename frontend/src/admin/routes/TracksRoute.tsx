@@ -928,6 +928,7 @@ export function TracksRoute() {
     try {
       const res = await adminApi.lyricsTimecodeSyncEnqueue({
         track_ids: [...selectedIds],
+        mode: 'all',
         limit: 500,
       })
       showAlert(

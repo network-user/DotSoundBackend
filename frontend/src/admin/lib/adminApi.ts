@@ -20,6 +20,7 @@ export interface LyricsTimecodeSyncJob {
   duration_ms: number | null
   progress_id: string | null
   request_with_sync: boolean
+  sync_mode: 'unsynced' | 'resync_existing'
 }
 
 function normalizeHttpDetail(raw: unknown): string {
@@ -2601,6 +2602,11 @@ export const adminApi = {
         since: string | null
       }
       candidate_count: number
+      candidate_counts: {
+        unsynced?: number
+        resync_existing?: number
+        all?: number
+      }
       counts: {
         queued: number
         running: number
@@ -2621,6 +2627,7 @@ export const adminApi = {
   lyricsTimecodeSyncEnqueue: (body: {
     track_ids?: number[]
     enqueue_all_unsynced?: boolean
+    mode?: 'unsynced' | 'resync_existing' | 'all'
     limit?: number
   }) =>
     adminFetch<{

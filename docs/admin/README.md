@@ -131,15 +131,17 @@ and the list of events.
 ## Lyrics timecode sync queue
 
 Section **Timecodes** (`tracks/timecode-sync`, capability
-`tracks.manage`) is for tracks that already have plain lyrics but no
-synced timecodes. It enqueues `LyricsJob` rows tagged
-`request_align_existing_text` and shows a dedicated queue: job in
-progress, next waiting item, reorderable backlog, and recent
-outcomes.
+`tracks.manage`) is for tracks that already have plain lyrics and
+need line-level timings. It supports both missing timecodes and
+forced resync of existing, suspicious timecodes. It enqueues
+`LyricsJob` rows tagged `request_align_existing_text` and shows a
+dedicated queue: job in progress, next waiting item, reorderable
+backlog, and recent outcomes.
 
-- **Start sync** tab: enqueue all eligible tracks (batch limit) or
+- **Start sync** tab: choose **Missing timecodes**, **Force resync**,
+  or **Both modes**, then enqueue all eligible tracks (batch limit) or
   explicit track IDs. The tracks list filter «No timecodes» links here
-  and supports batch enqueue for the current selection.
+  and batch enqueue for the current selection uses both modes.
 - **Queue** tab: optional filters **Only my enqueue runs** (matches
   `requested_by_user_id`) and **Last 24h / 7 days** (`since_hours`).
   Waiting jobs support numeric priority and **Run next** (bumps

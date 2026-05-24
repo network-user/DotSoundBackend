@@ -1,5 +1,15 @@
 # DotSound - TODO Tracker
 
+- [x] **Lyrics line-level resync quality and admin force-resync (2026-05-24)**
+  - Admin timecode sync now supports missing-timecode alignment and
+    forced resync for tracks that already have synced lines but need
+    fresh timings.
+  - Backend enqueue preserves canonical plain lyrics, bypasses the
+    old synced-lines short-circuit for admin force-resync, and keeps
+    DB access inside repositories.
+  - Admin UI exposes sync mode selection, candidate counters, mode
+    badges, and selected-track bulk enqueue across both modes.
+
 - [x] **Radio anti-clumping + explicit follow + station-neighbor retrieval (2026-05-23)**
   - PrivateCore `build_radio_queue` (`recommendation_engine.py`): seed-lock
     больше не сортирует объединённый пул по score (что собирало familiars в

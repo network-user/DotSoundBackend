@@ -1115,9 +1115,7 @@ async def admin_lyrics_timecode_sync_queue(
         since = datetime.now(UTC) - timedelta(hours=int(since_hours))
     requested_by = admin.id if mine else None
     try:
-        out = await AdminLyricsTimecodeSyncService(
-            session
-        ).get_overview(
+        out = await AdminLyricsTimecodeSyncService(session).get_overview(
             requested_by_user_id=requested_by,
             since=since,
         )
@@ -1126,9 +1124,7 @@ async def admin_lyrics_timecode_sync_queue(
     except Exception as exc:
         _raise_timecode_sync_http(exc, operation="queue")
     try:
-        return LyricsTimecodeSyncOverviewResponse.model_validate(
-            out
-        )
+        return LyricsTimecodeSyncOverviewResponse.model_validate(out)
     except Exception as exc:
         logger.exception(
             "admin_timecode_sync_response_invalid",
@@ -1143,10 +1139,7 @@ async def admin_lyrics_timecode_sync_queue(
 @router.post(
     "/tracks/lyrics-timecode-sync/enqueue",
     response_model=LyricsTimecodeSyncEnqueueResponse,
-    summary=(
-        "[Admin] Enqueue alignment for tracks with lyrics "
-        "but no timecodes"
-    ),
+    summary=("[Admin] Enqueue alignment or resync for tracks with lyrics"),
 )
 @limiter.limit("30/minute")
 async def admin_lyrics_timecode_sync_enqueue(
@@ -1166,6 +1159,7 @@ async def admin_lyrics_timecode_sync_enqueue(
             track_ids=body.track_ids or None,
             enqueue_all_unsynced=body.enqueue_all_unsynced,
             limit=body.limit,
+            mode=body.mode,
         )
     except HTTPException:
         raise
@@ -1220,9 +1214,7 @@ async def admin_lyrics_timecode_sync_cancel(
     _admin: User = Depends(require_admin_session),
 ) -> dict[str, Any]:
     try:
-        out = await AdminLyricsTimecodeSyncService(
-            session
-        ).cancel_job(job_id)
+        out = await AdminLyricsTimecodeSyncService(session).cancel_job(job_id)
     except HTTPException:
         raise
     except Exception as exc:

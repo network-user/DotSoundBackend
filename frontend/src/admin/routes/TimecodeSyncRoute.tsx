@@ -21,6 +21,7 @@ import { getAdminPanelRoute } from '@/lib/adminPath'
 
 type PanelTab = 'queue' | 'enqueue'
 type SinceFilter = 'all' | '24' | '168'
+type SyncMode = 'unsynced' | 'resync_existing' | 'all'
 
 function jobStatusKind(
   status: string,
@@ -45,6 +46,12 @@ function trackLabel(job: LyricsTimecodeSyncJob): string {
   const title = job.track_title?.trim() || `#${job.track_id}`
   const artist = job.track_artist?.trim()
   return artist ? `${artist} — ${title}` : title
+}
+
+function syncModeKey(mode: string): string {
+  return mode === 'resync_existing'
+    ? 'admin.timecodeSync.modeResyncExisting'
+    : 'admin.timecodeSync.modeUnsynced'
 }
 
 function QueueJobCard({
@@ -78,6 +85,9 @@ function QueueJobCard({
             {job.current_tier}
           </span>
         )}
+        <span className="admin-card__sub">
+          {t(syncModeKey(job.sync_mode))}
+        </span>
       </div>
     </div>
   )
@@ -138,6 +148,7 @@ export function TimecodeSyncRoute() {
   const tracksRoute = getAdminPanelRoute('/tracks')
   const [tab, setTab] = useState<PanelTab>('queue')
   const [enqueueLimit, setEnqueueLimit] = useState(100)
+  const [syncMode, setSyncMode] = useState<SyncMode>('unsynced')
   const [trackIdsRaw, setTrackIdsRaw] = useState('')
   const [filterMine, setFilterMine] = useState(false)
   const [sinceFilter, setSinceFilter] =
@@ -170,6 +181,7 @@ export function TimecodeSyncRoute() {
     mutationFn: (body: {
       track_ids?: number[]
       enqueue_all_unsynced?: boolean
+      mode?: SyncMode
       limit?: number
     }) => adminApi.lyricsTimecodeSyncEnqueue(body),
     onSuccess: (res) => {
@@ -250,6 +262,11 @@ export function TimecodeSyncRoute() {
           ),
         },
         {
+          header: t('admin.timecodeSync.colMode'),
+          accessorKey: 'sync_mode',
+          cell: (i) => t(syncModeKey(i.row.original.sync_mode)),
+        },
+        {
           header: t('admin.timecodeSync.colActions'),
           id: 'actions',
           cell: (i) => {
@@ -327,6 +344,11 @@ export function TimecodeSyncRoute() {
           ),
         },
         {
+          header: t('admin.timecodeSync.colMode'),
+          accessorKey: 'sync_mode',
+          cell: (i) => t(syncModeKey(i.row.original.sync_mode)),
+        },
+        {
           header: t('admin.timecodeSync.colFinished'),
           accessorKey: 'finished_at',
           cell: (i) =>
@@ -396,6 +418,10 @@ export function TimecodeSyncRoute() {
           <p className="admin-card__sub">
             {t('admin.timecodeSync.candidatesHint', {
               count: data?.candidate_count ?? '…',
+              unsynced:
+                data?.candidate_counts.unsynced ?? '…',
+              resync:
+                data?.candidate_counts.resync_existing ?? '…',
             })}
           </p>
           <div className="admin-toolbar">
@@ -414,6 +440,27 @@ export function TimecodeSyncRoute() {
                 style={{ marginLeft: 8, width: 88 }}
               />
             </label>
+            <AdminRangeSwitch
+              groupId="admin-timecode-sync-mode"
+              value={syncMode}
+              onChange={(v) => setSyncMode(v as SyncMode)}
+              options={[
+                {
+                  value: 'unsynced',
+                  label: t('admin.timecodeSync.modeUnsynced'),
+                },
+                {
+                  value: 'resync_existing',
+                  label: t(
+                    'admin.timecodeSync.modeResyncExisting',
+                  ),
+                },
+                {
+                  value: 'all',
+                  label: t('admin.timecodeSync.modeAll'),
+                },
+              ]}
+            />
           </div>
           <div
             className="admin-toolbar"
@@ -425,6 +472,7 @@ export function TimecodeSyncRoute() {
               onClick={() =>
                 enqueueMutation.mutate({
                   enqueue_all_unsynced: true,
+                  mode: syncMode,
                   limit: enqueueLimit,
                 })
               }
@@ -439,6 +487,7 @@ export function TimecodeSyncRoute() {
               onClick={() =>
                 enqueueMutation.mutate({
                   track_ids: parsedTrackIds,
+                  mode: syncMode,
                   limit: enqueueLimit,
                 })
               }
@@ -558,6 +607,12 @@ export function TimecodeSyncRoute() {
               <span className="admin-card__sub">
                 {t('admin.timecodeSync.statCandidates', {
                   count: data?.candidate_count ?? 0,
+                })}
+              </span>
+              <span className="admin-card__sub">
+                {t('admin.timecodeSync.statResyncCandidates', {
+                  count:
+                    data?.candidate_counts.resync_existing ?? 0,
                 })}
               </span>
             </div>

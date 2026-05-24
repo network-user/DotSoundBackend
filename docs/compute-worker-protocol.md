@@ -278,6 +278,7 @@ Request body (all fields optional):
   ],
   "sync_quality": "word",
   "sync_profile": "gpu_full",
+  "audio_seconds": 123.4,
   "audio_sha256": "abcd...",
   "asr_timed_words": [
     { "t": 0.0, "w": "Hello" },
@@ -285,6 +286,10 @@ Request body (all fields optional):
   ]
 }
 ```
+
+Optional **`audio_seconds`** lets the Backend/PrivateCore alignment
+guard detect clustered or late line timings during catalog-text
+alignment and resync diagnostics.
 
 Optional **`asr_timed_words`**: flat list of ASR words with times in
 **seconds** (`t`) and token text (`w`), in playback order — typically

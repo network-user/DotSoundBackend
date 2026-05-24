@@ -151,6 +151,7 @@ class LyricsBatchImportResponse(BaseModel):
 class LyricsTimecodeSyncEnqueueRequest(BaseModel):
     track_ids: list[int] = Field(default_factory=list, max_length=500)
     enqueue_all_unsynced: bool = False
+    mode: Literal["unsynced", "resync_existing", "all"] = "unsynced"
     limit: int = Field(default=100, ge=1, le=500)
 
 
@@ -187,20 +188,18 @@ class LyricsTimecodeSyncJobOut(BaseModel):
     duration_ms: int | None = None
     progress_id: str | None = None
     request_with_sync: bool
+    sync_mode: Literal["unsynced", "resync_existing"] = "unsynced"
 
 
 class LyricsTimecodeSyncOverviewResponse(BaseModel):
     filters: dict[str, str | int | None]
     candidate_count: int
+    candidate_counts: dict[str, int] = Field(default_factory=dict)
     counts: dict[str, int]
     running: LyricsTimecodeSyncJobOut | None = None
     next: LyricsTimecodeSyncJobOut | None = None
-    queued: list[LyricsTimecodeSyncJobOut] = Field(
-        default_factory=list
-    )
-    recent: list[LyricsTimecodeSyncJobOut] = Field(
-        default_factory=list
-    )
+    queued: list[LyricsTimecodeSyncJobOut] = Field(default_factory=list)
+    recent: list[LyricsTimecodeSyncJobOut] = Field(default_factory=list)
 
 
 class GenreMoodBatchPromptRequest(BaseModel):
