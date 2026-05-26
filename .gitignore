@@ -24,6 +24,7 @@ htmlcov/
 
 # Co-author history rewrite backups (local only)
 .git-coauthor-backups/
+.git-history-backups/
 
 # Ad-hoc import probes (never publish)
 scripts/_tmp_*
