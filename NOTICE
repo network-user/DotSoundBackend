@@ -1,5 +1,13 @@
 DotSoundBackend is source-available, not open source.
 
+This repository is published as an engineering showcase. It is intended
+for reading, architecture review, portfolio review, and non-production
+evaluation of the public Backend and Mini App layers.
+
+The private policy package `DotSoundPrivateCore` is intentionally not
+included. A public checkout may therefore be incomplete for full local
+execution, Docker image builds, or production deployment.
+
 Allowed by default:
 - Viewing and reviewing code.
 - Local non-production evaluation.

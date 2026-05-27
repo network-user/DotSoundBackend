@@ -3,9 +3,10 @@
 API-сервер музыкальной платформы DotSound — SoundCloud-style, UGC, без рекламы.
 Хранит треки в MinIO, метаданные в PostgreSQL, раздаёт Telegram Mini App.
 
-> Этот репозиторий опубликован как engineering showcase.
-> Критичная закрытая логика выносится в приватный репозиторий
-> `DotSoundPrivateCore`.
+> Source-available engineering showcase.
+> Репозиторий открыт для чтения кода и оценки инженерных решений.
+> Закрытое ядро `DotSoundPrivateCore` намеренно не публикуется и
+> требуется только для полного локального запуска.
 
 ---
 
@@ -26,7 +27,7 @@ API-сервер музыкальной платформы DotSound — SoundClo
 
 | Инструмент | Версия | Зачем |
 |-----------|--------|-------|
-| Python | 3.11+ | Backend |
+| Python | 3.12 | Backend |
 | [Poetry](https://python-poetry.org/) | любая | Управление зависимостями Python |
 | Node.js | 18+ | Сборка React Mini App |
 | npm | 9+ | Менеджер пакетов Node.js |
@@ -37,12 +38,18 @@ API-сервер музыкальной платформы DotSound — SoundClo
 
 ## Быстрый старт
 
+Этот раздел описывает локальный запуск для владельцев полного
+DotSound-workspace. Публичный showcase-клон без соседнего приватного
+`DotSoundPrivateCore` предназначен для code review и изучения
+архитектуры, а не для самостоятельного production/development запуска.
+
 ### Шаг 1 — Клонируйте и установите зависимости
 
 ```bash
 git clone <repo-url>
 cd DotSoundBackend
 
+# Требуется соседний приватный пакет ../DotSoundPrivateCore.
 poetry install
 ```
 
@@ -52,8 +59,8 @@ poetry install
 cp .env.example .env
 ```
 
-Файл `.env` уже содержит корректные значения для локального запуска через Docker.
-Если нужно изменить — откройте `.env` и отредактируйте нужные строки (см. раздел [Переменные окружения](#переменные-окружения)).
+Файл `.env.example` документирует переменные для локальной среды.
+Не используйте dev-значения как production-конфигурацию.
 
 ### Шаг 3 — Запустите инфраструктуру
 
@@ -61,9 +68,8 @@ cp .env.example .env
 docker compose up -d
 ```
 
-Это поднимет:
-- **PostgreSQL 16** на порту `5432` (user: `dotsound`, password: `dotsound`, db: `dotsound`)
-- **MinIO** на порту `9000` (API) и `9001` (веб-консоль)
+Это поднимет локальные dev-сервисы: PostgreSQL, Redis, MinIO и
+другие компоненты, если они включены в compose-профилях.
 
 Проверить что контейнеры запущены:
 ```bash
@@ -94,13 +100,9 @@ poetry run python scripts/sc_id_refresher.py
 poetry run python scripts/sc_id_refresher.py --now --log-level DEBUG
 ```
 
-**Docker Compose (по желанию, dev):** тот же демон как отдельный контейнер.
-В **обычном** `docker compose up` он не стартует — включите профиль
-`sc-refresh`. В **prod** (`docker-compose.yml` + `docker-compose.prod.yml`,
-`scripts/deploy.sh`) сервис `sc_id_refresher` поднимается вместе с
-`backend`/`worker` и раз в неделю обновляет `SC_CLIENT_ID` в `.env` на
-хосте (bind-mount). После смены id перезапустите `backend`/`worker`,
-чтобы pydantic подхватил значение (или дождитесь следующего деплоя).
+**Docker Compose (по желанию, dev):** дополнительные фоновые сервисы
+включаются compose-профилями. Они оставлены как пример production-like
+оркестрации, но не являются частью публичного standalone-дистрибутива.
 
 ```bash
 # Локально / dev — вместе со стеком
@@ -153,15 +155,14 @@ npm run build
 
 | Переменная | Описание | Значение по умолчанию |
 |-----------|---------|----------------------|
-| `DATABASE_URL` | asyncpg URL PostgreSQL | `postgresql+asyncpg://dotsound:dotsound@localhost:5432/dotsound` |
-| `MINIO_ENDPOINT` | Адрес MinIO (host:port) | `localhost:9000` |
-| `MINIO_ACCESS_KEY` | Логин MinIO | `minioadmin` |
-| `MINIO_SECRET_KEY` | Пароль MinIO | `minioadmin` |
-| `MINIO_BUCKET` | Имя бакета для аудио | `dotsound-audio` |
-| `MINIO_USE_SSL` | Использовать HTTPS для MinIO | `false` |
-| `LOG_LEVEL` | Уровень логов (`DEBUG`/`INFO`/`WARNING`) | `INFO` |
-| `COMPLAINT_THRESHOLD` | Количество жалоб до авто-скрытия трека | `3` |
-| `ADMIN_PANEL_PATH` | Скрытый slug админ-панели и admin API (`/<slug>` и `/api/v1/<slug>`) | `admin` |
+| Переменная | Описание |
+|-----------|---------|
+| `DATABASE_URL` | asyncpg URL PostgreSQL |
+| `REDIS_URL` | Redis для rate limit, очередей и realtime |
+| `MINIO_*` | S3-совместимое хранилище для медиа |
+| `JWT_SECRET` | Секрет подписи JWT; обязателен для non-debug запуска |
+| `ALLOWED_ORIGINS` / `ALLOWED_HOSTS` | HTTP/CORS guardrails |
+| `ADMIN_PANEL_PATH` | Slug админ-панели и admin API |
 
 ---
 
@@ -181,7 +182,9 @@ npm run build
 | `POST` | `/api/v1/complaints` | Подать жалобу на нарушение АП |
 | `*` | `/api/v1/playlists/…` | CRUD плейлистов |
 
-Полная документация с примерами запросов: `http://localhost:8000/docs`
+Локальная OpenAPI-документация доступна в dev-режиме по адресу
+`http://localhost:8000/docs`. Для публичной эксплуатации схему и
+internal routes нужно закрывать настройками окружения и периметра.
 
 ---
 
@@ -217,12 +220,20 @@ DotSoundBackend/
 
 Приватное ядро, которое не публикуется в этом репозитории:
 
-- `DotSoundPrivateCore` — internal auth policies, protected
-  integration contracts, anti-abuse и другие production-only правила.
+- `DotSoundPrivateCore` — закрытые правила и decision-функции.
+  Публичный Backend показывает транспортный слой, API, хранение,
+  orchestration и frontend, но не раскрывает реализацию ядра.
 
 ---
 
 ## Команды разработчика
+
+Команды ниже отражают полный internal workspace. В публичном showcase
+они полезны как ориентир, но могут требовать закрытый пакет
+`DotSoundPrivateCore` и актуальную локальную инфраструктуру. На момент
+публикационной подготовки полный Ruff/Mypy backlog не заявляется как
+зелёный quality gate; активные обязательные guardrails находятся в
+`.github/workflows/policy-guardrails.yml`.
 
 ```bash
 # Тесты
@@ -248,7 +259,9 @@ poetry run alembic downgrade -1
 
 ## License / Usage Restrictions
 
-Репозиторий **не является open source**.
+Репозиторий **не является open source**. Это source-available showcase:
+код можно читать и оценивать, но права на production-использование,
+hosting, redistribution и производные продукты ограничены лицензией.
 
 - Лицензия: [`LICENSE`](./LICENSE)
 - Ограничения использования: [`NOTICE`](./NOTICE)

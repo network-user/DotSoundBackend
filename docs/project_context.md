@@ -13,7 +13,7 @@
 
 ---
 
-## Четыре репозитория
+## DotSound workspace
 
 Пути в таблице — **относительно корня клона DotSoundBackend** (соседние репозитории лежат в одном каталоге с `DotSoundBackend`).
 
@@ -21,14 +21,16 @@
 | ------------------------- | ---------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | **DotSoundBackend**       | `.`                                      | FastAPI + React + PostgreSQL + Redis + MinIO; опционально **Elasticsearch 8** для полнотекстового поиска и suggest. Hub: оркестрация, БД, очередь jobs.   |
 | **DotSoundBot**           | `../DotSoundBot`                         | Telegram-бот (aiogram 3). Только UI.                                                                                                                    |
-| **DotSoundPrivateCore**   | `../DotSoundPrivateCore`                 | Чистый Python, без фреймворков. Алгоритмы, константы, политики.                                                                                          |
+| **DotSoundPrivateCore**   | `../DotSoundPrivateCore`                 | Закрытый пакет правил и decision-функций; не публикуется вместе с showcase-репозиториями.                                                                 |
 | **DotSoundComputeWorker** | `../DotSoundComputeWorker`               | Pull-based ASR-воркер (faster-whisper + опциональный Demucs). Дёргает Backend по HMAC, делает тяжёлый compute, отдаёт результат.                         |
 
 
 **Правила:**
 
-- Backend импортирует из PrivateCore. PrivateCore ничего не знает о FastAPI/SQLAlchemy.
-- Worker импортирует из PrivateCore. Backend никогда не загружает faster-whisper в свой процесс — `disable_local_asr=True` плюс отсутствие `ml`-extra гарантируют это.
+- Backend и Worker импортируют закрытые decision-функции из
+  PrivateCore. Публичные репозитории показывают transport,
+  orchestration, storage и UI-слои, но не раскрывают реализацию
+  приватных правил.
 
 ---
 
@@ -38,13 +40,19 @@
 - **БД:** PostgreSQL 14+, SQLAlchemy 2.x async, Alembic миграции
 - **Очередь:** Redis + Taskiq (воркеры: transcoding, lyrics, cover, import, ES reindex)
 - **Поиск (опц.):** Elasticsearch 8 (`elasticsearch` PyPI, async), индексы `dotsound_tracks` / `dotsound_artists`; при пустом `ELASTICSEARCH_URL` — только PostgreSQL
-- **Хранилище:** MinIO (S3-совместимый). Аудио-блобы — content-addressed (CAS) по `source_sha256` оригинала: `blobs/{xx}/{sha}.mp3`. HLS-бандл шарится между всеми треками с тем же источником и версионируется по политике транскода: `hls-blobs/{xx}/{sha}/v{N}/master.m3u8` (актуальная версия — `LATEST_BUNDLE_VERSION` из `playback_streaming_policy`). Один `AudioBlob` ↔ много `Track` (между пользователями тоже). Уникальный индекс `(uploaded_by_id, blob_id)` снят (миграция 0097).
+- **Хранилище:** MinIO (S3-совместимый). Аудио-блобы —
+  content-addressed по хешу исходного файла, HLS-бандлы переиспользуются
+  между треками с тем же источником. Backend владеет S3/DB
+  оркестрацией, а параметры политик приходят из закрытого ядра.
 - **Streaming pass-through:** `app/core/s3.open_object_range` отдаёт `(meta, AsyncGenerator[bytes])` без RAM-буферизации; `/api/v1/tracks/{id}/audio` и `/api/v1/tracks/{id}/hls/...` отвечают `StreamingResponse` 64 KiB-чанками с `Range/206`, `ETag`, `Last-Modified`, `If-None-Match → 304` и immutable-`Cache-Control` для CAS-блобов. Это убирает 20–30-секундный «старт» и заморозку при seek посередине трека.
-- **HLS-политика:** новые треки — 4-секундные сегменты с `EXT-X-INDEPENDENT-SEGMENTS`. Константы и master-playlist builder живут в `dotsound_private_core.services.playback_streaming_policy` (`DEFAULT_HLS_SEGMENT_SECONDS`, `LATEST_BUNDLE_VERSION`, `build_master_playlist`). Старые 10-секундные бандлы перетранскодируются фоновым воркером `app/services/hls_migration_worker.py` под управлением admin-эндпоинта `/api/v1/admin/hls-migration/{status,trigger}`; миграция 0108 добавила `tracks.hls_segment_seconds` и `tracks.hls_bundle_version`.
+- **HLS-политика:** Backend хранит и отдаёт HLS-ресурсы, а
+  policy-уровень сегментации и версионирования остаётся за закрытым
+  ядром.
 - **Дедупликация загрузок:** двухслойная. (1) Клиентский compound-хеш (head+tail+size) — UX pre-check per-user через `POST /tracks/check-duplicate`. (2) Серверный SHA-256 источника, считается стримом в `/upload/.../complete`, прозрачно дедуплицирует кросс-юзерно. При попадании в существующий блоб транскод пропускается, трек сразу `active`.
 - **GC orphan-блобов:** ежедневный шедулер `audio-blob-orphan-gc` (миграция 0098) реконсилирует `audio_blobs` и S3-префиксы `blobs/`, `hls-blobs/`; удаляет осиротевшее старше 6 часов.
-- **Исходящий HTTP (опц.):** все внешние вызовы из PrivateCore идут через единый opaque outbound-слой (`dotsound_private_core.services.outbound`). Настраивается env-переменными `OUTBOUND_*`. Внутренние детали (транспорт, имперсонация, провайдеры) бэкенду не известны и не упоминаются в этом репо.
-- **Исходящий HTTP к SoundCloud/Bandcamp (Backend):** опционально `OUTBOUND_STATIC_PROXY_URLS` (список URL для httpx, round-robin) или локальный пул Tor (`TOR_POOL_ENABLED`); одновременно нельзя — см. `app/services/outbound_proxy.py`, `app/config.py`.
+- **Исходящий HTTP (опц.):** Backend держит публичную orchestration
+  оболочку. Подробности внешних источников, egress-выбора и
+  антиблок-решений не являются публичной частью showcase.
 - **Аутентификация:** JWT + Telegram HMAC + Email (magic link) + TOTP 2FA
 - **Real-time:** WebSocket (Redis Pub/Sub), присутствие, typing indicators
 - **Фронтенд:** React 18 + TypeScript + Vite, CSS custom properties (без Tailwind)
@@ -71,11 +79,13 @@ frontend/src/
   lib/ws.ts        ← WebSocket с авто-реконнектом
 ```
 
-**Плейлист «Выбор пользователей» (recs):** `GET /api/v1/recommendations/user-choice` (JWT) — ранжирование в PrivateCore (`playcount_policy`: смесь `play_count` и лайков за 7 суток); на главной секция `user_choice` из `GET /api/v1/recommendations/home`. Публичный `play_count`: для залогиненных — `POST /api/v1/signals/listen` + политика PrivateCore + дедуп Redis; для гостя — `POST /api/v1/tracks/{id}/play` с дедупом по IP+трек.
+**Плейлисты и рекомендации:** публичные endpoints возвращают
+подготовленные очереди и секции. Backend собирает кандидатов,
+кэширует ответы и применяет decisions из закрытого ядра без раскрытия
+весов и эвристик.
 
-**Динамический плейлист «Забытые сокровища»:** `GET /api/v1/recommendations/forgotten-treasures` (JWT) — треки из лайков пользователя, лайк не моложе порога и без прослушиваний в «окне тишины»; ранжирование (`forgotten_treasures_policy`) и пороговые константы в PrivateCore.
-
-**Онбординг — превью по жанру (recsys):** таблицы `genre_samples` и `track_preview_clips` (миграция `0059`), `GenreSamplesService`, публичные `GET /api/v1/onboarding/genres/{genre}/preview-queue` (требуется JWT) и `GET /api/v1/track-preview/{track_id}/segment.mp4` (15s AAC в fMP4). Кураторский список: `GET/POST/DELETE /api/v1/admin/genre-samples` с capability `recsys.genre_samples.manage`.
+**Онбординг и превью:** Backend хранит curated samples, выдаёт
+короткие preview-ресурсы и держит admin CRUD для управления подборками.
 
 ---
 
@@ -111,85 +121,37 @@ backfill). `TrackService.search` и discovery при доступном ES сн�
 `elasticsearch_backfill_on_empty`, `elasticsearch_dev_bootstrap`,
 `elasticsearch_track_fuzziness`, `elasticsearch_fuzzy_max_expansions` — в `app/config.py` и `.env.example`.
 
-**Каталог релизов артиста (SoundCloud sync):** оркестрация в
-`app/services/artist_catalog_sync_service.py` по `artists.soundcloud_user_id`
-(SC `GET …/users/{id}/albums`, импорт треков через `SoundCloudService.import_or_get_track`;
-плюс релиз «Похожее» из artist station: `GET …/resolve` на
-`soundcloud.com/discover/sets/artist-stations:{id}` и `GET …/tracks?ids=…`,
-`release_kind = dotsound_sc_artist_station`, см. `SoundCloudService`.
-Таблицы `artist_catalog_*`, связи `TrackArtist`. Фоновые задачи Taskiq —
-`app/services/artist_catalog_sync_worker.py`. Конфиг: `catalog_uploader_id`
-(и `CATALOG_UPLOADER_ID` в `.env.example`). Операторский CRUD и постановка
-синка: `app/api/v1/admin/artist_catalog.py` + `app/services/admin_artist_catalog_service.py`
-(админ-сессия; resync — `require_step_up("catalog.sync.run")`). Статус последнего
-синка для UI: Redis `app/services/artist_catalog_sync_progress.py` (ключ
-`artist_catalog_sync:{artist_id}`), поля в `GET …/catalog/overview`.
+**Каталог релизов артиста:** Backend отвечает за DB-схему, admin UI,
+очереди синхронизации и progress state. Внешние источники и правила
+получения данных описываются публично только на уровне product
+capability, без раскрытия внутренней стратегии.
 
 ---
 
-## Ключевые директории PrivateCore
+## PrivateCore boundary
 
 ```
-src/dotsound_private_core/
-  contracts/internal_api.py   ← константы внутреннего API
-  services/
-    lyrics_provider.py        ← автоопределение текста (внутренняя реализация)
-    text_genre_mood_infer.py  ← эвристики жанра/настроения по тексту (keywords)
-    artist_normalizer.py      ← парсинг "Kai Angel & 9mice", fuzzy match
-    recommendation_engine.py  ← скоринг треков, daily mix, radio
-    playcount_policy.py        ← публичный play_count (qualify) + user-choice chart
-    recommendation_language_policy.py ← эвристики языка (opaque), RU-boost
-    auth_policy.py            ← TTL, IP-диапазоны, burn/cooldown
-    upload_policy.py          ← разрешённые MIME, опасные расширения
-    abuse.py                  ← disposable email, Tor exit nodes
-    scoring.py                ← веса сигналов, maturity levels
-    cold_start.py             ← onboarding, калибровка
-    moderation.py             ← порог авто-скрытия
-    account_deletion_policy.py← grace period 30 дней
+DotSoundPrivateCore/
+  contracts/    ← стабильные протокольные имена для внутренних вызовов
+  services/     ← закрытые policy и decision-функции
 ```
+
+Публичные репозитории не документируют веса, thresholds, fallback
+порядок, provider routing, антиблок-эвристики и ML/ASR детали.
 
 ---
 
-## Lyrics — каскадная модель (после rev 0044)
+## Lyrics and compute pipeline
 
-Backend = чистый hub. Каждая задача попадает в `LyricsJob` с
-полем `tiers_planned` (по умолчанию: `catalog_only`,
-`remote_whisper`, `speechkit_paid`) и `current_tier`.
-`tier_attempts` JSONB хранит лог каждой попытки с
-`{tier, started_at, status, error, finished_at}`.
-
-1. Пользователь нажимает "Авто-генерация" → `LyricsService.trigger_auto_generation`
-2. `lyrics_cascade.start_cascade` создаёт job, ставит первый tier:
-  - `**catalog_only**` — Backend Taskiq, вызывает
-  - `**remote_whisper**` — Backend оставляет job со статусом
-  `queued, profile=gpu_full`. Удалённый
-  `DotSoundComputeWorker` забирает через HMAC pull API
-  (`/api/v1/internal/audio-compute/jobs/claim`).
-  - `**speechkit_paid**` — Backend дёргает Yandex Cloud
-  SpeechKit Async через `asr_speechkit_adapter.transcribe`.
-  Tier выключен по умолчанию + жёсткий бюджет-гард
-  (`asr_policy.should_use_paid_asr`).
-3. Tier-успех → `LyricsRepository.create_or_update`, job → `done`.
-   После сохранения непустого текста (если включено
-   `LYRICS_DERIVED_GENRE_MOOD_ENABLED`) эвристика в PrivateCore может
-   заполнить пустой жанр трека и дописать теги настроения в
-   `track_audio_features`. В админке — batch prompt/import
-   `POST /api/v1/admin/tracks/genre-mood/*` по аналогии с lyrics.
-4. Tier-фейл / lease expired (lease reaper) →
-  `lyrics_cascade.handle_tier_failure` → следующий tier.
-5. Cascade exhausted → `status="failed"`, причина в `error`.
-
-Whisper (faster-whisper / Demucs) **никогда** не выполняется в
-Backend-процессе. Если хочется быстрый dev-loop без поднятия
-отдельного Worker'а — флаг `LYRICS_ALLOW_LOCAL_ASR=true` в `.env`
-(валидатор в `app/config.py` запрещает его в проде).
+Backend = orchestration hub. Пользовательский запрос создаёт job,
+Backend хранит состояние и отдаёт работу удалённому воркеру через
+HMAC-защищённый internal API. Тяжёлое распознавание и quality policy
+не являются частью публичного Backend-процесса.
 
 См. также:
 
-- `app/services/lyrics_cascade.py` — единственный авторитет на
-переходы между tier'ами.
-- `app/services/lyrics_worker.py` — `catalog_only_lyrics_task`
-и `speechkit_lyrics_task`.
+- `app/services/lyrics_cascade.py` — backend state machine вокруг job.
+- `app/services/lyrics_worker.py` — Taskiq orchestration.
 - `app/api/v1/internal/audio_compute.py` — HMAC API для
 удалённого воркера.
 - `app/middlewares/internal_api_allowlist.py` — IP allowlist
@@ -197,9 +159,8 @@ Backend-процессе. Если хочется быстрый dev-loop без
 - `docs/compute-worker-protocol.md` — публичный контракт
 HMAC + claim/result для воркера.
 
-Всё, что относится к источникам текста, распознаванию и
-сопоставлению — внутренняя реализация PrivateCore и в этом
-документе не описывается.
+Всё, что относится к источникам текста, распознаванию, fallback order,
+provider selection и сопоставлению — закрытая реализация PrivateCore.
 
 ### Observability
 
@@ -208,26 +169,15 @@ HMAC + claim/result для воркера.
 `worker_logs:{worker_id}` стримит их в реальном времени.
 - Полный таймлайн job'а доступен по WS-каналу `job_trace:{job_id}`
 (источник: `LyricsJob.tier_attempts` + `WorkerAuditLog`).
-- Prometheus-метрики: `lyrics_jobs_total`, `lyrics_job_duration_seconds`,
-`tier_fallback_total`, `worker_anomaly_total`,
-`hmac_auth_failures_total`, `speechkit_spent_rub_total`,
-`speechkit_budget_remaining_rub`, `worker_heartbeat_lag_seconds`,
-`elasticsearch_query_total` (op/outcome, если ES включён).
+- Prometheus-метрики покрывают job lifecycle, worker health, HMAC auth
+  failures и search outcomes без раскрытия закрытых policy деталей.
 
 ### Security (compute pipeline)
 
-- HMAC-SHA256 по канону `METHOD\nPATH\nTS\nNONCE\nSHA256(BODY)`,
-ключ = `sha256(raw_secret)`. Skew ±60s, nonce dedup в Redis 5
-min.
-- Per-worker IP allowlist (`ComputeWorker.allowed_ip_cidrs`,
-`dotsound_private_core.services.network_policy`).
-- Per-action rate limit (slowapi-style через Redis), 3 нарушения
-в 10 min → auto-suspend на 5 min.
-- Anomaly detector: `processing_too_fast`, `duplicate_result`,
-`suspicious_failure_rate`, `stale_after_claim`. 3 флага в час
-→ auto-suspend на 30 min + admin alert.
-- OTT для скачивания аудио: TTL 5 min, привязан к
-`worker.last_ip`, single-use через Redis `SET NX EX`.
+- HMAC-подписанные internal requests.
+- Per-worker IP allowlist и rate limiting.
+- Audit trail для claim/result/fail/progress событий.
+- Одноразовые короткоживущие ссылки для скачивания аудио воркером.
 
 ---
 
@@ -387,17 +337,13 @@ WebSocket на Redis, статистика для владельца трека,
 
 ## Compliance / правовая позиция
 
-Финальная правовая позиция и пошаговый план приведения к РФ-законам
-зафиксированы в:
+Публичный showcase хранит только безопасный обзор legal/compliance
+контекста. Реальные операторские данные, внутренние планы и
+юридические рабочие материалы не должны публиковаться в этом репо.
 
-- `LEGAL.md` — оператор-физлицо (Звягинцев Р. Н.), некоммерческий
-  статус, отказ от платежей/рекламы, информационный посредник по
-  ст. 1253.1 ГК.
-- `.claude/plans/lucky-stargazing-badger.md` — Фазы 0–8 (комментирование
-  чатов, Privacy/acceptance/18+, РФ-хостинг, cookie, account deletion,
-  legal-секция в Settings).
+- `LEGAL.md` — public-safe индекс юридических документов.
 - `docs/REGULATORY_DISABLED.md` — реестр временно отключённых модулей
   и условия их возврата.
-- `TODO.md`, раздел **«Соответствие 152-ФЗ / ПДн»** — открытые
-  организационные задачи (уведомление в РКН и т. п.).
+- `TODO.md` — открытые организационные задачи, если они допустимы для
+  публичного просмотра.
 

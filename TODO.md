@@ -1,5 +1,16 @@
 # DotSound - TODO Tracker
 
+- [x] **Source-available showcase publication prep (2026-05-27)**
+  - Backend, Bot, and ComputeWorker README/NOTICE/legal/docs now state
+    source-available showcase scope and the closed `DotSoundPrivateCore`
+    dependency.
+  - Public docs were sanitized for operator placeholders, internal plans,
+    and private policy/provider details.
+  - Full lint/test CI is documented as intentionally not green/public yet;
+    active public guardrails remain boundary checks and secret scanning.
+  - Full-history high-confidence secret pattern scan over the three public
+    repos found no matches; local `.env` files were not read.
+
 - [x] **Fix admin timecode-sync queue internal error (2026-05-24)**
   - PostgreSQL candidate/resync counts no longer call
     `jsonb_array_length` on non-array `synced_lines` values; CASE-guarded

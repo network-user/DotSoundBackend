@@ -2,8 +2,9 @@
 
 ## Scope
 
-This file defines which parts of `DotSoundBackend` stay public and
-which parts are owned by `DotSoundPrivateCore`.
+This file documents the public/private split for the source-available
+Backend showcase. It intentionally describes boundaries, not private
+implementation details.
 
 ## Public In DotSoundBackend
 
@@ -11,142 +12,64 @@ which parts are owned by `DotSoundPrivateCore`.
 - Public schemas and API contracts in `app/schemas`.
 - ORM models and DB repositories in `app/models` and
   `app/repositories`.
-- App bootstrap and infrastructure wiring in `app/main.py`,
-  `app/dependencies.py`, `app/core/db.py`, and `app/core/s3.py`.
+- App bootstrap, dependency injection, S3/DB/Redis wiring, logging, and
+  observability adapters.
 - Frontend serving and Mini App static delivery.
+- Backend orchestration around queues, jobs, storage, and admin tools.
 
-## Private Candidates Migrated To DotSoundPrivateCore
+## Private In DotSoundPrivateCore
 
-- `app/api/v1/auth.py`
-  - one-time code generation rules
-  - IP masking and user-agent normalization rules
-  - internal bot notification request shaping
-- `app/services/import_service.py`
-  - internal bot bridge URL and header rules
-- `app/services/import_worker.py`
-  - secure internal bot download URL and header rules
-  - audio mime to extension normalization rules
-  - import size guardrails
+`DotSoundPrivateCore` remains closed and is not published with the
+showcase repositories. It owns security-sensitive and product-sensitive
+decisions, including:
 
-## Private Candidates Planned For Later Slices
+- Auth and internal bridge policy.
+- Anti-abuse and moderation decisions.
+- Recommendation, scoring, ranking, and personalization decisions.
+- Upload/file validation policies and safety allowlists.
+- External-source, outbound, and provider-selection strategy.
+- ML/ASR quality policy and fallback decisions.
+- Retention/lifecycle thresholds and other product guardrails.
 
-- Anti-abuse and scoring policies.
-- Production-only risk and moderation heuristics.
-- Additional internal admin automation with privileged side effects.
+## Backend Adapter Contract
 
-## Recsys (listening language)
+Backend may import stable functions or constants from PrivateCore and
+apply them to DB/Redis/S3/HTTP state. Backend must not duplicate private
+rules locally and must not expose private weights, thresholds, provider
+order, routing strategy, or anti-block details through docs, logs,
+OpenAPI schemas, or frontend bundles.
 
-- Heuristics and score weights for listening-language affinity live in
-  `DotSoundPrivateCore` (`recommendation_language_policy`,
-  `recommendation_engine`, `scoring`). Cyrillic strata ratio, cold-start
-  language affinity defaults, and whether Russian discovery boosting is
-  always on are defined there (`RU_STRATIFICATION_ALWAYS`,
-  `DEFAULT_CYRILLIC_STRATA_RATIO`, `cold_start_language_affinity_weights`).
-- Backend supplies track metadata, aggregates `language_affinity` from
-  history and `users.locale`, runs SQL candidate pools (including
-  stratified Cyrillic vs global slices where applicable), and issues
-  external discovery search queries.
+Allowed public wording:
 
-## Streaming Egress Pool
+- "Backend asks PrivateCore for a decision."
+- "The decision is policy-driven and lives in the private core."
+- "Backend owns storage, queues, and API transport."
 
-- Decision rules for the third-party audio CDN streaming pool live in
-  `DotSoundPrivateCore` (`streaming_egress_policy`). The policy module
-  owns sticky-TTL, quarantine thresholds, exponential back-off, and the
-  set of services that count as "audio CDN streaming". Decision
-  functions are stateless: Backend passes a snapshot of in-flight
-  counters and last-use timestamps and gets back the next egress to
-  use plus an updated health record.
-- Backend (`app/services/streaming_egress_pool.py`) owns the runtime
-  state — per-egress in-flight counter, last-use timestamp, quarantine
-  window, and the per-track sticky map — guarded by a single
-  `threading.Lock`. The playback range proxy
-  (`app/api/v1/tracks/playback.py`) and the background audio-cache
-  worker (`app/services/audio_cache_worker.py`) both route audio CDN
-  requests through the pool, sharing capacity caps and quarantine
-  state. They both fall back to the server's native egress when no
-  proxy is available or healthy. Tor is intentionally not on this
-  path. Sticky binding uses ``make_sticky_key(track_id, stream_url)``
-  so different transcodings of the same track form separate buckets.
-- Prometheus surface: ``streaming_egress_picks_total``,
-  ``streaming_egress_quarantine_total``,
-  ``streaming_egress_exhausted_total``,
-  ``streaming_egress_in_flight``,
-  ``streaming_egress_failure_ratio``,
-  ``audio_egress_ttfb_seconds`` (Histogram). Labels stay
-  low-cardinality (egress identity = ``direct`` or
-  ``scheme://host:port``). The TTFB histogram is recorded by the
-  Backend playback range proxy right after the upstream
-  ``GET`` returns — useful for spotting one slow proxy in a
-  pool that otherwise looks healthy.
-- Catalog/API path (``api-v2.soundcloud.com`` resolve / search /
-  transcoding metadata) keeps the legacy OutboundClient pool
-  (Tor / static proxies) as the primary egress. When every
-  identity in the pool is quarantined and
-  ``SC_CATALOG_DIRECT_FALLBACK_ON_EXHAUSTION`` is on (default),
-  ``sc_browser_session._direct_get_fallback`` performs one
-  last-resort GET from the server's native IP. Counted via
-  ``sc_catalog_direct_fallback_total{result}``.
+Avoid public wording:
 
-## Tor Circuit Auto-Recovery
+- Exact score weights, cooldowns, caps, or thresholds.
+- Provider order, fallback stages, model choices, or prompts.
+- Egress strategy, quarantine logic, or service-specific anti-block
+  details.
+- Internal module names when the module name reveals a private strategy.
 
-- After ``OutboundExhaustedError`` keeps firing for the same
-  outbound service ``TOR_RECOVERY_FAILURE_THRESHOLD`` times in a row
-  (default 3), Backend (`app/services/tor_recovery.py`) issues one
-  forced NEWNYM signal via ``TorPool.force_newnym`` and clears the
-  PrivateCore burned-IP quarantine via
-  ``reset_outbound_quarantine``. Throttled by
-  ``TOR_RECOVERY_MIN_INTERVAL_S`` (default 60s) — Tor itself
-  rate-limits NEWNYM and silently drops signals that arrive too fast.
-- Split of responsibilities:
-  - PrivateCore exposes ``reset_outbound_quarantine() -> int`` that
-    drops every burned identity from the in-memory cache. The
-    decision *whether* to call it lives in Backend (the recovery
-    loop and the periodic NEWNYM callback). PrivateCore only owns
-    the storage shape.
-  - Backend ``TorPool.force_newnym(reason, cooldown_s)`` rotates
-    every circuit's exit IP and triggers the registered
-    NEWNYM-callbacks (which include
-    ``reset_audio_proxy_clients`` and
-    ``reset_outbound_quarantine``).
-  - Backend ``tor_recovery.note_outbound_exhaustion(service)``
-    counts consecutive exhaustions per-service and triggers the
-    pair of operations above when the threshold is reached.
-    Counter is reset by
-    ``tor_recovery.note_outbound_success(service)`` after a clean
-    OutboundClient call.
-- Prometheus surface: ``tor_recovery_triggered_total`` (Counter).
-  Alert ``TorRecoveryFiringTooOften`` (warning, > 1/min for 15m)
-  catches the case where SC bans Tor exits faster than NEWNYM can
-  rotate, indicating residential proxies or longer quarantine TTLs
-  are needed.
+## Current Known Public Adapters
 
-## Streaming Alerts
+- Auth and web-auth flows call PrivateCore for code generation and
+  security policy.
+- Upload/file validation calls PrivateCore for allow/deny decisions.
+- Recommendations and radio endpoints call PrivateCore for ranking and
+  queue decisions.
+- Playback, offline caching, and lifecycle services call PrivateCore for
+  policy decisions while Backend handles storage and streaming.
+- Compute-worker APIs use PrivateCore-owned contracts and Backend-owned
+  HMAC/DB/Redis orchestration.
 
-- Prometheus alert rules live in
-  ``infra/prometheus/streaming_alerts.yml`` and are wired in via
-  ``rule_files`` in ``infra/prometheus/prometheus.yml``. The file
-  is mounted by ``docker-compose.observability.yml``. Coverage:
-  - ``SoundCloudCatalogDirectFallbackFailing`` (page) — direct
-    fallback errors > 1/min for 5m. Action: provision residential
-    proxies for the SC catalog or extend the quarantine cooldown.
-  - ``SoundCloudCatalogDirectFallbackElevated`` (warning) — any
-    direct fallback > 2/min for 15m. Capacity-planning signal.
-  - ``StreamingEgressPoolExhausted`` (page) — every streaming
-    proxy quarantined > 1/min for 5m.
-  - ``StreamingEgressHighFailureRatio`` (warning) — single egress
-    > 50% failure for 10m (likely a dead proxy entry).
-  - ``TorRecoveryFiringTooOften`` (warning) — see above.
+## Non-Goals
 
-## Non-Goals For Slice-1
-
-- No migration of websocket manager and realtime orchestration.
-- No API contract changes for public endpoints.
-- No migrations that require frontend protocol changes.
-
-## Promotion Policy
-
-- See `docs/promotion-policy-contract.md` for the contract that
-  `dotsound_private_core.services.promotion_policy` must satisfy.
-- Backend adapter: `app/services/promotion_policy_adapter.py` —
-  pass-through defaults until PrivateCore ships the module.
-
+- This document is not a PrivateCore module inventory.
+- This document does not define implementation details for algorithms,
+  provider integrations, scoring, or anti-abuse.
+- This document does not make the public repositories standalone; they
+  remain showcase repositories that require the private package for full
+  local execution.

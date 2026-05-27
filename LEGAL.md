@@ -1,182 +1,78 @@
 # DotSound Legal Package
 
-Статус: pre-release alignment (стратегия «серая зона», физлицо-оператор)
+Status: pre-release legal alignment for a source-available engineering
+showcase.
 
-Этот файл служит индексом юридических документов проекта и фиксирует
-правовую позицию владельца. Он не заменяет консультацию с профильным
-юристом по РФ.
+This file is a public-safe index for legal and compliance documents in
+the repository. It is not legal advice and it does not replace review by
+a qualified lawyer before a real public product launch.
 
-## Правовая позиция (фиксируется до публичного релиза)
+## Publication Scope
 
-- **Оператор обработки персональных данных:** физическое лицо
-  Звягинцев Роберт Николаевич. Регистрация ИП/ООО не планируется.
-- **Контактный email для legal/privacy/правообладателей:**
-  `legal@dotsound.app` *(placeholder — заменить на реальный адрес
-  до публичного релиза, см. план в `.claude/plans/`)*.
-- **Хостинг и локализация ПДн:** `serv.host`, РФ-локация (242-ФЗ).
-- **Статус сервиса:** некоммерческий проект-витрина для личного
-  бренда автора. Платежей, подписок, донатов и рекламы внутри
-  сервиса нет и не планируется.
-- **Статус по контенту:** информационный посредник по ст. 1253.1
-  ГК РФ. Контент загружается пользователями (UGC); внешние ссылки —
-  как `external_reference`.
-- **Возрастная категория:** 18+ (вход в Mini App требует
-  подтверждения совершеннолетия).
-- **Чаты и комментарии между пользователями:** временно отключены
-  (см. `docs/REGULATORY_DISABLED.md`) во избежание попадания под
-  ст. 10.1 149-ФЗ (организатор распространения информации). Код
-  сохранён для последующего восстановления при оформлении юрлица.
-- **Уведомление в РКН (152-ФЗ):** регистрационный номер —
-  `_(заполнить после подачи через pd.rkn.gov.ru)_`.
+This repository may be visible for code reading and architecture review.
+It is not an open-source license grant and it is not a production
+deployment guide. The license and `NOTICE` define the allowed use.
 
-## Применимые ограничения и осознанные риски
+Operational details, personal data of the operator, private deployment
+notes, and internal legal plans are intentionally excluded from this
+public-facing index.
 
-Подробная карта рисков и митигаций — в плане
-`.claude/plans/lucky-stargazing-badger.md`. Кратко:
+## Product Assumptions
 
-- Музыкальные права: модель «UGC + информационный посредник» без
-  лицензионных договоров с РАО/ВОИС/РСП. Резервный план —
-  переключить флаг `SC_PLAYBACK_MODE=reference` при первой
-  претензии.
-- ОРИ-обязательства: устранены отключением peer-to-peer-обмена.
-- Реклама / платежи / детский трафик: исключены продуктово.
+- DotSound is a music platform with user-generated content.
+- UGC uploads can store audio in project-controlled infrastructure.
+  Public texts must not claim that the service never stores audio.
+- External-source tracks, licensed tracks, and UGC tracks are treated as
+  separate product/legal modes.
+- Own playback over third-party stream URLs is treated as high-risk and
+  requires legal review before public launch or scale-up.
+- Chat/comment functionality is treated as a regulated feature and must
+  be reviewed separately before it is enabled publicly.
 
-## Документы
+## Documents
 
-- `docs/legal/archive/LEGAL_AUDIT_RU.md` — итоговый юридико-архитектурный
-  аудит и матрица рисков (архивный снимок).
-- `docs/legal/USER_AGREEMENT.md` — черновик пользовательского
-  соглашения / публичной оферты.
-- `docs/legal/PRIVACY_POLICY.md` — черновик политики обработки
-  персональных данных.
-- `docs/legal/COPYRIGHT_POLICY.md` — порядок уведомлений
-  правообладателей и takedown flow.
-- `docs/legal/UPLOAD_RULES.md` — правила загрузки контента и
-  запреты для `UGC`.
-- `docs/legal/LEGAL_TEXTS.md` — канонические продуктовые тексты для
-  `upload`, `complaints`, `/legal` и карточек треков.
-- В Mini App маршрут `/legal/anti-abuse-signals` — краткое раскрытие
-  сигналов против автоматических регистраций (черновик; см. также
-  `docs/legal/PRIVACY_POLICY.md`, п. 7.5).
-- `docs/legal/SOURCE_TERMS_CHECKLIST.md` — internal checklist для
-  проверки Terms/API внешних источников перед публичным запуском.
-- `docs/legal/SOUNDCLOUD_TERMS_REVIEW.md` — source-specific internal
-  review для текущей SoundCloud integration.
+- `docs/legal/USER_AGREEMENT.md` — draft user agreement.
+- `docs/legal/PRIVACY_POLICY.md` — draft privacy policy.
+- `docs/legal/COPYRIGHT_POLICY.md` — rightsholder notice and takedown
+  flow.
+- `docs/legal/UPLOAD_RULES.md` — upload rules and UGC restrictions.
+- `docs/legal/LEGAL_TEXTS.md` — canonical product text for upload,
+  complaints, legal views, and track cards.
+- `docs/legal/SOURCE_TERMS_CHECKLIST.md` — checklist for external-source
+  integrations before launch.
 
-## Удаление аккаунта и контента
+## Account And Content Deletion
 
-**Аккаунт.** Запрос на удаление подаётся через
-`Settings → Удалить аккаунт…`. Сервис ставит метку `deleted_at`
-и в течение grace-периода (см. PrivateCore
-`account_deletion_policy.GRACE_PERIOD_DAYS`) ежедневный фоновый
-таск `daily-user-hard-delete` (cron `30 3 * * *`) удаляет
-учётную запись окончательно. До истечения grace доступна кнопка
-«Отменить удаление» (`POST /api/v1/users/me/restore`); статус
-читается через `GET /api/v1/users/me/deletion-status`.
+Account deletion and track deletion use a soft-delete plus grace-period
+model. After the grace period, scheduled jobs remove or detach related
+records and external assets according to backend lifecycle services and
+private policy decisions.
 
-При hard-delete обнуляются прямые ссылки на пользователя в
-комментариях/сообщениях (отображаются как «Удалённый
-пользователь»), очищаются строки `admin_actions_log` с этим
-`user_id`, удаляется аватар из MinIO. **Загруженные треки
-сохраняются** в каталоге; колонка `tracks.uploaded_by_id`
-переходит в `NULL` (трек становится «бесхозным»).
+Public product copy must clearly distinguish between deleting an account,
+deleting uploaded content, and removing local device caches.
 
-**Контент (треки).** Для треков работает та же модель
-soft-delete + grace + hard-delete:
+## Local Offline Cache
 
-- владелец удаляет трек → `deleted_reason = "owner"`;
-- админ-модерация → `"admin"` или `"dmca"` (с собственным grace
-  per-reason из `track_lifecycle_policy`);
-- ежедневный таск `daily-track-hard-delete` (cron `0 4 * * *`)
-  удаляет внешние ассеты (S3: HLS-префикс, file_key, cover_key,
-  video_key, video_thumbnail_key), снимает ссылку с
-  `audio_blobs`, удаляет ES-документ и саму строку.
+The Mini App can cache eligible tracks on the user's device through
+browser storage. Backend and PrivateCore decide whether a response is
+eligible for offline caching; the client must not cache external-source
+or third-party stream content without an explicit allow signal.
 
-В течение grace восстановление доступно владельцу через
-`Settings → Корзина треков` (`POST /api/v1/tracks/{id}/restore`)
-или администратору через `POST /api/v1/admin/tracks/{id}/restore`.
+## External Processing
 
-## Локальный оффлайн-кэш (PWA)
+Any optional third-party processing tier for uploaded audio must remain
+disabled by default until:
 
-Mini App как PWA сохраняет небольшое количество треков на
-устройстве пользователя для воспроизведения без сети
-(`IndexedDB` + `Cache API`, имя кэша `offline-tracks-v1`).
-Кэш живёт **только на устройстве**, оператор копий не получает.
+1. The data transfer is disclosed in the privacy policy and user
+   agreement.
+2. User consent and subprocessors are reviewed.
+3. Budget, kill-switch, and audit logging are configured.
 
-**Что разрешено кэшировать:** только треки c
-`access_mode = "internal_stream"` и `catalog_type ∈ {ugc,
-licensed}`. Решение принимает PrivateCore-policy и backend
-проставляет заголовок `X-Offline-Allowed` на каждый ответ
-`/audio` и HLS-ресурсы. Service Worker отказывается записывать
-ответ в кэш при `X-Offline-Allowed: 0`.
+## Before A Real Public Launch
 
-**Что не кэшируется:** `third_party_stream`, `official_embed`,
-`external_reference` — для них нет права на воспроизведение
-без сети. SoundCloud-/Bandcamp-/YouTube-стримы редиректят на
-внешние CDN и в кэш не попадают.
-
-**Триггер сохранения:** клиент автоматически сохраняет трек в
-локальный кэш при добавлении в избранное (лайк); при снятии
-лайка запись удаляется. Поведение можно отключить в
-`Settings → Авто-сохранение лайкнутых треков`.
-
-**Лимиты:** размер одного трека ограничен PrivateCore-policy
-(`X-Offline-Allowed` + `max_track_bytes`). Общий объём кэша
-ограничен на стороне клиента: либо пользовательским выбором в
-`Settings → Лимит оффлайн-кеша` (1/5/20 ГБ), либо браузерной
-квотой (`navigator.storage.estimate()`). При приближении к
-лимиту клиент применяет LRU-вытеснение по `cachedAt`.
-Полностью очистить кэш можно кнопкой `Settings → Очистить` или
-стандартным «Очистить данные сайта» в браузере.
-
-**Удаление трека из каталога:** кэшированный трек на устройстве
-останется до следующего онлайн-сеанса; при возврате в сеть
-клиент проверяет `X-Offline-Allowed` и удаляет запись.
-
-## Backlog: 152-ФЗ и функционал
-
-Пошаговый план приведения функционала к 152-ФЗ/242-ФЗ/436-ФЗ
-зафиксирован в `.claude/plans/lucky-stargazing-badger.md`
-(Фазы 0–8). Трекер открытых задач — `TODO.md`, раздел
-**«Соответствие 152-ФЗ / ПДн»**; контекст для агентов — `AGENTS.md`
-(Legal readiness), `docs/project_context.md` (раздел compliance).
-
-## Как использовать
-
-- Для любого изменения в `upload`, `import`, `playback`,
-  `complaints`, `recommendation` или `LegalView` сначала проверьте,
-  не противоречит ли код этим документам.
-- Если UI-текст изменяет юридический смысл, обновите соответствующий
-  документ в `docs/legal/` в том же наборе изменений.
-- Публикация документов в репозитории полезна для engineering
-  alignment, но для реального compliance их нужно отдельно
-  опубликовать в продукте и связать с acceptance flow.
-
-## Текущий MVP-риск
-
-На момент создания этого пакета внешний playback через собственный
-player DotSound поверх stream URL стороннего сервиса считается
-высокорисковой моделью и требует отдельного legal review перед
-публичным запуском.
-
-## Cross-border data transfer (Yandex SpeechKit)
-
-Tier `speechkit_paid` в каскаде распознавания лирики передаёт
-аудиофайл пользователя в Yandex Cloud (Россия). Это материальное
-изменение для пользователя, поэтому tier по умолчанию **выключен**
-(`YANDEX_SPEECHKIT_ENABLED=false`).
-
-Перед включением в продакшн обязательно:
-
-1. Раскрыть факт передачи в `docs/legal/PRIVACY_POLICY.md` и
-   обновить пользовательское соглашение (`USER_AGREEMENT.md`).
-2. Проверить, что для UGC-загрузок есть согласие на обработку
-   третьими сторонами (см. чек-лист в `UPLOAD_RULES.md`).
-3. Зафиксировать договор с Yandex Cloud (DPA + ToS) в архиве
-   `docs/legal/`.
-4. Включить kill-switch и месячный бюджет в админ-панели
-   (`/admin/audio-compute/speechkit`); по умолчанию бюджет 500 ₽.
-
-Каскад логирует `speechkit_billed` для каждой оплаченной операции;
-WorkerAuditLog хранит этот след 90 дней (см.
-`app/tasks/audit_log_pruner.py`).
+- Replace draft legal texts with lawyer-reviewed documents.
+- Publish the legal/privacy contact in product surfaces.
+- Confirm personal-data processing, retention, subprocessors, and
+  localization requirements.
+- Review terms for every external source and keep `UGC`, `licensed`,
+  and `external-source` flows distinct in code and UI.

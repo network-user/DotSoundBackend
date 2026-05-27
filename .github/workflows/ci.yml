@@ -1,71 +1,12 @@
-#name: CI
+# Full Backend lint/test CI is intentionally not enabled for the public
+# source-available showcase yet.
 #
-#on:
-#  push:
-#    branches: [main]
-#  pull_request:
-#    branches: [main]
+# Why:
+# - The repository depends on the private `DotSoundPrivateCore` package
+#   for complete installation and runtime behaviour.
+# - The historical Ruff/Mypy backlog is not advertised as green.
+# - The active public guardrails live in `policy-guardrails.yml`
+#   (boundary checks, mojibake checks, and full-history secret scanning).
 #
-#jobs:
-#  backend:
-#    name: Backend (lint + tests + coverage)
-#    runs-on: ubuntu-latest
-#    steps:
-#      - uses: actions/checkout@v4
-#        with:
-#          path: DotSoundBackend
-#
-#      - name: Check out PrivateCore
-#        uses: actions/checkout@v4
-#        with:
-#          repository: ${{ github.repository_owner }}/DotSoundPrivateCore
-#          token: ${{ secrets.PRIVATE_CORE_TOKEN || github.token }}
-#          path: DotSoundPrivateCore
-#          ref: main
-#
-#      - name: Set up Python 3.12
-#        uses: actions/setup-python@v5
-#        with:
-#          python-version: "3.12"
-#
-#      - name: Install poetry
-#        run: pipx install poetry==1.8.3
-#
-#      - name: Install dependencies
-#        working-directory: DotSoundBackend
-#        run: poetry install --no-interaction --no-ansi
-#
-#      - name: Ruff
-#        working-directory: DotSoundBackend
-#        run: poetry run ruff check app
-#
-#      - name: Black
-#        working-directory: DotSoundBackend
-#        run: poetry run black --check app
-#
-#      - name: Mypy
-#        working-directory: DotSoundBackend
-#        run: poetry run mypy app
-#        continue-on-error: true
-#
-#      - name: Pytest with coverage
-#        working-directory: DotSoundBackend
-#        env:
-#          DATABASE_URL: sqlite+aiosqlite:///:memory:
-#          REDIS_URL: redis://localhost:6379/0
-#          MINIO_ENDPOINT: http://localhost:9000
-#          MINIO_ACCESS_KEY: minio
-#          MINIO_SECRET_KEY: minio12345
-#          MINIO_BUCKET: dotsound
-#          DEBUG: "true"
-#          JWT_SECRET: ci-test-secret
-#          ALLOWED_ORIGINS: "*"
-#          ALLOWED_HOSTS: "*"
-#        run: poetry run pytest -q --cov=app --cov-report=term-missing --cov-report=xml
-#
-#      - name: Upload coverage.xml
-#        uses: actions/upload-artifact@v4
-#        with:
-#          name: coverage-backend
-#          path: DotSoundBackend/coverage.xml
-#          if-no-files-found: warn
+# Internal maintainers can re-enable a full CI workflow once the private
+# dependency, lint backlog, and test environment are publication-ready.

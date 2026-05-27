@@ -350,4 +350,6 @@ multi-language) the reference recipe is:
 
 ## License
 
-The reference worker is MIT-licensed; you can fork it.
+The reference worker is source-available, not open source. It is
+published for code reading and architecture review under its repository
+license.
