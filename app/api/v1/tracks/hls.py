@@ -166,7 +166,21 @@ async def hls_master(
     structlog.contextvars.bind_contextvars(track_id=track_id)
     repo = TrackRepository(session)
     track = await repo.get_by_id(track_id)
-    if not track or not track.hls_manifest_key:
+    if not track:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="HLS not ready for this track",
+        )
+    from app.services.ugc_playback_normalize_service import (
+        maybe_schedule_ugc_playback_normalize,
+    )
+
+    if not track.hls_manifest_key:
+        await maybe_schedule_ugc_playback_normalize(
+            session,
+            track,
+            trigger="hls_not_ready",
+        )
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="HLS not ready for this track",
@@ -191,11 +205,11 @@ async def hls_master(
         )
     except HTTPException as exc:
         if exc.status_code == status.HTTP_404_NOT_FOUND:
-            # Bundle key on the row points at an object that no longer
-            # exists in S3 (lost segment, stale CAS reference, etc.).
-            # Clear it so the next play resolves ``has_hls=false`` on
-            # the schema and the frontend goes straight to progressive
-            # /audio instead of looping HLS startup-timeouts forever.
+            await maybe_schedule_ugc_playback_normalize(
+                session,
+                track,
+                trigger="hls_master_missing",
+            )
             await _clear_stale_hls_manifest(track_id, track.hls_manifest_key)
         raise
 

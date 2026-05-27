@@ -150,6 +150,7 @@ services:
       - app.services.transcoding
       - app.services.video_transcoding
       - app.services.telegram_import_backfill_service
+      - app.services.ugc_playback_normalize_service
       - app.services.import_worker
       - app.services.external_import_worker
       - app.services.import_lyrics_worker

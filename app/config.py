@@ -586,6 +586,9 @@ class AppSettings(BaseSettings):
     #: it instead of paying the full materialisation cost again.
     radio_yt_mix_cache_ttl_seconds: int = 300
     playback_repair_sweep_limit: int = 30
+    ugc_playback_normalize_on_playback_enabled: bool = True
+    ugc_playback_normalize_cooldown_seconds: int = 6 * 3600
+    ugc_playback_normalize_sweep_limit: int = 40
 
     snippet_ffmpeg_enabled: bool = True
     snippet_external_catalog_allowed: bool = False

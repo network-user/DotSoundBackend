@@ -74,6 +74,7 @@ async def transcode_and_upload_local(
     lo_dir = os.path.join(tmp_dir, "lo")
     os.makedirs(hi_dir)
     os.makedirs(lo_dir)
+    transcode_ok = False
 
     try:
         # Скачиваем оригинальный файл из временного хранилища S3
@@ -246,6 +247,7 @@ async def transcode_and_upload_local(
             if track_id:
                 await schedule_reindex_track(track_id)
                 await generate_waveform_task.kiq(track_id)
+            transcode_ok = True
 
     except Exception:
         logger.exception("transcoding_exception", track_id=track_id)
@@ -253,11 +255,13 @@ async def transcode_and_upload_local(
 
     finally:
         shutil.rmtree(tmp_dir, ignore_errors=True)
-        # Удаляем временный исходный файл из S3 после обработки
-        try:
-            await s3.delete_object(raw_key)
-        except Exception:
-            logger.warning("failed_to_delete_raw_temp_file", raw_key=raw_key)
+        if transcode_ok:
+            try:
+                await s3.delete_object(raw_key)
+            except Exception:
+                logger.warning(
+                    "failed_to_delete_raw_temp_file", raw_key=raw_key
+                )
 
 
 @broker.task  # Превращаем в фоновую задачу воркера

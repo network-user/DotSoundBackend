@@ -334,6 +334,24 @@ class ChunkedUploadService:
             )
             await self._session.flush()
 
+        from app.services.file_validator import validate_audio_async
+
+        probe_bytes = min(record.total_size, 8192)
+        range_header = (
+            f"bytes=0-{probe_bytes - 1}" if probe_bytes > 0 else None
+        )
+        head, _, _, _ = await s3.download_object_range(
+            record.s3_key,
+            range_header,
+        )
+        detected_mime = await validate_audio_async(
+            head,
+            record.filename,
+        )
+        if detected_mime != record.mime:
+            record.mime = detected_mime
+            await self._session.flush()
+
         meta = record.meta or {}
         upload_svc = UploadService(self._session)
         track = await upload_svc.finalize_from_s3(

@@ -291,6 +291,9 @@ def _get_audio_proxy_client(proxy_url: str | None) -> httpx.AsyncClient:
     50 so concurrent listeners on the same egress reuse warm
     sockets instead of paying the connect cost each time.
     """
+    from app.services.outbound_proxy import proxy_url_for_httpx
+
+    httpx_proxy = proxy_url_for_httpx(proxy_url)
     client = _audio_proxy_http_clients.get(proxy_url)
     if client is None or client.is_closed:
         client = httpx.AsyncClient(
@@ -302,7 +305,7 @@ def _get_audio_proxy_client(proxy_url: str | None) -> httpx.AsyncClient:
             ),
             follow_redirects=True,
             trust_env=False,
-            proxy=proxy_url,
+            proxy=httpx_proxy,
             limits=httpx.Limits(
                 max_connections=100,
                 max_keepalive_connections=50,
@@ -774,6 +777,31 @@ async def _stream_s3_audio_object(
     except ClientError as exc:
         code = exc.response["Error"]["Code"]
         if code == "NoSuchKey":
+            track_id_raw = structlog.contextvars.get_contextvars().get(
+                "track_id"
+            )
+            if track_id_raw is not None:
+                try:
+                    from app.core.db import AsyncSessionLocal
+                    from app.services.ugc_playback_normalize_service import (
+                        maybe_schedule_ugc_playback_normalize,
+                    )
+
+                    tid = int(track_id_raw)
+                    async with AsyncSessionLocal() as norm_session:
+                        tr = await norm_session.get(Track, tid)
+                        if tr is not None:
+                            await maybe_schedule_ugc_playback_normalize(
+                                norm_session,
+                                tr,
+                                trigger="audio_s3_missing",
+                            )
+                            await norm_session.commit()
+                except Exception:  # noqa: BLE001
+                    logger.warning(
+                        "ugc_normalize_on_s3_missing_hook_failed",
+                        track_id=track_id_raw,
+                    )
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail="Audio file not found in storage",
@@ -1248,6 +1276,16 @@ async def audio_stream(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail="Playback temporarily unavailable for this track",
         )
+
+    from app.services.ugc_playback_normalize_service import (
+        maybe_schedule_ugc_playback_normalize,
+    )
+
+    await maybe_schedule_ugc_playback_normalize(
+        session,
+        track,
+        trigger="audio_stream",
+    )
 
     if track.hls_manifest_key and not force_progressive:
         manifest_url = f"/api/v1/tracks/{track_id}/hls/master.m3u8"

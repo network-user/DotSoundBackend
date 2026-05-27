@@ -1235,15 +1235,47 @@ export const adminApi = {
       method: 'POST',
       body: { track_ids: trackIds },
     }),
-  normalizeTelegramPlayback: (params?: {
+  normalizeInternalUgcPlayback: (params?: {
     limit?: number
     dry_run?: boolean
+    force_retry?: boolean
   }) =>
     adminFetch<{
       dry_run: boolean
       found: number
       enqueued: number
       failed: number
+      skipped: number
+      unrecoverable: number
+      items: Array<{
+        track_id: number
+        status: string
+        title: string
+        file_key: string
+        tmp_key: string | null
+        error: string | null
+      }>
+      detail: string
+    }>('/tracks/playback-health/normalize-internal-ugc', {
+      method: 'POST',
+      body: {
+        limit: params?.limit,
+        dry_run: params?.dry_run,
+        force_retry: params?.force_retry ?? true,
+      },
+    }),
+  normalizeTelegramPlayback: (params?: {
+    limit?: number
+    dry_run?: boolean
+    force_retry?: boolean
+  }) =>
+    adminFetch<{
+      dry_run: boolean
+      found: number
+      enqueued: number
+      failed: number
+      skipped: number
+      unrecoverable: number
       items: Array<{
         track_id: number
         status: string
@@ -1258,8 +1290,21 @@ export const adminApi = {
       body: {
         limit: params?.limit,
         dry_run: params?.dry_run,
+        force_retry: params?.force_retry ?? true,
       },
     }),
+  listUnrecoverableInternalUgc: (limit = 100) =>
+    adminFetch<{
+      total: number
+      items: Array<{
+        track_id: number
+        title: string
+        file_key: string
+        detail: string
+      }>
+    }>(
+      `/tracks/playback-health/unrecoverable-internal-ugc?limit=${limit}`,
+    ),
   auditSoundCloudPlayback: (params?: {
     search?: string
     limit?: number

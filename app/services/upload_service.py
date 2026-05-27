@@ -101,7 +101,7 @@ class UploadService:
             validate_audio_async,
         )
 
-        await validate_audio_async(data, file.filename)
+        mime = await validate_audio_async(data, file.filename)
         await scan_for_malware(data, file.filename)
 
         if uploader_id is not None:

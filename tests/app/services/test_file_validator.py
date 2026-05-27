@@ -98,6 +98,14 @@ _WEBM_HEADER = (
 
 
 class TestValidateAudio:
+    def test_valid_mp3_when_magic_returns_octet_stream(self) -> None:
+        with patch(
+            "app.services.file_validator._mime_with_magic",
+            return_value="application/octet-stream",
+        ):
+            result = validate_audio(_MP3_HEADER, "song.mp3")
+        assert result == "audio/mpeg"
+
     def test_valid_mp3(self) -> None:
         result = validate_audio(_MP3_HEADER, "song.mp3")
         assert "audio" in result or "video" in result

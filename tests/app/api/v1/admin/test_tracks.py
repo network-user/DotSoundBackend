@@ -593,6 +593,8 @@ async def test_admin_normalize_telegram_playback_endpoint(
         found=2,
         enqueued=1,
         failed=1,
+        skipped=0,
+        unrecoverable=0,
         items=[
             TelegramImportBackfillItem(
                 track_id=11,
@@ -612,7 +614,7 @@ async def test_admin_normalize_telegram_playback_endpoint(
     )
 
     with patch(
-        "app.api.v1.admin.tracks.TelegramImportBackfillService"
+        "app.api.v1.admin.tracks.UgcPlaybackNormalizeService"
     ) as service_cls:
         service = service_cls.return_value
         service.run = AsyncMock(return_value=report)
@@ -627,13 +629,14 @@ async def test_admin_normalize_telegram_playback_endpoint(
         limit=123,
         dry_run=False,
         urgent=True,
+        force_retry=True,
     )
     body = r.json()
     assert body["dry_run"] is False
     assert body["found"] == 2
     assert body["enqueued"] == 1
     assert body["failed"] == 1
-    assert body["detail"] == "telegram playback normalization queued"
+    assert body["detail"] == "internal-stream UGC playback normalization queued"
     assert body["items"][0] == {
         "track_id": 11,
         "status": "enqueued",

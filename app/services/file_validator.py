@@ -17,6 +17,13 @@ logger: structlog.stdlib.BoundLogger = structlog.get_logger(
 
 
 _MAGIC_HEAD_BYTES = 8192
+_MAGIC_INCONCLUSIVE = frozenset(
+    {
+        "",
+        "application/octet-stream",
+        "binary/octet-stream",
+    }
+)
 
 
 def _mime_with_magic(data: bytes) -> str | None:
@@ -88,7 +95,7 @@ def _detect_mime(data: bytes) -> str:
     if len(data) < 4:
         return "application/octet-stream"
     detected = _mime_with_magic(data)
-    if detected is not None:
+    if detected is not None and detected not in _MAGIC_INCONCLUSIVE:
         return detected
     detected = _mime_from_signatures(data)
     if detected is not None:

@@ -33,6 +33,7 @@ from app.schemas.admin_playback import (
     AdminSoundCloudEncryptedUnsupportedCleanupRequest,
     AdminSoundCloudEncryptedUnsupportedCleanupResponse,
     AdminSoundCloudPlaybackAuditRequest,
+    AdminInternalUgcUnrecoverableResponse,
     AdminTelegramPlaybackNormalizeRequest,
     AdminTelegramPlaybackNormalizeResponse,
 )
@@ -51,8 +52,8 @@ from app.services.admin_track_context_service import (
 from app.services.admin_track_genre_mood_import_service import (
     AdminTrackGenreMoodImportService,
 )
-from app.services.telegram_import_backfill_service import (
-    TelegramImportBackfillService,
+from app.services.ugc_playback_normalize_service import (
+    UgcPlaybackNormalizeService,
 )
 from app.services.transcoding import transcode_hls_only
 
@@ -537,10 +538,66 @@ async def admin_repair_tracks_playback(
     return result
 
 
+async def _run_internal_ugc_normalize(
+    session: AsyncSession,
+    body: AdminTelegramPlaybackNormalizeRequest,
+    *,
+    urgent: bool,
+    log_event: str,
+) -> AdminTelegramPlaybackNormalizeResponse:
+    service = UgcPlaybackNormalizeService(session)
+    report = await service.run(
+        limit=body.limit,
+        dry_run=body.dry_run,
+        urgent=urgent,
+        force_retry=body.force_retry,
+    )
+    await session.commit()
+    logger.info(
+        log_event,
+        found=report.found,
+        enqueued=report.enqueued,
+        failed=report.failed,
+        skipped=report.skipped,
+        unrecoverable=report.unrecoverable,
+        dry_run=report.dry_run,
+        force_retry=body.force_retry,
+    )
+    suffix = "queued" if not report.dry_run else "dry run"
+    return AdminTelegramPlaybackNormalizeResponse(
+        **report.to_dict(),
+        detail=f"internal-stream UGC playback normalization {suffix}",
+    )
+
+
+@router.post(
+    "/tracks/playback-health/normalize-internal-ugc",
+    response_model=AdminTelegramPlaybackNormalizeResponse,
+    summary=(
+        "[Admin] Queue playback normalization for internal-stream UGC "
+        "(Telegram imports and manual uploads)"
+    ),
+)
+@limiter.limit("5/minute")
+async def admin_normalize_internal_ugc_playback(
+    request: Request,
+    body: AdminTelegramPlaybackNormalizeRequest,
+    session: AsyncSession = Depends(get_db),
+    _admin: User = Depends(require_admin_session),
+) -> AdminTelegramPlaybackNormalizeResponse:
+    return await _run_internal_ugc_normalize(
+        session,
+        body,
+        urgent=True,
+        log_event="admin_internal_ugc_playback_normalize",
+    )
+
+
 @router.post(
     "/tracks/playback-health/normalize-telegram",
     response_model=AdminTelegramPlaybackNormalizeResponse,
-    summary="[Admin] Queue urgent playback normalization for Telegram tracks",
+    summary="[Admin] Deprecated alias for normalize-internal-ugc",
+    deprecated=True,
 )
 @limiter.limit("5/minute")
 async def admin_normalize_telegram_playback(
@@ -549,29 +606,43 @@ async def admin_normalize_telegram_playback(
     session: AsyncSession = Depends(get_db),
     _admin: User = Depends(require_admin_session),
 ) -> AdminTelegramPlaybackNormalizeResponse:
-    service = TelegramImportBackfillService(session)
-    report = await service.run(
-        limit=body.limit,
-        dry_run=body.dry_run,
+    return await _run_internal_ugc_normalize(
+        session,
+        body,
         urgent=True,
-        force_retry=body.force_retry,
+        log_event="admin_telegram_playback_normalize_queued",
     )
-    await session.commit()
-    logger.info(
-        "admin_telegram_playback_normalize_queued",
-        found=report.found,
-        enqueued=report.enqueued,
-        failed=report.failed,
-        dry_run=report.dry_run,
-        force_retry=body.force_retry,
-    )
-    return AdminTelegramPlaybackNormalizeResponse(
-        **report.to_dict(),
-        detail=(
-            "telegram playback normalization queued"
-            if not report.dry_run
-            else "telegram playback normalization dry run"
-        ),
+
+
+@router.get(
+    "/tracks/playback-health/unrecoverable-internal-ugc",
+    response_model=AdminInternalUgcUnrecoverableResponse,
+    summary=(
+        "[Admin] List internal-stream UGC tracks whose source audio "
+        "object is missing from storage"
+    ),
+)
+@limiter.limit("30/minute")
+async def admin_list_unrecoverable_internal_ugc(
+    request: Request,
+    limit: int = Query(default=100, ge=1, le=5000),
+    session: AsyncSession = Depends(get_db),
+    _admin: User = Depends(require_admin_session),
+) -> AdminInternalUgcUnrecoverableResponse:
+    items = await UgcPlaybackNormalizeService(
+        session
+    ).list_unrecoverable_candidates(limit=limit)
+    return AdminInternalUgcUnrecoverableResponse(
+        total=len(items),
+        items=[
+            {
+                "track_id": i.track_id,
+                "title": i.title,
+                "file_key": i.file_key,
+                "detail": i.detail or "",
+            }
+            for i in items
+        ],
     )
 
 

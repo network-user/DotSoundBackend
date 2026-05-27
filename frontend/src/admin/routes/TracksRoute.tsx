@@ -735,7 +735,7 @@ export function TracksRoute() {
     if (!ok) return
     setTelegramNormalizeBusy(true)
     try {
-      const result = await adminApi.normalizeTelegramPlayback({
+      const result = await adminApi.normalizeInternalUgcPlayback({
         limit: 5000,
       })
       await showAlert(

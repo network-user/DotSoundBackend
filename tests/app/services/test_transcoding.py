@@ -113,6 +113,53 @@ async def test_transcode_and_upload_ffmpeg_fail(
     assert args[0][1] == "error"
 
 
+@patch(
+    f"{_MOD}._update_track_status",
+    new_callable=AsyncMock,
+)
+@patch(
+    f"{_MOD}.s3.delete_object",
+    new_callable=AsyncMock,
+)
+@patch(
+    f"{_MOD}.s3.download_object",
+    new_callable=AsyncMock,
+    return_value=_RAW,
+)
+@patch(f"{_MOD}.asyncio.create_subprocess_exec")
+async def test_transcode_local_keeps_raw_on_ffmpeg_fail(
+    mock_exec: AsyncMock,
+    mock_dl: AsyncMock,
+    mock_del: AsyncMock,
+    mock_status: AsyncMock,
+) -> None:
+    from app.services.compute_job_dispatcher import LocalComputeJob
+    from app.services.transcoding import transcode_and_upload_local
+
+    mock_proc = AsyncMock()
+    mock_proc.communicate = AsyncMock(
+        return_value=(b"", b"error")
+    )
+    mock_proc.returncode = 1
+    mock_exec.return_value = mock_proc
+
+    job = LocalComputeJob(
+        job_type="track_transcoding",
+        target_kind="track",
+        target_id="1",
+        payload={
+            "track_id": 1,
+            "raw_key": "temp/raw/keep-me.mp3",
+            "original_filename": "t.mp3",
+        },
+        feature_version="test-v1",
+    )
+    await transcode_and_upload_local(job)
+
+    mock_status.assert_awaited()
+    mock_del.assert_not_awaited()
+
+
 @patch(f"{_MOD}.s3.upload_object", new_callable=AsyncMock)
 async def test_upload_hls(
     mock_upload: AsyncMock,

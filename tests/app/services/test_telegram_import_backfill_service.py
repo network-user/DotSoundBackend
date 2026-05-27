@@ -14,7 +14,7 @@ from app.services.telegram_import_backfill_service import (
 
 pytestmark = pytest.mark.anyio
 
-_MOD = "app.services.telegram_import_backfill_service"
+_MOD = "app.services.ugc_playback_normalize_service"
 
 
 async def _make_user(session: AsyncSession, telegram_id: int) -> User:
@@ -27,6 +27,32 @@ async def _make_user(session: AsyncSession, telegram_id: int) -> User:
     await session.flush()
     await session.refresh(user)
     return user
+
+
+async def _make_internal_upload_track(
+    session: AsyncSession,
+    *,
+    user_id: int,
+    file_key: str = "temp/uploads/1/uuid/track.mp3",
+    hls_manifest_key: str | None = None,
+) -> Track:
+    track = Track(
+        title="Manual Upload",
+        artist="Artist",
+        file_key=file_key,
+        hls_manifest_key=hls_manifest_key,
+        uploaded_by_id=user_id,
+        is_active=True,
+        is_public=True,
+        source="internal",
+        catalog_type="ugc",
+        access_mode="internal_stream",
+        processing_status="error",
+    )
+    session.add(track)
+    await session.flush()
+    await session.refresh(track)
+    return track
 
 
 async def _make_telegram_track(
@@ -70,6 +96,23 @@ async def _make_telegram_track(
     return track
 
 
+async def test_dry_run_lists_manual_internal_upload_candidates(
+    db_session: AsyncSession,
+) -> None:
+    user = await _make_user(db_session, 6105)
+    candidate = await _make_internal_upload_track(
+        db_session,
+        user_id=user.id,
+        file_key="temp/raw/legacy_1_song.mp3",
+    )
+
+    service = TelegramImportBackfillService(db_session)
+    report = await service.run(limit=10, dry_run=True)
+
+    assert report.found == 1
+    assert report.items[0].track_id == candidate.id
+
+
 async def test_dry_run_lists_only_legacy_telegram_candidates(
     db_session: AsyncSession,
 ) -> None:
@@ -93,12 +136,16 @@ async def test_dry_run_lists_only_legacy_telegram_candidates(
     assert report.items[0].status == "candidate"
 
 
+@patch(f"{_MOD}.q.find_existing_job", new_callable=AsyncMock, return_value=None)
+@patch(f"{_MOD}._source_object_exists", new_callable=AsyncMock, return_value=True)
+@patch(f"{_MOD}._is_marked_unrecoverable", new_callable=AsyncMock, return_value=False)
+@patch(f"{_MOD}._acquire_schedule_cooldown", new_callable=AsyncMock, return_value=True)
 @patch(
     "app.services.search_index_notify.schedule_reindex_track",
     new_callable=AsyncMock,
 )
 @patch(
-    f"{_MOD}.repair_telegram_import_transcode_task.kiq",
+    f"{_MOD}.repair_ugc_playback_normalize_task.kiq",
     new_callable=AsyncMock,
 )
 @patch(f"{_MOD}.s3.upload_object", new_callable=AsyncMock)
@@ -112,6 +159,10 @@ async def test_apply_copies_raw_object_and_queues_repair(
     mock_upload: AsyncMock,
     mock_repair_kiq: AsyncMock,
     mock_reindex: AsyncMock,
+    _mock_cooldown: AsyncMock,
+    _mock_unrec: AsyncMock,
+    _mock_exists: AsyncMock,
+    _mock_find_job: AsyncMock,
     db_session: AsyncSession,
 ) -> None:
     user = await _make_user(db_session, 6101)
@@ -135,25 +186,27 @@ async def test_apply_copies_raw_object_and_queues_repair(
     assert tmp_key.endswith(".ogg")
     mock_download.assert_awaited_once_with("blobs/aa/raw.ogg")
     mock_upload.assert_awaited_once_with(tmp_key, b"raw-ogg", "audio/ogg")
-    mock_repair_kiq.assert_awaited_once_with(
-        track_id=track.id,
-        raw_key=tmp_key,
-        original_filename="audio.ogg",
-        source_sha256=source_sha,
-        feature_version="telegram-import-repair-v1",
-    )
+    mock_repair_kiq.assert_awaited_once()
+    kiq_kwargs = mock_repair_kiq.await_args.kwargs
+    assert kiq_kwargs["track_id"] == track.id
+    assert kiq_kwargs["raw_key"] == tmp_key
+    assert kiq_kwargs["feature_version"] == "ugc-playback-normalize-v1"
     mock_reindex.assert_awaited_once_with(track.id)
 
     await db_session.refresh(track)
     assert track.source_sha256 == source_sha
 
 
+@patch(f"{_MOD}.q.find_existing_job", new_callable=AsyncMock, return_value=None)
+@patch(f"{_MOD}._source_object_exists", new_callable=AsyncMock, return_value=True)
+@patch(f"{_MOD}._is_marked_unrecoverable", new_callable=AsyncMock, return_value=False)
+@patch(f"{_MOD}._acquire_schedule_cooldown", new_callable=AsyncMock, return_value=True)
 @patch(
     "app.services.search_index_notify.schedule_reindex_track",
     new_callable=AsyncMock,
 )
 @patch(
-    f"{_MOD}.repair_telegram_import_transcode_task.kiq",
+    f"{_MOD}.repair_ugc_playback_normalize_task.kiq",
     new_callable=AsyncMock,
 )
 @patch(f"{_MOD}.s3.upload_object", new_callable=AsyncMock)
@@ -167,6 +220,10 @@ async def test_urgent_apply_queues_high_priority_repair(
     _mock_upload: AsyncMock,
     mock_repair_kiq: AsyncMock,
     _mock_reindex: AsyncMock,
+    _mock_cooldown: AsyncMock,
+    _mock_unrec: AsyncMock,
+    _mock_exists: AsyncMock,
+    _mock_find_job: AsyncMock,
     db_session: AsyncSession,
 ) -> None:
     user = await _make_user(db_session, 6103)
@@ -182,15 +239,19 @@ async def test_urgent_apply_queues_high_priority_repair(
     kwargs = mock_repair_kiq.await_args.kwargs
     assert kwargs["track_id"] == track.id
     assert kwargs["priority"] == 0
-    assert kwargs["feature_version"] == "telegram-import-urgent-repair-v1"
+    assert kwargs["feature_version"] == "ugc-playback-normalize-urgent-v1"
 
 
+@patch(f"{_MOD}.q.find_existing_job", new_callable=AsyncMock, return_value=None)
+@patch(f"{_MOD}._source_object_exists", new_callable=AsyncMock, return_value=True)
+@patch(f"{_MOD}._is_marked_unrecoverable", new_callable=AsyncMock, return_value=False)
+@patch(f"{_MOD}._acquire_schedule_cooldown", new_callable=AsyncMock, return_value=True)
 @patch(
     "app.services.search_index_notify.schedule_reindex_track",
     new_callable=AsyncMock,
 )
 @patch(
-    f"{_MOD}.repair_telegram_import_transcode_task.kiq",
+    f"{_MOD}.repair_ugc_playback_normalize_task.kiq",
     new_callable=AsyncMock,
 )
 @patch(f"{_MOD}.s3.upload_object", new_callable=AsyncMock)
@@ -204,6 +265,10 @@ async def test_force_retry_uses_unique_feature_version(
     _mock_upload: AsyncMock,
     mock_repair_kiq: AsyncMock,
     _mock_reindex: AsyncMock,
+    _mock_cooldown: AsyncMock,
+    _mock_unrec: AsyncMock,
+    _mock_exists: AsyncMock,
+    _mock_find_job: AsyncMock,
     db_session: AsyncSession,
 ) -> None:
     user = await _make_user(db_session, 6104)
@@ -217,11 +282,15 @@ async def test_force_retry_uses_unique_feature_version(
     kwargs = mock_repair_kiq.await_args.kwargs
     feature_version = kwargs["feature_version"]
     assert feature_version.startswith(
-        "telegram-import-urgent-repair-v1-retry-"
+        "ugc-playback-normalize-urgent-v1-retry-"
     )
-    assert feature_version != "telegram-import-urgent-repair-v1"
+    assert feature_version != "ugc-playback-normalize-urgent-v1"
 
 
+@patch(f"{_MOD}.q.find_existing_job", new_callable=AsyncMock, return_value=None)
+@patch(f"{_MOD}._source_object_exists", new_callable=AsyncMock, return_value=True)
+@patch(f"{_MOD}._is_marked_unrecoverable", new_callable=AsyncMock, return_value=False)
+@patch(f"{_MOD}._acquire_schedule_cooldown", new_callable=AsyncMock, return_value=True)
 @patch(f"{_MOD}.s3.upload_object", new_callable=AsyncMock)
 @patch(
     f"{_MOD}.s3.download_object",
@@ -229,13 +298,17 @@ async def test_force_retry_uses_unique_feature_version(
     return_value=b"raw-bytes",
 )
 @patch(
-    f"{_MOD}.repair_telegram_import_transcode_task.kiq",
+    f"{_MOD}.repair_ugc_playback_normalize_task.kiq",
     new_callable=AsyncMock,
 )
 async def test_apply_hashes_source_when_blob_is_missing(
     mock_repair_kiq: AsyncMock,
     _mock_download: AsyncMock,
     _mock_upload: AsyncMock,
+    _mock_cooldown: AsyncMock,
+    _mock_unrec: AsyncMock,
+    _mock_exists: AsyncMock,
+    _mock_find_job: AsyncMock,
     db_session: AsyncSession,
 ) -> None:
     user = await _make_user(db_session, 6102)
@@ -254,4 +327,4 @@ async def test_apply_hashes_source_when_blob_is_missing(
         "48c2a3cc55bca79baff97910b96c74b906fc5d893a1bc5ccd14d629d"
         "3f3ef715"
     )
-    assert kwargs["feature_version"] == "telegram-import-repair-v1"
+    assert kwargs["feature_version"] == "ugc-playback-normalize-v1"

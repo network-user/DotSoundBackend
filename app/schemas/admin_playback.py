@@ -51,10 +51,26 @@ class AdminTelegramPlaybackNormalizeResponse(BaseModel):
     found: int
     enqueued: int
     failed: int
+    skipped: int = 0
+    unrecoverable: int = 0
     items: list[AdminTelegramPlaybackNormalizeItem] = Field(
         default_factory=list
     )
     detail: str = ""
+
+
+class AdminInternalUgcUnrecoverableItem(BaseModel):
+    track_id: int
+    title: str
+    file_key: str
+    detail: str = ""
+
+
+class AdminInternalUgcUnrecoverableResponse(BaseModel):
+    total: int
+    items: list[AdminInternalUgcUnrecoverableItem] = Field(
+        default_factory=list
+    )
 
 
 class AdminSoundCloudPlaybackAuditRequest(BaseModel):

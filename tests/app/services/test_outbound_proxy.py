@@ -8,6 +8,19 @@ import pytest
 pytestmark = pytest.mark.anyio
 
 
+def test_proxy_url_for_httpx_normalizes_socks5h() -> None:
+    from app.services.outbound_proxy import proxy_url_for_httpx
+
+    assert (
+        proxy_url_for_httpx("socks5h://user:pass@proxy.example:1080")
+        == "socks5://user:pass@proxy.example:1080"
+    )
+    assert proxy_url_for_httpx("http://127.0.0.1:8080") == (
+        "http://127.0.0.1:8080"
+    )
+    assert proxy_url_for_httpx(None) is None
+
+
 def test_get_outbound_proxy_static_round_robin(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
