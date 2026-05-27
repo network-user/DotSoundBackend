@@ -3,7 +3,7 @@ from __future__ import annotations
 import threading
 import time
 from typing import Any, Protocol
-from urllib.parse import SplitResult, urlsplit, urlunsplit, urlunsplit
+from urllib.parse import SplitResult, urlsplit, urlunsplit
 
 import httpx
 import structlog
@@ -39,24 +39,6 @@ class _OutboundMetrics(Protocol):
 
 def proxy_url_for_httpx(proxy_url: str | None) -> str | None:
     """Normalize proxy URLs for httpx (socksio rejects ``socks5h://``)."""
-    if not proxy_url:
-        return None
-    parsed = urlsplit(proxy_url)
-    if parsed.scheme == "socks5h":
-        return urlunsplit(
-            (
-                "socks5",
-                parsed.netloc,
-                parsed.path,
-                parsed.query,
-                parsed.fragment,
-            )
-        )
-    return proxy_url
-
-
-def proxy_url_for_httpx(proxy_url: str | None) -> str | None:
-    """Normalize proxy URLs for httpx (socksio does not accept socks5h)."""
     if not proxy_url:
         return None
     parsed = urlsplit(proxy_url)

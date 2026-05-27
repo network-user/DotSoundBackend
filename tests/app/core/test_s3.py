@@ -1,3 +1,4 @@
+from collections.abc import AsyncIterator
 from unittest.mock import (
     AsyncMock,
     MagicMock,
@@ -9,11 +10,13 @@ from botocore.exceptions import ClientError
 
 from app.core.s3 import (
     build_cas_audio_key,
+    compute_sha256_streaming,
     delete_object,
     download_object,
     download_object_range,
     ensure_bucket_exists,
     get_presigned_url,
+    open_object_range,
     put_cas_audio,
     upload_audio,
     upload_object,
@@ -32,9 +35,7 @@ def _s3_client_mock() -> AsyncMock:
     client.get_object = AsyncMock()
     client.head_bucket = AsyncMock()
     client.create_bucket = AsyncMock()
-    client.list_objects_v2 = AsyncMock(
-        return_value={"Contents": []}
-    )
+    client.list_objects_v2 = AsyncMock(return_value={"Contents": []})
     client.generate_presigned_url = AsyncMock(
         return_value="https://s3/presigned"
     )
@@ -49,9 +50,7 @@ def test_build_cas_audio_key() -> None:
 
 @patch(f"{_MOD}.get_s3_client")
 @patch(f"{_MOD}.upload_object", new_callable=AsyncMock)
-async def test_put_cas_audio(
-    mock_uo: AsyncMock, mock_ctx: MagicMock
-) -> None:
+async def test_put_cas_audio(mock_uo: AsyncMock, mock_ctx: MagicMock) -> None:
     client = _s3_client_mock()
     ctx = AsyncMock()
     ctx.__aenter__ = AsyncMock(return_value=client)
@@ -74,9 +73,7 @@ async def test_upload_audio_with_user(
     ctx.__aexit__ = AsyncMock(return_value=False)
     mock_ctx.return_value = ctx
 
-    key = await upload_audio(
-        b"data", "mp3", "audio/mpeg", user_id=42
-    )
+    key = await upload_audio(b"data", "mp3", "audio/mpeg", user_id=42)
 
     assert key.startswith("42/")
     assert key.endswith(".mp3")
@@ -93,9 +90,7 @@ async def test_upload_audio_anon(
     ctx.__aexit__ = AsyncMock(return_value=False)
     mock_ctx.return_value = ctx
 
-    key = await upload_audio(
-        b"data", "wav", "audio/wav"
-    )
+    key = await upload_audio(b"data", "wav", "audio/wav")
 
     assert key.startswith("anon/")
 
@@ -136,15 +131,9 @@ async def test_download_object(
     mock_ctx: MagicMock,
 ) -> None:
     body_stream = AsyncMock()
-    body_stream.read = AsyncMock(
-        return_value=b"audio-data"
-    )
-    body_stream.__aenter__ = AsyncMock(
-        return_value=body_stream
-    )
-    body_stream.__aexit__ = AsyncMock(
-        return_value=False
-    )
+    body_stream.read = AsyncMock(return_value=b"audio-data")
+    body_stream.__aenter__ = AsyncMock(return_value=body_stream)
+    body_stream.__aexit__ = AsyncMock(return_value=False)
     client = _s3_client_mock()
     client.get_object = AsyncMock(
         return_value={
@@ -166,15 +155,9 @@ async def test_download_object_range_no_range(
     mock_ctx: MagicMock,
 ) -> None:
     body_stream = AsyncMock()
-    body_stream.read = AsyncMock(
-        return_value=b"full-data"
-    )
-    body_stream.__aenter__ = AsyncMock(
-        return_value=body_stream
-    )
-    body_stream.__aexit__ = AsyncMock(
-        return_value=False
-    )
+    body_stream.read = AsyncMock(return_value=b"full-data")
+    body_stream.__aenter__ = AsyncMock(return_value=body_stream)
+    body_stream.__aexit__ = AsyncMock(return_value=False)
     client = _s3_client_mock()
     client.get_object = AsyncMock(
         return_value={
@@ -188,9 +171,7 @@ async def test_download_object_range_no_range(
     ctx.__aexit__ = AsyncMock(return_value=False)
     mock_ctx.return_value = ctx
 
-    data, length, cr, ct = (
-        await download_object_range("key.mp3")
-    )
+    data, length, cr, ct = await download_object_range("key.mp3")
 
     assert data == b"full-data"
     assert length == 9
@@ -203,15 +184,9 @@ async def test_download_object_range_with_range(
     mock_ctx: MagicMock,
 ) -> None:
     body_stream = AsyncMock()
-    body_stream.read = AsyncMock(
-        return_value=b"part"
-    )
-    body_stream.__aenter__ = AsyncMock(
-        return_value=body_stream
-    )
-    body_stream.__aexit__ = AsyncMock(
-        return_value=False
-    )
+    body_stream.read = AsyncMock(return_value=b"part")
+    body_stream.__aenter__ = AsyncMock(return_value=body_stream)
+    body_stream.__aexit__ = AsyncMock(return_value=False)
     client = _s3_client_mock()
     client.get_object = AsyncMock(
         return_value={
@@ -226,11 +201,7 @@ async def test_download_object_range_with_range(
     ctx.__aexit__ = AsyncMock(return_value=False)
     mock_ctx.return_value = ctx
 
-    data, length, cr, ct = (
-        await download_object_range(
-            "key.mp3", "bytes=0-3"
-        )
-    )
+    data, length, cr, ct = await download_object_range("key.mp3", "bytes=0-3")
 
     assert data == b"part"
     assert cr == "bytes 0-3/100"
@@ -241,13 +212,9 @@ async def test_download_object_range_client_error(
     mock_ctx: MagicMock,
 ) -> None:
     client = _s3_client_mock()
-    error_response = {
-        "Error": {"Code": "NoSuchKey"}
-    }
+    error_response = {"Error": {"Code": "NoSuchKey"}}
     client.get_object = AsyncMock(
-        side_effect=ClientError(
-            error_response, "GetObject"
-        )
+        side_effect=ClientError(error_response, "GetObject")
     )
     ctx = AsyncMock()
     ctx.__aenter__ = AsyncMock(return_value=client)
@@ -298,13 +265,9 @@ async def test_ensure_bucket_creates_when_missing(
     mock_ctx: MagicMock,
 ) -> None:
     client = _s3_client_mock()
-    error_response = {
-        "Error": {"Code": "404"}
-    }
+    error_response = {"Error": {"Code": "404"}}
     client.head_bucket = AsyncMock(
-        side_effect=ClientError(
-            error_response, "HeadBucket"
-        )
+        side_effect=ClientError(error_response, "HeadBucket")
     )
     ctx = AsyncMock()
     ctx.__aenter__ = AsyncMock(return_value=client)
@@ -325,20 +288,12 @@ async def test_ensure_bucket_retries_on_error(
     client_ok = _s3_client_mock()
 
     fail_ctx = AsyncMock()
-    fail_ctx.__aenter__ = AsyncMock(
-        side_effect=ConnectionError("not ready")
-    )
-    fail_ctx.__aexit__ = AsyncMock(
-        return_value=False
-    )
+    fail_ctx.__aenter__ = AsyncMock(side_effect=ConnectionError("not ready"))
+    fail_ctx.__aexit__ = AsyncMock(return_value=False)
 
     ok_ctx = AsyncMock()
-    ok_ctx.__aenter__ = AsyncMock(
-        return_value=client_ok
-    )
-    ok_ctx.__aexit__ = AsyncMock(
-        return_value=False
-    )
+    ok_ctx.__aenter__ = AsyncMock(return_value=client_ok)
+    ok_ctx.__aexit__ = AsyncMock(return_value=False)
 
     mock_ctx.side_effect = [
         fail_ctx,
@@ -402,11 +357,141 @@ async def test_upload_voice(
     ctx.__aexit__ = AsyncMock(return_value=False)
     mock_ctx.return_value = ctx
 
-    key, dur, wf = await upload_voice(
-        b"raw", user_id=7
-    )
+    key, dur, wf = await upload_voice(b"raw", user_id=7)
 
     assert key.startswith("voice/7/")
     assert key.endswith(".ogg")
     assert dur == 5
     assert len(wf) == 100
+
+
+class _FakeStreamingBody:
+    """Mimics aiobotocore StreamingBody on aiohttp >= 3.13.
+
+    ``read(amt)`` raises ``TypeError`` (the regression seen in prod):
+    aiobotocore 2.18.x forwards ``amt`` to ``aiohttp.ClientResponse.read``,
+    which in aiohttp 3.13.x no longer accepts a size argument.
+    ``iter_chunks(size)`` is the documented public API and is what the
+    streaming code MUST use.
+    """
+
+    def __init__(self, chunks: list[bytes]) -> None:
+        self._chunks = list(chunks)
+        self.iter_chunks_calls: list[int] = []
+        self.aexit_called = False
+
+    async def __aenter__(self) -> "_FakeStreamingBody":
+        return self
+
+    async def __aexit__(self, *_exc: object) -> bool:
+        self.aexit_called = True
+        return False
+
+    async def read(self, *args: object) -> bytes:
+        if args:
+            raise TypeError(
+                "ClientResponse.read() takes 1 positional argument "
+                "but 2 were given"
+            )
+        out = b"".join(self._chunks)
+        self._chunks.clear()
+        return out
+
+    def iter_chunks(self, size: int | None = None) -> AsyncIterator[bytes]:
+        self.iter_chunks_calls.append(int(size or 0))
+        chunks = list(self._chunks)
+        self._chunks.clear()
+
+        async def _gen() -> AsyncIterator[bytes]:
+            for c in chunks:
+                yield c
+
+        return _gen()
+
+
+@patch(f"{_MOD}.get_s3_client")
+async def test_open_object_range_streams_via_iter_chunks(
+    mock_ctx: MagicMock,
+) -> None:
+    body = _FakeStreamingBody([b"abc", b"defg", b"hi"])
+    client = _s3_client_mock()
+    client.get_object = AsyncMock(
+        return_value={
+            "Body": body,
+            "ContentLength": 9,
+            "ContentRange": "bytes 0-8/9",
+            "ContentType": "audio/mpeg",
+            "ETag": '"deadbeef"',
+            "AcceptRanges": "bytes",
+        }
+    )
+    ctx = AsyncMock()
+    ctx.__aenter__ = AsyncMock(return_value=client)
+    ctx.__aexit__ = AsyncMock(return_value=False)
+    mock_ctx.return_value = ctx
+
+    meta, gen = await open_object_range("key.mp3", "bytes=0-8", chunk_size=4)
+
+    assert meta.content_length == 9
+    assert meta.content_range == "bytes 0-8/9"
+    assert meta.etag == "deadbeef"
+
+    collected: list[bytes] = []
+    async for chunk in gen:
+        collected.append(chunk)
+
+    assert b"".join(collected) == b"abcdefghi"
+    assert body.iter_chunks_calls == [4]
+    assert body.aexit_called is True
+
+
+@patch(f"{_MOD}.get_s3_client")
+async def test_open_object_range_does_not_call_read_with_amt(
+    mock_ctx: MagicMock,
+) -> None:
+    body = _FakeStreamingBody([b"payload"])
+    body.read = AsyncMock(  # type: ignore[method-assign]
+        side_effect=AssertionError(
+            "read(amt) must not be used on aiohttp >= 3.13; "
+            "use iter_chunks instead"
+        )
+    )
+    client = _s3_client_mock()
+    client.get_object = AsyncMock(
+        return_value={
+            "Body": body,
+            "ContentLength": 7,
+            "ContentType": "audio/mpeg",
+            "AcceptRanges": "bytes",
+        }
+    )
+    ctx = AsyncMock()
+    ctx.__aenter__ = AsyncMock(return_value=client)
+    ctx.__aexit__ = AsyncMock(return_value=False)
+    mock_ctx.return_value = ctx
+
+    _meta, gen = await open_object_range("k", chunk_size=64)
+    async for _ in gen:
+        pass
+
+
+@patch(f"{_MOD}.get_s3_client")
+async def test_compute_sha256_streaming_uses_iter_chunks(
+    mock_ctx: MagicMock,
+) -> None:
+    import hashlib
+
+    payload = [b"hello-", b"dotsound-", b"world"]
+    body = _FakeStreamingBody(list(payload))
+    client = _s3_client_mock()
+    client.get_object = AsyncMock(return_value={"Body": body})
+    ctx = AsyncMock()
+    ctx.__aenter__ = AsyncMock(return_value=client)
+    ctx.__aexit__ = AsyncMock(return_value=False)
+    mock_ctx.return_value = ctx
+
+    digest = await compute_sha256_streaming("k.mp3")
+
+    expected = hashlib.sha256(b"".join(payload)).hexdigest()
+    assert digest == expected
+    assert body.iter_chunks_calls and body.iter_chunks_calls[0] > 0

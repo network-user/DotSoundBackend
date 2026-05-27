@@ -261,7 +261,7 @@ async def upload_voice(
 
 
 async def delete_objects_by_prefix(prefix: str) -> int:
-    """List and delete all object keys with the given key prefix. Returns count."""
+    """List and delete all keys under ``prefix``; return how many."""
     n = 0
     cont_token = None
     async with get_s3_client() as s3:
@@ -404,10 +404,9 @@ async def open_object_range(
 
     async def _iter() -> AsyncGenerator[bytes, None]:
         try:
-            while True:
-                chunk = await body.read(chunk_size)
+            async for chunk in body.iter_chunks(chunk_size):
                 if not chunk:
-                    break
+                    continue
                 yield chunk
         finally:
             with contextlib.suppress(BaseException):
@@ -426,10 +425,9 @@ async def compute_sha256_streaming(file_key: str) -> str:
             Bucket=settings.minio_bucket, Key=file_key
         )
         async with response["Body"] as stream:
-            while True:
-                chunk = await stream.read(_STREAM_HASH_CHUNK)
+            async for chunk in stream.iter_chunks(_STREAM_HASH_CHUNK):
                 if not chunk:
-                    break
+                    continue
                 sha.update(chunk)
     return sha.hexdigest()
 
