@@ -402,9 +402,11 @@ async def open_object_range(
         accept_ranges=str(response.get("AcceptRanges", "bytes")),
     )
 
+    reader = body.content
+
     async def _iter() -> AsyncGenerator[bytes, None]:
         try:
-            async for chunk in body.iter_chunks(chunk_size):
+            async for chunk in reader.iter_chunked(chunk_size):
                 if not chunk:
                     continue
                 yield chunk
@@ -425,7 +427,7 @@ async def compute_sha256_streaming(file_key: str) -> str:
             Bucket=settings.minio_bucket, Key=file_key
         )
         async with response["Body"] as stream:
-            async for chunk in stream.iter_chunks(_STREAM_HASH_CHUNK):
+            async for chunk in stream.content.iter_chunked(_STREAM_HASH_CHUNK):
                 if not chunk:
                     continue
                 sha.update(chunk)

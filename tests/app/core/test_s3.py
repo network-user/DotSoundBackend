@@ -365,40 +365,20 @@ async def test_upload_voice(
     assert len(wf) == 100
 
 
-class _FakeStreamingBody:
-    """Mimics aiobotocore StreamingBody on aiohttp >= 3.13.
+class _FakeStreamReader:
+    """Mimics ``aiohttp.StreamReader`` used as ``ClientResponse.content``.
 
-    ``read(amt)`` raises ``TypeError`` (the regression seen in prod):
-    aiobotocore 2.18.x forwards ``amt`` to ``aiohttp.ClientResponse.read``,
-    which in aiohttp 3.13.x no longer accepts a size argument.
-    ``iter_chunks(size)`` is the documented public API and is what the
-    streaming code MUST use.
+    ``iter_chunked(n)`` is the documented public API for chunked reads on
+    aiohttp >= 3.13; both ``ClientResponse.iter_chunks`` and a
+    size-argument ``ClientResponse.read(n)`` are unavailable.
     """
 
     def __init__(self, chunks: list[bytes]) -> None:
         self._chunks = list(chunks)
-        self.iter_chunks_calls: list[int] = []
-        self.aexit_called = False
+        self.iter_chunked_calls: list[int] = []
 
-    async def __aenter__(self) -> "_FakeStreamingBody":
-        return self
-
-    async def __aexit__(self, *_exc: object) -> bool:
-        self.aexit_called = True
-        return False
-
-    async def read(self, *args: object) -> bytes:
-        if args:
-            raise TypeError(
-                "ClientResponse.read() takes 1 positional argument "
-                "but 2 were given"
-            )
-        out = b"".join(self._chunks)
-        self._chunks.clear()
-        return out
-
-    def iter_chunks(self, size: int | None = None) -> AsyncIterator[bytes]:
-        self.iter_chunks_calls.append(int(size or 0))
+    def iter_chunked(self, size: int) -> AsyncIterator[bytes]:
+        self.iter_chunked_calls.append(int(size))
         chunks = list(self._chunks)
         self._chunks.clear()
 
@@ -409,11 +389,49 @@ class _FakeStreamingBody:
         return _gen()
 
 
+class _FakeBody:
+    """Mimics what aiobotocore exposes as ``response["Body"]`` on prod.
+
+    ``getattr`` for ``iter_chunks`` falls through to the wrapped
+    ``ClientResponse`` and raises ``AttributeError`` (the actual prod
+    error). ``read(amt)`` is forbidden because aiohttp 3.13 dropped the
+    size argument. Streaming code MUST go through ``self.content``.
+    """
+
+    def __init__(self, chunks: list[bytes]) -> None:
+        self.content = _FakeStreamReader(chunks)
+        self.aexit_called = False
+
+    async def __aenter__(self) -> "_FakeBody":
+        return self
+
+    async def __aexit__(self, *_exc: object) -> bool:
+        self.aexit_called = True
+        return False
+
+    def __getattr__(self, name: str) -> object:
+        if name == "iter_chunks":
+            raise AttributeError(
+                "'ClientResponse' object has no attribute 'iter_chunks'"
+            )
+        raise AttributeError(name)
+
+    async def read(self, *args: object) -> bytes:
+        if args:
+            raise TypeError(
+                "ClientResponse.read() takes 1 positional argument "
+                "but 2 were given"
+            )
+        raise AssertionError(
+            "streaming code must not buffer the whole body via read()"
+        )
+
+
 @patch(f"{_MOD}.get_s3_client")
-async def test_open_object_range_streams_via_iter_chunks(
+async def test_open_object_range_streams_via_content_iter_chunked(
     mock_ctx: MagicMock,
 ) -> None:
-    body = _FakeStreamingBody([b"abc", b"defg", b"hi"])
+    body = _FakeBody([b"abc", b"defg", b"hi"])
     client = _s3_client_mock()
     client.get_object = AsyncMock(
         return_value={
@@ -441,26 +459,20 @@ async def test_open_object_range_streams_via_iter_chunks(
         collected.append(chunk)
 
     assert b"".join(collected) == b"abcdefghi"
-    assert body.iter_chunks_calls == [4]
+    assert body.content.iter_chunked_calls == [4]
     assert body.aexit_called is True
 
 
 @patch(f"{_MOD}.get_s3_client")
-async def test_open_object_range_does_not_call_read_with_amt(
+async def test_open_object_range_does_not_touch_iter_chunks_or_read_amt(
     mock_ctx: MagicMock,
 ) -> None:
-    body = _FakeStreamingBody([b"payload"])
-    body.read = AsyncMock(  # type: ignore[method-assign]
-        side_effect=AssertionError(
-            "read(amt) must not be used on aiohttp >= 3.13; "
-            "use iter_chunks instead"
-        )
-    )
+    body = _FakeBody([b"payload-bytes"])
     client = _s3_client_mock()
     client.get_object = AsyncMock(
         return_value={
             "Body": body,
-            "ContentLength": 7,
+            "ContentLength": 13,
             "ContentType": "audio/mpeg",
             "AcceptRanges": "bytes",
         }
@@ -471,18 +483,22 @@ async def test_open_object_range_does_not_call_read_with_amt(
     mock_ctx.return_value = ctx
 
     _meta, gen = await open_object_range("k", chunk_size=64)
-    async for _ in gen:
-        pass
+    collected: list[bytes] = []
+    async for chunk in gen:
+        collected.append(chunk)
+
+    assert b"".join(collected) == b"payload-bytes"
+    assert body.content.iter_chunked_calls == [64]
 
 
 @patch(f"{_MOD}.get_s3_client")
-async def test_compute_sha256_streaming_uses_iter_chunks(
+async def test_compute_sha256_streaming_uses_content_iter_chunked(
     mock_ctx: MagicMock,
 ) -> None:
     import hashlib
 
     payload = [b"hello-", b"dotsound-", b"world"]
-    body = _FakeStreamingBody(list(payload))
+    body = _FakeBody(list(payload))
     client = _s3_client_mock()
     client.get_object = AsyncMock(return_value={"Body": body})
     ctx = AsyncMock()
@@ -494,4 +510,5 @@ async def test_compute_sha256_streaming_uses_iter_chunks(
 
     expected = hashlib.sha256(b"".join(payload)).hexdigest()
     assert digest == expected
-    assert body.iter_chunks_calls and body.iter_chunks_calls[0] > 0
+    assert body.content.iter_chunked_calls
+    assert body.content.iter_chunked_calls[0] > 0
