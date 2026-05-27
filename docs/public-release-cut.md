@@ -1,28 +1,34 @@
-# DotSoundBackend Public Release Cut
+# Public Showcase Cut
 
-## Included In Public Repository
+This document defines the intended public shape of the
+source-available Backend repository.
 
-- API route wiring and schemas.
-- Data models and repositories.
-- Non-sensitive services and app bootstrap.
-- Frontend Mini App UI and build pipeline.
-- Tests and developer tooling.
+## Included
 
-## Excluded Or Delegated To Private Core
+- API route wiring, schemas, models, migrations, and repositories.
+- Non-sensitive service orchestration and app bootstrap.
+- Frontend Mini App source.
+- Public worker/API contracts.
+- Design, architecture, legal draft, and boundary documentation that is
+  safe for public reading.
 
-- Internal secret-header transport contracts.
-- One-time web auth private helper rules.
-- Internal bot bridge URL policies.
-- Anti-abuse/scoring and production-only risk rules.
+## Excluded
+
+- PrivateCore source and module inventory.
+- Production deployment runbooks.
+- Internal transition notes, agent instructions, redesign work plans, and
+  archived audits.
+- Operator-specific legal details and private contact data.
+- Sensitive routing, policy tuning, and ranking details.
+- Secret files and local environment files.
 
 ## Pre-Publish Checklist
 
-- [x] No hardcoded internal bridge constants in public code (spot-check; run `check_boundary_policy.py` in CI).
-- [x] No secrets in source or frontend bundle (gitleaks in `policy-guardrails.yml`; local purge of `.env`/coverage/`_tmp_*` paths).
-- [x] AI co-author trailers removed from public repo history (Backend, Bot, ComputeWorker).
-- [x] `docs/ai-boundary-policy.md` reflects current boundaries (review on policy changes).
-- [x] CI guardrails enabled (Backend/Bot/ComputeWorker: `policy-guardrails.yml` + gitleaks).
-- [x] License present (Source-Available 1.0 in Backend, Bot, ComputeWorker).
-- [ ] GitHub visibility set to Public (manual) for Backend, Bot, ComputeWorker only.
-- [ ] PrivateCore remains private; no public remote fork with stale history.
-
+- [x] Repository states source-available showcase scope.
+- [x] PrivateCore is documented as a closed dependency.
+- [x] Public docs avoid internal plans and operator-specific details.
+- [x] CI does not claim a green full lint/type/test gate.
+- [x] Public guardrails and secret scanning are documented.
+- [ ] GitHub visibility set to Public manually for the selected public
+  repositories only.
+- [ ] PrivateCore remains private.

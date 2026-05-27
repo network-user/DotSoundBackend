@@ -1,8 +1,7 @@
 # Compute Worker — Admin Guide
 
 This public-safe guide explains the admin surface for pull-based compute
-workers without documenting private provider strategy, paid fallback
-details, model choices, or policy thresholds.
+workers without documenting sensitive policy or operational strategy.
 
 Technical worker protocol: `docs/compute-worker-protocol.md`.
 
@@ -59,11 +58,10 @@ Backend plus the private policy package.
 
 This document intentionally omits:
 
-- Private cascade tier names and fallback order.
-- External provider configuration.
+- Private cascade details.
+- External service configuration.
 - Paid processing budget knobs.
-- Model/provider choices.
-- Internal policy thresholds and auto-suspension constants.
+- Sensitive policy and operational tuning.
 
 Those details belong to private operational runbooks and
 `DotSoundPrivateCore`.

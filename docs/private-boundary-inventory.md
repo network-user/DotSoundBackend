@@ -35,9 +35,8 @@ decisions, including:
 
 Backend may import stable functions or constants from PrivateCore and
 apply them to DB/Redis/S3/HTTP state. Backend must not duplicate private
-rules locally and must not expose private weights, thresholds, provider
-order, routing strategy, or anti-block details through docs, logs,
-OpenAPI schemas, or frontend bundles.
+rules locally and must not expose sensitive policy internals through
+docs, logs, OpenAPI schemas, or frontend bundles.
 
 Allowed public wording:
 
@@ -47,10 +46,9 @@ Allowed public wording:
 
 Avoid public wording:
 
-- Exact score weights, cooldowns, caps, or thresholds.
-- Provider order, fallback stages, model choices, or prompts.
-- Egress strategy, quarantine logic, or service-specific anti-block
-  details.
+- Sensitive policy tuning.
+- Internal cascade, routing, or model-selection details.
+- Service-specific operational strategy.
 - Internal module names when the module name reveals a private strategy.
 
 ## Current Known Public Adapters

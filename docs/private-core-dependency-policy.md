@@ -1,3 +1,44 @@
+# PrivateCore Dependency Policy
+
+`DotSoundPrivateCore` is a private package. The public Backend
+repository is not intended to be a standalone runnable distribution
+without it.
+
+## Local Development
+
+Internal development uses a sibling checkout of the private package via
+a path dependency. Public showcase readers should treat that dependency
+as an architectural boundary: Backend is the transport/orchestration
+layer, PrivateCore is the decision layer.
+
+## Publication Rule
+
+The Backend repository may mention that it imports PrivateCore decisions,
+but public docs must not list private module inventories, symbol tables,
+policy tuning, routing strategy, or other implementation details.
+
+## Adapter Contract
+
+Backend adapters may:
+
+- pass request, DB, Redis, and storage state into PrivateCore decisions;
+- apply returned decisions to infrastructure state;
+- expose only public API fields needed by the frontend or external
+  worker contracts.
+
+Backend adapters must not:
+
+- duplicate private rules locally;
+- persist private reasoning in public logs;
+- expose private policy internals through OpenAPI schemas, docs,
+  frontend bundles, or admin payloads.
+
+## CI And Release Notes
+
+Full internal CI can pin a private package revision. Public showcase CI
+must avoid pretending the repository is standalone unless the private
+dependency is explicitly stubbed or replaced by a public-compatible
+adapter.
 # DotSoundBackend Private Core Dependency Policy
 
 ## Local Development

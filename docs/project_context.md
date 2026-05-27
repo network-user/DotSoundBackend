@@ -159,8 +159,8 @@ HMAC-защищённый internal API. Тяжёлое распознавани�
 - `docs/compute-worker-protocol.md` — публичный контракт
 HMAC + claim/result для воркера.
 
-Всё, что относится к источникам текста, распознаванию, fallback order,
-provider selection и сопоставлению — закрытая реализация PrivateCore.
+Всё, что относится к источникам текста, распознаванию,
+маршрутизации и сопоставлению — закрытая реализация PrivateCore.
 
 ### Observability
 
