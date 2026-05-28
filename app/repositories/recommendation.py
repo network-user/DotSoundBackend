@@ -227,22 +227,20 @@ class RecommendationRepository:
     ) -> list[Track]:
         if not artist_ids:
             return []
+        track_id_subq = select(TrackArtist.track_id).where(
+            TrackArtist.artist_id.in_(artist_ids)
+        )
         result = await self._session.execute(
             select(Track)
-            .join(
-                TrackArtist,
-                TrackArtist.track_id == Track.id,
-            )
             .where(
+                Track.id.in_(track_id_subq),
                 Track.is_active.is_(True),
                 Track.is_public.is_(True),
                 self._exclude_hidden_sources(),
                 TrackRepository._playback_listing_allowed(),
                 TrackRepository._playable_filter(),
-                TrackArtist.artist_id.in_(artist_ids),
             )
-            .distinct()
-            .order_by(Track.created_at.desc())
+            .order_by(Track.created_at.desc(), Track.id.desc())
             .limit(limit)
         )
         return list(result.scalars().all())

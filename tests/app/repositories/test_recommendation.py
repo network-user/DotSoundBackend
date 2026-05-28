@@ -3,6 +3,7 @@ from datetime import UTC, datetime, timedelta
 from typing import Protocol
 
 import pytest
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.artist import Artist, TrackArtist
@@ -345,3 +346,99 @@ async def test_get_track_similarity_candidates_for_artist_ids(
     )
 
     assert [t.id for t in out] == [close.id]
+
+
+async def test_get_tracks_by_artist_ids_returns_empty_for_no_artists(
+    session: AsyncSession,
+) -> None:
+    repo = RecommendationRepository(session)
+    assert await repo.get_tracks_by_artist_ids([]) == []
+
+
+async def test_get_tracks_by_artist_ids_deduplicates_collaboration_tracks(
+    session: AsyncSession,
+    create_track: _CreateTrack,
+) -> None:
+    primary = Artist(name="Primary", name_normalized="primary")
+    feature = Artist(name="Feature", name_normalized="feature")
+    session.add_all([primary, feature])
+    await session.flush()
+
+    collab = await create_track(file_key="collab.mp3")
+    solo_primary = await create_track(file_key="solo_primary.mp3")
+    solo_feature = await create_track(file_key="solo_feature.mp3")
+
+    session.add_all(
+        [
+            TrackArtist(track_id=collab.id, artist_id=primary.id),
+            TrackArtist(track_id=collab.id, artist_id=feature.id),
+            TrackArtist(track_id=solo_primary.id, artist_id=primary.id),
+            TrackArtist(track_id=solo_feature.id, artist_id=feature.id),
+        ]
+    )
+    await session.flush()
+
+    repo = RecommendationRepository(session)
+    tracks = await repo.get_tracks_by_artist_ids(
+        [primary.id, feature.id],
+        limit=10,
+    )
+    track_ids = [t.id for t in tracks]
+
+    assert sorted(track_ids) == sorted(
+        {collab.id, solo_primary.id, solo_feature.id}
+    )
+    assert len(track_ids) == len(set(track_ids))
+
+
+async def test_get_tracks_by_artist_ids_respects_active_and_public_filters(
+    session: AsyncSession,
+    create_track: _CreateTrack,
+) -> None:
+    artist = Artist(name="ActiveOnly", name_normalized="activeonly")
+    session.add(artist)
+    await session.flush()
+
+    visible = await create_track(file_key="visible.mp3")
+    inactive = await create_track(file_key="inactive.mp3", is_active=False)
+    private_track = await create_track(
+        file_key="private.mp3", is_public=False
+    )
+    session.add_all(
+        [
+            TrackArtist(track_id=visible.id, artist_id=artist.id),
+            TrackArtist(track_id=inactive.id, artist_id=artist.id),
+            TrackArtist(track_id=private_track.id, artist_id=artist.id),
+        ]
+    )
+    await session.flush()
+
+    repo = RecommendationRepository(session)
+    tracks = await repo.get_tracks_by_artist_ids([artist.id], limit=10)
+
+    assert [t.id for t in tracks] == [visible.id]
+
+
+def test_get_tracks_by_artist_ids_sql_skips_distinct_on_json_columns() -> None:
+    from sqlalchemy.dialects import postgresql
+
+    from app.models.artist import TrackArtist
+    from app.models.track import Track
+
+    track_id_subq = select(TrackArtist.track_id).where(
+        TrackArtist.artist_id.in_([1, 2])
+    )
+    q = (
+        select(Track)
+        .where(Track.id.in_(track_id_subq))
+        .order_by(Track.created_at.desc())
+        .limit(10)
+    )
+    sql = str(
+        q.compile(
+            dialect=postgresql.dialect(),
+            compile_kwargs={"literal_binds": True},
+        )
+    )
+    assert "DISTINCT" not in sql.upper()
+    assert "JOIN track_artists" not in sql.upper()

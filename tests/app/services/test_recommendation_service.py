@@ -499,10 +499,17 @@ async def test_get_radio_filters_recent_playback_failures(
         assert [c.track_id for c in candidates] == [21]
         return scored
 
+    mock_artist_repo = AsyncMock()
+    mock_artist_repo.get_track_artists = AsyncMock(return_value=[])
+
     with (
         patch(
             "app.repositories.track.TrackRepository",
             return_value=mock_track_repo,
+        ),
+        patch(
+            "app.repositories.artist.ArtistRepository",
+            return_value=mock_artist_repo,
         ),
         patch(
             f"{_MOD}.build_radio_queue",
@@ -513,6 +520,10 @@ async def test_get_radio_filters_recent_playback_failures(
         svc._rec_repo.get_candidate_tracks = AsyncMock(
             return_value=[failed, playable]
         )
+        svc._rec_repo.get_track_similarity_candidates = AsyncMock(
+            return_value=[]
+        )
+        svc._embedding_repo.find_neighbors = AsyncMock(return_value=[])
         svc._tracks_to_features = AsyncMock(
             return_value=[feat_seed, feat_playable]
         )
@@ -731,6 +742,14 @@ async def test_get_radio_passes_station_neighbor_track_ids(
         svc._catalog_repo.get_station_neighbor_track_ids_for_artists = (
             AsyncMock(return_value=[101, 102, 103])
         )
+        svc._catalog_repo.get_similar_artist_recommendation_signals = (
+            AsyncMock(return_value=([], {}))
+        )
+        svc._rec_repo.get_track_similarity_candidates_for_artist_ids = (
+            AsyncMock(return_value=[])
+        )
+        svc._rec_repo.get_tracks_by_artist_ids = AsyncMock(return_value=[])
+        svc._rec_repo.get_tracks_by_ids = AsyncMock(return_value=[])
         svc._tracks_to_features = AsyncMock(
             return_value=[feat_seed, feat_candidate]
         )

@@ -11,6 +11,13 @@ import structlog
 from dotsound_private_core.services.playback_health_policy import (
     should_exclude_from_autoplay_queue,
 )
+from dotsound_private_core.services.radio_policy import (
+    radio_seed_artist_pool_limit,
+    radio_seed_embedding_pool_limit,
+    radio_seed_genre_pool_limit,
+    radio_seed_similarity_pool_limit,
+    should_include_seed_artist_pool,
+)
 from dotsound_private_core.services.recommendation_engine import (
     MAX_GENRE_MIXES,
     ExternalTrackCandidate,
@@ -55,6 +62,7 @@ from dotsound_private_core.services.user_top_policy import (
     rank_user_top_genres,
 )
 from sqlalchemy import func, select
+from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.observability import radio_request_observed
@@ -163,6 +171,8 @@ _RADIO_SESSION_KEY_PREFIX = "radio:session:"
 _RADIO_SESSION_TTL = 3600
 _RADIO_SESSION_BUFFER = 96
 _RADIO_MERGED_EXCLUDE_CAP = 280
+_RADIO_USER_SUPPLEMENT_LIMIT = 80
+_RADIO_SIMILAR_ARTIST_CAP = 25
 _DAILY_NOVELTY_TARGET = 0.4
 _WEEKLY_NOVELTY_TARGET = 0.5
 _SEQUENTIAL_RADIO_KEY = "recsys.sequential_radio"
@@ -453,6 +463,41 @@ class RecommendationService:
             locale,
         )
 
+    async def _append_artist_scoring_groups(
+        self,
+        groups: list[list[Track]],
+        *,
+        artist_ids: list[int],
+        limit: int,
+        exclude_ids: set[int] | None,
+    ) -> None:
+        if not artist_ids:
+            return
+        ex = exclude_ids
+        try:
+            artist_tracks = await self._rec_repo.get_tracks_by_artist_ids(
+                artist_ids,
+                limit=limit,
+            )
+            if artist_tracks:
+                groups.append(artist_tracks)
+            similar_to_artist_tracks = (
+                await self._rec_repo
+                .get_track_similarity_candidates_for_artist_ids(
+                    artist_ids,
+                    limit=max(50, limit),
+                    exclude_ids=ex if ex else None,
+                )
+            )
+            if similar_to_artist_tracks:
+                groups.append(similar_to_artist_tracks)
+        except SQLAlchemyError as exc:
+            logger.warning(
+                "scoring_artist_candidate_pool_failed",
+                artist_count=len(artist_ids),
+                error=str(exc),
+            )
+
     async def _scoring_candidate_tracks(
         self,
         user_id: int,
@@ -483,33 +528,30 @@ class RecommendationService:
         groups: list[list[Track]] = [base if isinstance(base, list) else []]
         artist_ids = user_prefs.preferred_artist_ids[:20]
         if artist_ids:
-            artist_tracks = await self._rec_repo.get_tracks_by_artist_ids(
-                artist_ids,
+            await self._append_artist_scoring_groups(
+                groups,
+                artist_ids=artist_ids,
                 limit=max(40, limit // 2),
+                exclude_ids=ex if ex else None,
             )
-            if isinstance(artist_tracks, list):
-                groups.append(artist_tracks)
-            rec_repo = self._rec_repo
-            similar_to_artist_tracks = (
-                await rec_repo.get_track_similarity_candidates_for_artist_ids(
-                    artist_ids,
-                    limit=max(50, limit // 2),
-                    exclude_ids=ex if ex else None,
-                )
-            )
-            if isinstance(similar_to_artist_tracks, list):
-                groups.append(similar_to_artist_tracks)
 
         similar_artist_ids = user_prefs.similar_artist_ids[:30]
         if similar_artist_ids:
-            similar_artist_tracks = (
-                await self._rec_repo.get_tracks_by_artist_ids(
-                    similar_artist_ids,
-                    limit=max(40, limit // 2),
+            try:
+                similar_artist_tracks = (
+                    await self._rec_repo.get_tracks_by_artist_ids(
+                        similar_artist_ids,
+                        limit=max(40, limit // 2),
+                    )
                 )
-            )
-            if isinstance(similar_artist_tracks, list):
-                groups.append(similar_artist_tracks)
+                if similar_artist_tracks:
+                    groups.append(similar_artist_tracks)
+            except SQLAlchemyError as exc:
+                logger.warning(
+                    "scoring_similar_artist_pool_failed",
+                    artist_count=len(similar_artist_ids),
+                    error=str(exc),
+                )
 
         learned_genres = user_prefs.preferred_genres[:4]
         if not genre_filter and learned_genres:
@@ -789,13 +831,21 @@ class RecommendationService:
         genre_filter = (
             pref.preferred_genres if pref and pref.preferred_genres else None
         )
-        candidates = await self._scoring_candidate_tracks(
-            user_id,
-            200,
-            genre_filter,
-            user_prefs,
-            user_locale,
-        )
+        try:
+            candidates = await self._scoring_candidate_tracks(
+                user_id,
+                200,
+                genre_filter,
+                user_prefs,
+                user_locale,
+            )
+        except SQLAlchemyError as exc:
+            logger.warning(
+                "home_scoring_candidates_failed",
+                user_id=user_id,
+                error=str(exc),
+            )
+            candidates = []
 
         if candidates:
             features = await self._tracks_to_features(candidates)
@@ -1755,6 +1805,143 @@ class RecommendationService:
                 freshness[tid] = "new"
         return freshness
 
+    async def _collect_radio_seed_candidate_groups(
+        self,
+        seed: Track,
+        *,
+        seed_artist_ids: list[int],
+        exclude_ids: set[int],
+        queue_size: int,
+    ) -> tuple[list[list[Track]], list[int]]:
+        exclude_for_seed = set(exclude_ids) | {seed.id}
+        sim_limit = radio_seed_similarity_pool_limit(queue_size)
+        emb_limit = radio_seed_embedding_pool_limit(queue_size)
+        artist_pool_limit = radio_seed_artist_pool_limit(queue_size)
+        genre_limit = radio_seed_genre_pool_limit(queue_size)
+        groups: list[list[Track]] = []
+        station_neighbor_ids: list[int] = []
+
+        indexed_tracks = await self._rec_repo.get_track_similarity_candidates(
+            seed.id,
+            limit=sim_limit,
+            exclude_ids=exclude_for_seed,
+        )
+        if indexed_tracks:
+            groups.append(indexed_tracks)
+
+        embedding_neighbors = await self._embedding_repo.find_neighbors(
+            seed_track_id=seed.id,
+            k=emb_limit,
+            exclude_ids=exclude_for_seed,
+        )
+        embedding_track_ids = [tid for tid, _ in embedding_neighbors]
+        if embedding_track_ids:
+            embedding_tracks = await self._rec_repo.get_tracks_by_ids(
+                embedding_track_ids
+            )
+            if embedding_tracks:
+                groups.append(embedding_tracks)
+
+        if should_include_seed_artist_pool(seed_artist_ids):
+            station_neighbor_ids = (
+                await self._catalog_repo
+                .get_station_neighbor_track_ids_for_artists(
+                    seed_artist_ids,
+                    exclude_track_ids=frozenset({seed.id}),
+                    limit=200,
+                )
+            )
+            if station_neighbor_ids:
+                neighbor_tracks = await self._rec_repo.get_tracks_by_ids(
+                    station_neighbor_ids
+                )
+                if neighbor_tracks:
+                    groups.append(neighbor_tracks)
+
+            similar_artist_ids, _ = (
+                await self._catalog_repo
+                .get_similar_artist_recommendation_signals(seed_artist_ids)
+            )
+            seed_artist_set = set(seed_artist_ids)
+            related_artist_ids = [
+                aid
+                for aid in similar_artist_ids
+                if aid not in seed_artist_set
+            ][:_RADIO_SIMILAR_ARTIST_CAP]
+            if related_artist_ids:
+                similar_artist_tracks = (
+                    await self._rec_repo
+                    .get_track_similarity_candidates_for_artist_ids(
+                        related_artist_ids,
+                        limit=sim_limit,
+                        exclude_ids=exclude_for_seed,
+                    )
+                )
+                if similar_artist_tracks:
+                    groups.append(similar_artist_tracks)
+
+            cross_artist_similar = (
+                await self._rec_repo
+                .get_track_similarity_candidates_for_artist_ids(
+                    seed_artist_ids,
+                    limit=sim_limit,
+                    exclude_ids=exclude_for_seed,
+                )
+            )
+            if cross_artist_similar:
+                groups.append(cross_artist_similar)
+
+            raw_same_artist = await self._rec_repo.get_tracks_by_artist_ids(
+                seed_artist_ids,
+                limit=max(artist_pool_limit, 80),
+            )
+            same_artist = [
+                t
+                for t in raw_same_artist
+                if t.id not in exclude_for_seed
+            ]
+            if same_artist:
+                features = await self._tracks_to_features(
+                    [seed] + same_artist
+                )
+                seed_feat = features[0]
+                cand_feats = [
+                    f for f in features[1:] if f.track_id != seed.id
+                ]
+                if cand_feats:
+                    scored_same = select_similar_tracks(
+                        seed_feat,
+                        cand_feats,
+                        limit=artist_pool_limit,
+                        station_neighbor_track_ids=(
+                            frozenset(station_neighbor_ids)
+                            if station_neighbor_ids
+                            else None
+                        ),
+                    )
+                    track_map = {t.id: t for t in same_artist}
+                    picked = [
+                        track_map[row.track_id]
+                        for row in scored_same
+                        if row.track_id in track_map
+                    ]
+                    if picked:
+                        groups.append(picked)
+
+        seed_genre = getattr(seed, "genre", None)
+        if seed_genre:
+            seed_genre_tracks = (
+                await self._rec_repo.get_candidate_tracks_stratified(
+                    total_limit=genre_limit,
+                    genre_filter=[seed_genre],
+                    exclude_ids=exclude_for_seed,
+                )
+            )
+            if seed_genre_tracks:
+                groups.append(seed_genre_tracks)
+
+        return groups, station_neighbor_ids
+
     async def get_radio(
         self,
         seed_track_id: int,
@@ -1874,62 +2061,54 @@ class RecommendationService:
             ) = await self._build_user_prefs(user_id)
             radio_tuning = await self._load_radio_tuning(user_id=user_id)
 
-        if user_id and user_prefs is not None:
-            candidates = await self._scoring_candidate_tracks(
-                user_id,
-                200,
-                None,
-                user_prefs,
-                user_locale,
+        from app.repositories.artist import ArtistRepository
+
+        artist_repo = ArtistRepository(self._session)
+        seed_artists = await artist_repo.get_track_artists(seed.id)
+        seed_artist_ids = [a.id for a in seed_artists]
+
+        seed_groups, station_neighbor_ids = (
+            await self._collect_radio_seed_candidate_groups(
+                seed,
+                seed_artist_ids=seed_artist_ids,
                 exclude_ids=set(exclude_normalized),
+                queue_size=queue_size,
             )
+        )
+
+        user_supplement: list[Track] = []
+        if user_id and user_prefs is not None:
+            try:
+                user_supplement = await self._scoring_candidate_tracks(
+                    user_id,
+                    _RADIO_USER_SUPPLEMENT_LIMIT,
+                    None,
+                    user_prefs,
+                    user_locale,
+                    exclude_ids=set(exclude_normalized),
+                )
+            except SQLAlchemyError as exc:
+                logger.warning(
+                    "radio_scoring_candidates_failed",
+                    user_id=user_id,
+                    seed_track_id=seed_track_id,
+                    error=str(exc),
+                )
         else:
-            candidates = await self._rec_repo.get_candidate_tracks(
-                limit=200,
+            user_supplement = await self._rec_repo.get_candidate_tracks(
+                limit=_RADIO_USER_SUPPLEMENT_LIMIT,
                 exclude_ids=(
                     set(exclude_normalized) if exclude_normalized else None
                 ),
             )
-        seed_related_groups: list[list[Track]] = []
-        exclude_for_seed = set(exclude_normalized) | {seed.id}
-        seed_genre = getattr(seed, "genre", None)
-        if seed_genre:
-            seed_genre_tracks = (
-                await self._rec_repo.get_candidate_tracks_stratified(
-                    total_limit=max(80, queue_size * 4),
-                    genre_filter=[seed_genre],
-                    exclude_ids=exclude_for_seed,
-                )
-            )
-            if isinstance(seed_genre_tracks, list):
-                seed_related_groups.append(seed_genre_tracks)
 
-        indexed_tracks = await self._rec_repo.get_track_similarity_candidates(
-            seed.id,
-            limit=max(80, queue_size * 4),
-            exclude_ids=exclude_for_seed,
+        merge_groups = seed_groups + (
+            [user_supplement] if user_supplement else []
         )
-        if isinstance(indexed_tracks, list):
-            seed_related_groups.append(indexed_tracks)
-
-        embedding_neighbors = await self._embedding_repo.find_neighbors(
-            seed_track_id=seed.id,
-            k=max(queue_size * 3, 40),
-            exclude_ids=exclude_for_seed,
+        candidates = _merge_track_groups(
+            merge_groups,
+            limit=max(200, queue_size * 16),
         )
-        embedding_track_ids = [tid for tid, _ in embedding_neighbors]
-        if embedding_track_ids:
-            embedding_tracks = await self._rec_repo.get_tracks_by_ids(
-                embedding_track_ids
-            )
-            if isinstance(embedding_tracks, list):
-                seed_related_groups.append(embedding_tracks)
-
-        if seed_related_groups:
-            candidates = _merge_track_groups(
-                [candidates] + seed_related_groups,
-                limit=max(200, queue_size * 16),
-            )
         before_filter = len(candidates)
         candidates = _filter_radio_playback_candidates(candidates)
         if len(candidates) != before_filter:
@@ -1998,22 +2177,6 @@ class RecommendationService:
         history: list[RecListenEvent] = []
         if user_id:
             history = await self._build_listen_history(user_id)
-
-        from app.repositories.artist import ArtistRepository
-
-        artist_repo = ArtistRepository(self._session)
-        seed_artists = await artist_repo.get_track_artists(seed.id)
-        seed_artist_ids = [a.id for a in seed_artists]
-        station_neighbor_ids: list[int] = []
-        if seed_artist_ids:
-            station_neighbor_ids = (
-                await self._catalog_repo
-                .get_station_neighbor_track_ids_for_artists(
-                    seed_artist_ids,
-                    exclude_track_ids=frozenset({seed.id}),
-                    limit=200,
-                )
-            )
 
         rerank_enabled, rerank_lambda = await self._load_diversity_rerank(
             user_id=user_id
