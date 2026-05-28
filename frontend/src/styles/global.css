@@ -2402,6 +2402,43 @@ textarea.form-input { resize: none; }
 .tcs-video-mode .tcs-sheet-mood-bg {
   opacity: 0.18;
 }
+
+@media (max-width: 560px), (pointer: coarse) {
+  .tcs-sheet {
+    background: linear-gradient(
+      180deg,
+      rgba(12, 12, 16, 0.72) 0%,
+      rgba(10, 10, 14, 0.92) 44%,
+      rgba(8, 8, 12, 0.97) 100%
+    );
+  }
+
+  .tcs-sheet-mood-bg__cover {
+    opacity: 0.36;
+  }
+
+  .tcs-sheet-mood-bg__tones {
+    opacity: 0.72;
+  }
+
+  .tcs-sheet-mood-bg__scrim {
+    background: linear-gradient(
+      180deg,
+      rgba(8, 8, 12, 0.58) 0%,
+      rgba(10, 10, 14, 0.82) 42%,
+      rgba(8, 8, 12, 0.95) 100%
+    );
+  }
+
+  .tcs-artist {
+    color: rgba(255, 255, 255, 0.86);
+  }
+
+  .tcs-last-listen {
+    color: rgba(255, 255, 255, 0.78);
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   .tcs-sheet-mood-bg__cover {
     filter: blur(32px) saturate(1.02);

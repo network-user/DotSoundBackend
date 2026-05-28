@@ -2006,6 +2006,46 @@ body.ds-perf-lite .mp-btn--playing {
   height: 44px;
 }
 
+@media (max-width: 560px), (pointer: coarse) {
+  .mp-shell {
+    border-color: rgba(255, 255, 255, 0.16);
+    background:
+      linear-gradient(
+        180deg,
+        rgba(26, 26, 26, 0.9) 0%,
+        rgba(6, 6, 6, 0.97) 100%
+      );
+  }
+
+  .mp-shell::before {
+    opacity: 0.16;
+  }
+
+  .mp-shell::after {
+    background:
+      linear-gradient(
+        90deg,
+        color-mix(in srgb, var(--mp-tone-a) 14%, transparent),
+        transparent 36%,
+        color-mix(in srgb, var(--mp-tone-b) 12%, transparent)
+      ),
+      linear-gradient(
+        180deg,
+        rgba(255, 255, 255, 0.085) 0%,
+        color-mix(in srgb, var(--mp-tone-c) 30%, rgba(0, 0, 0, 0.72))
+          100%
+      );
+  }
+
+  .mp-kicker {
+    color: rgba(255, 255, 255, 0.84);
+  }
+
+  .mp-artist {
+    color: rgba(255, 255, 255, 0.86);
+  }
+}
+
 @media (max-width: 390px) {
   #player-bar.rp-player-bar--touch {
     left: 7px;

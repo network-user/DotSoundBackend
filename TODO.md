@@ -20,6 +20,8 @@ work, and release coordination live outside the public repository.
   green for public checkouts.
 - [x] A full-history high-confidence credential pattern scan over the
   three public repositories found no matches.
+- [x] Mobile glass contrast improved for mini-player and track-card
+  sheet readability.
 
 ## Remaining Before Changing Repository Visibility
 
