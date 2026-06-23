@@ -74,3 +74,18 @@ either paste the value into chat or grant explicit permission to
 read a specific file. Permission does not carry over between
 sessions or files.
 
+## Документация и README-sync (DotCore)
+
+Канон правил для агентов - корневой [agents.md](agents.md) (layers,
+public/private границы, карта PrivateCore, тест-конвенции). Человеческая
+документация - [README.md](README.md) в стандарте DotCore (плоский техдок,
+обложка `docs/cover.svg`, LoC-бейдж в маркерах `<!-- loc:start -->`).
+
+- «Обнови README» / «сгенерируй README» → скилл `generate-readme`.
+- **Глобальные изменения функционала** (новые/удалённые команды, модули,
+  зависимости, смена архитектуры или runtime) → обнови `README.md` тем же
+  скиллом, включая пересчёт LoC. Мелкие правки (опечатки, внутренний
+  рефактор, багфиксы) README не трогают.
+- Не латай разметку README вручную и не удаляй LoC-маркеры - перегенерируй
+  скиллом. README не дублирует operational-правила из `agents.md`.
+

@@ -1,0 +1,40 @@
+---
+description: DotCore контекст проекта - сборка, тесты, соглашения. Канон правил - agents.md в корне.
+globs:
+  - "**/*"
+alwaysApply: true
+---
+
+# DotCore Project Context
+
+Канонические инструкции для агентов: [agents.md](../../agents.md) в корне
+репозитория (public/private границы, секреты, layers, карта PrivateCore).
+Человеческая документация: [README.md](../../README.md).
+
+## Кратко
+
+- **Тип:** full-stack (FastAPI backend + React Mini App), Telegram-style
+- **Установка:** `poetry install` (требует `../DotSoundPrivateCore`)
+- **Dev:** `make dev` (Postgres + MinIO + Redis, миграции, backend :8000)
+- **Тесты:** `make test` / `make test-cov` (branch coverage gate 95%)
+- **Lint:** `make lint` (Ruff + Black + mypy strict, длина строки 79)
+
+## Правила
+
+- Источник правды - код и манифесты, не устаревший README.
+- `api/v1/` без прямых ORM-запросов; бизнес-правила и security-константы -
+  только в `DotSoundPrivateCore`. Внутренняя реализация ядра не называется
+  (black-box, `docs/ai-boundary-policy.md`).
+- `.env` и секреты агенту недоступны; имена переменных - только в абстракции.
+- README в стандарте DotCore: без marketing, `<details>`, centered hero, emoji.
+- Обложка: `docs/cover.svg` + `<img>` (GitHub вырезает inline `<svg>`).
+- LoC-бейдж - 4-й в строке header, между `<!-- loc:start -->` и `<!-- loc:end -->`.
+- **README-sync:** при глобальных изменениях (новые/удалённые команды, модули,
+  зависимости, смена архитектуры или runtime) обнови README через скилл
+  `generate-readme` - в том числе пересчёт LoC. Мелкие правки README не трогают.
+- Минимальный scope изменений.
+
+## README
+
+Перегенерация: скилл `generate-readme` (обновляет README + cover + этот rule).
+Не дублируй README целиком в чат - ссылайся на секции.
