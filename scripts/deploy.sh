@@ -47,9 +47,30 @@ fi
 
 COMPOSE=(docker compose "${COMPOSE_FILES[@]}")
 DEPLOY_PRUNE_BUILDER_CACHE="${DEPLOY_PRUNE_BUILDER_CACHE:-1}"
-DEPLOY_BUILDER_CACHE_KEEP_STORAGE="${DEPLOY_BUILDER_CACHE_KEEP_STORAGE:-4GB}"
+# Keep enough build cache between deploys to retain the warm apt/npm/poetry
+# layers (BuildKit evicts least-recently-used beyond this size). 4GB was too
+# small for these images and forced a cold rebuild — and a ~48-min apt step —
+# on every deploy. Tune to the server's free disk via this env var.
+DEPLOY_BUILDER_CACHE_KEEP_STORAGE="${DEPLOY_BUILDER_CACHE_KEEP_STORAGE:-20GB}"
 
 log() { printf '\033[1;36m==>\033[0m %s\n' "$*"; }
+
+# Build images one at a time. On a small build host, building every image in
+# parallel thrashes disk IO — that's what dragged apt to ~48 min and tripped
+# esbuild's postinstall with ETXTBSY. Serialising costs a little wall-clock on
+# a cold cache but is stable; with the build cache retained between deploys
+# each image is mostly cache hits anyway.
+build_serial() {
+  for svc in "$@"; do
+    log "Building ${svc}"
+    "${COMPOSE[@]}" build "${svc}"
+  done
+}
+
+# Buildable services active in the prod stack (postgres/redis/minio/
+# elasticsearch/clamav/caddy are pulled images, not built). backend, worker
+# and sc_id_refresher share one image, so the 2nd/3rd are cache hits.
+BUILD_SERVICES=(backend worker frontend bot sc_id_refresher backup)
 
 pull_repo() {
   local name="$1"
@@ -91,7 +112,7 @@ case "${MODE}" in
     pull_repo DotSoundComputeWorker || true
 
     log "Building images"
-    "${COMPOSE[@]}" build
+    build_serial "${BUILD_SERVICES[@]}"
 
     log "Bringing up infrastructure (postgres/redis/minio/elasticsearch)"
     "${COMPOSE[@]}" up -d postgres redis minio elasticsearch
@@ -111,7 +132,7 @@ case "${MODE}" in
 
   skip-pull)
     log "Building images"
-    "${COMPOSE[@]}" build
+    build_serial "${BUILD_SERVICES[@]}"
     "${COMPOSE[@]}" up -d postgres redis minio elasticsearch
     wait_for_postgres
     run_migrations
@@ -127,7 +148,7 @@ case "${MODE}" in
   only-backend)
     pull_repo DotSoundBackend
     pull_repo DotSoundPrivateCore
-    "${COMPOSE[@]}" build backend worker sc_id_refresher
+    build_serial backend worker sc_id_refresher
     "${COMPOSE[@]}" up -d postgres redis minio elasticsearch
     wait_for_postgres
     run_migrations
@@ -137,13 +158,13 @@ case "${MODE}" in
   only-bot)
     pull_repo DotSoundBot
     pull_repo DotSoundPrivateCore
-    "${COMPOSE[@]}" build bot
+    build_serial bot
     "${COMPOSE[@]}" up -d bot
     ;;
 
   only-frontend)
     pull_repo DotSoundBackend
-    "${COMPOSE[@]}" build frontend
+    build_serial frontend
     "${COMPOSE[@]}" up -d frontend caddy
     ;;
 

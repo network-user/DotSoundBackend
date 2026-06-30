@@ -37,15 +37,19 @@ RUN curl -sSL https://install.python-poetry.org | python3 -
 
 WORKDIR /app
 
+# Install backend dependencies first — before PrivateCore is copied — so this
+# expensive layer stays cached whenever only PrivateCore changes (it's pulled
+# fresh on most deploys). The lockfile is committed and kept in sync with
+# pyproject, so install straight from it rather than regenerating on build.
+COPY DotSoundBackend/pyproject.toml DotSoundBackend/poetry.lock ./
+RUN poetry install --no-interaction --no-ansi --no-root
+
 COPY DotSoundPrivateCore /DotSoundPrivateCore
 
 # Defense-in-depth: the private core's local secret files must never
 # persist in an image layer. Dockerfile.dockerignore already excludes
 # them from the context under BuildKit; this also covers legacy builds.
 RUN rm -f /DotSoundPrivateCore/.env /DotSoundPrivateCore/.env.*
-
-COPY DotSoundBackend/pyproject.toml DotSoundBackend/poetry.lock ./
-RUN poetry lock --no-update && poetry install --no-interaction --no-ansi --no-root
 
 # PrivateCore runtime extras are installed separately so they never appear
 # in the backend's declarative dependency graph.

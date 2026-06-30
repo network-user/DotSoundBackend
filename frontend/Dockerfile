@@ -3,7 +3,13 @@ FROM node:20-alpine as build-stage
 WORKDIR /app
 
 COPY package.json package-lock.json ./
-RUN npm ci
+# esbuild's postinstall validates its binary by exec-ing it right after
+# writing it; under heavy build-host IO contention the file can still be
+# open for write, yielding ETXTBSY ("text file busy"). The race is
+# transient, so retry npm ci a couple of times before giving up.
+RUN npm ci --no-audit --no-fund \
+ || npm ci --no-audit --no-fund \
+ || npm ci --no-audit --no-fund
 
 COPY . .
 RUN npm run build
