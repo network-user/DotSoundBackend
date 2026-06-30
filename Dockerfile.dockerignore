@@ -1,0 +1,47 @@
+# Build-context ignore for DotSoundBackend/Dockerfile.
+#
+# BuildKit (default in Docker Compose v2) reads "<dockerfile>.dockerignore"
+# next to the Dockerfile, so this file governs the parent build context
+# (..) that holds both DotSoundBackend and the sibling private core.
+# Patterns are relative to that context root. Its job: keep secrets, VCS
+# metadata, local databases, and caches out of every image layer — most
+# importantly the private core's local .env must never bake into an image.
+
+# Secrets / local environment
+**/.env
+**/.env.*
+!**/.env.example
+**/*.pem
+**/*.key
+**/*.p12
+**/*.pfx
+**/*.keystore
+**/*.jks
+**/secrets.json
+**/credentials.json
+**/service-account*.json
+
+# VCS metadata and local history-rewrite backups
+**/.git
+**/.git-coauthor-backups
+**/.git-history-backups
+**/.git-release-backups
+
+# Local databases / dumps
+**/*.sqlite
+**/*.sqlite3
+**/*.db
+
+# Python / tooling caches and artifacts
+**/__pycache__
+**/*.py[cod]
+**/.mypy_cache
+**/.ruff_cache
+**/.pytest_cache
+**/.coverage
+**/coverage.xml
+**/htmlcov
+
+# Local virtualenv and frontend deps (the image installs its own)
+**/.venv
+**/node_modules

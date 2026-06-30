@@ -235,6 +235,9 @@ async def create_test_user(
     telegram_id: int,
     **kwargs: object,
 ) -> dict[str, Any]:
+    # POST /api/v1/users is internal-only (require_internal_caller).
+    # The ASGI test client's 127.0.0.1 is inside the debug allowlist,
+    # so this server-to-server style upsert is permitted in tests.
     payload = {
         "telegram_id": telegram_id,
         "first_name": kwargs.get("first_name", "Test"),

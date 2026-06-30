@@ -18,7 +18,9 @@ services:
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-dotsound}
       POSTGRES_DB: ${POSTGRES_DB:-dotsound}
     ports:
-      - "5432:5432"
+      # Loopback-only on the host; prod overlay resets this entirely
+      # and reaches Postgres over the internal dotsound network.
+      - "127.0.0.1:5432:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
@@ -38,8 +40,9 @@ services:
       MINIO_ROOT_USER: ${MINIO_ROOT_USER:-minioadmin}
       MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-minioadmin}
     ports:
-      - "9000:9000"
-      - "9001:9001"
+      # Loopback-only on the host; prod overlay resets these ports.
+      - "127.0.0.1:9000:9000"
+      - "127.0.0.1:9001:9001"
     volumes:
       - minio_data:/data
     healthcheck:
@@ -55,7 +58,8 @@ services:
     image: redis:7-alpine
     restart: unless-stopped
     ports:
-      - "6379:6379"
+      # Loopback-only on the host; prod overlay resets this port.
+      - "127.0.0.1:6379:6379"
     volumes:
       - redis_data:/data
     healthcheck:
@@ -75,7 +79,8 @@ services:
       - xpack.security.enabled=false
       - "ES_JAVA_OPTS=-Xms512m -Xmx512m"
     ports:
-      - "9200:9200"
+      # Loopback-only on the host; prod overlay resets this port.
+      - "127.0.0.1:9200:9200"
     volumes:
       - elasticsearch_data:/usr/share/elasticsearch/data
     ulimits:
@@ -219,7 +224,8 @@ services:
       CLAMD_CONF_MaxFileSize: "200M"
       CLAMD_CONF_StreamMaxLength: "200M"
     ports:
-      - "3310:3310"
+      # Loopback-only on the host; prod overlay resets this port.
+      - "127.0.0.1:3310:3310"
     volumes:
       - clamav_data:/var/lib/clamav
     healthcheck:
@@ -369,7 +375,9 @@ services:
       PGADMIN_DEFAULT_EMAIL: ${PGADMIN_DEFAULT_EMAIL:-admin@dotsound.local}
       PGADMIN_DEFAULT_PASSWORD: ${PGADMIN_DEFAULT_PASSWORD:-admin}
     ports:
-      - "5050:80"
+      # Loopback-only admin UI; reach it via an SSH tunnel, never
+      # expose pgAdmin directly to the network.
+      - "127.0.0.1:5050:80"
     volumes:
       - pgadmin_data:/var/lib/pgadmin
     depends_on:
@@ -384,8 +392,11 @@ services:
     profiles:
       - tools
     ports:
-      - "9090:9000"
-      - "9443:9443"
+      # Loopback-only: Portainer mounts the Docker socket (full host
+      # control), so it must never be reachable off-host. Tunnel in
+      # over SSH to use it.
+      - "127.0.0.1:9090:9000"
+      - "127.0.0.1:9443:9443"
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
       - portainer_data:/data

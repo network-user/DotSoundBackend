@@ -16,11 +16,13 @@ from typing import TYPE_CHECKING
 
 import httpx
 import structlog
+from fastapi import HTTPException
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import settings
 from app.core import s3
+from app.core.ssrf_guard import assert_public_http_url
 from app.models.artist import Artist, TrackArtist
 from app.models.track import Track
 from app.services import artist_enrichment_progress as progress
@@ -538,6 +540,17 @@ class ArtistEnrichmentService:
         client: httpx.AsyncClient,
         url: str,
     ) -> bytes | None:
+        # SSRF guard: provider-supplied image URLs must resolve to a
+        # public host. Skip (not fail) anything pointing at a private,
+        # loopback, link-local or cloud-metadata target.
+        try:
+            assert_public_http_url(url, field="artist_image_url")
+        except HTTPException:
+            logger.warning(
+                "artist_image_download_blocked_ssrf",
+                url=url,
+            )
+            return None
         try:
             resp = await client.get(url)
         except httpx.HTTPError as exc:

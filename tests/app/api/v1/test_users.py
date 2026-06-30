@@ -58,6 +58,25 @@ async def test_register_same_user_twice(
     )
 
 
+@patch("app.dependencies.is_ip_in_cidrs", return_value=False)
+async def test_external_caller_blocked_with_404(
+    _mock_gate: object,
+    client: AsyncClient,
+) -> None:
+    # A caller whose IP is outside the internal allowlist must get a
+    # silent 404 — it cannot upsert a user by telegram_id.
+    payload = {
+        "telegram_id": 555000555,
+        "username": "external",
+        "first_name": "Ext",
+        "last_name": None,
+    }
+    response = await client.post(
+        "/api/v1/users", json=payload
+    )
+    assert response.status_code == 404
+
+
 async def test_get_user_not_found(
     client: AsyncClient,
 ) -> None:
@@ -70,16 +89,10 @@ async def test_get_user_not_found(
 async def test_get_user_by_id(
     client: AsyncClient,
 ) -> None:
-    payload = {
-        "telegram_id": 987654321,
-        "username": "getme",
-        "first_name": "Get",
-        "last_name": "Me",
-    }
-    created = await client.post(
-        "/api/v1/users", json=payload
+    created = await create_test_user(
+        client, 987654321, username="getme", last_name="Me"
     )
-    user_id = created.json()["id"]
+    user_id = created["id"]
 
     response = await client.get(
         f"/api/v1/users/{user_id}"

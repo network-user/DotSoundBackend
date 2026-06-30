@@ -98,8 +98,11 @@ services:
     image: grafana/grafana:11.3.0
     restart: unless-stopped
     environment:
-      GF_SECURITY_ADMIN_USER: admin
-      GF_SECURITY_ADMIN_PASSWORD: admin
+      # Overridable so prod can inject a strong credential via env.
+      # Set GRAFANA_ADMIN_PASSWORD in the deploy environment; the
+      # admin/admin fallback is for local dev only.
+      GF_SECURITY_ADMIN_USER: ${GRAFANA_ADMIN_USER:-admin}
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:-admin}
       GF_USERS_ALLOW_SIGN_UP: "false"
     volumes:
       - ./infra/grafana/provisioning:/etc/grafana/provisioning:ro

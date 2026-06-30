@@ -36,9 +36,35 @@ app/static/mini_app/
 
 # Frontend node_modules
 frontend/node_modules/
+
+# Playwright E2E output (never commit run artifacts / traces)
+frontend/test-results/
+frontend/playwright-report/
 .claude/
 # Local chat context exports (do not commit)
 context_delete.txt
 
 # Debug-mode per-service log files (settings.debug=true only)
 logs/
+
+# Secrets / keys / local data (defense-in-depth — keep the template tracked)
+.env.*
+!.env.example
+*.pem
+*.key
+*.p12
+*.pfx
+*.keystore
+*.jks
+secrets.json
+credentials.json
+service-account*.json
+*.sqlite
+*.sqlite3
+*.db
+*.tmp
+
+# Virtual environments
+venv/
+.venv/
+env/

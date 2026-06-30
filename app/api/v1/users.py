@@ -22,6 +22,7 @@ from app.dependencies import (
     get_current_user,
     get_db,
     get_optional_user,
+    require_internal_caller,
 )
 from app.models.user import User
 from app.repositories.complaint import (
@@ -105,18 +106,25 @@ def _listen_history_next_cursor(
     "",
     response_model=UserResponse,
     status_code=status.HTTP_200_OK,
-    summary="Register or update a user by Telegram ID",
+    summary="Register or update a user by Telegram ID (internal only)",
 )
 @limiter.limit("60/minute")
 async def register_or_update_user(
     request: Request,
     data: UserCreate,
     session: AsyncSession = Depends(get_db),
+    _internal: None = Depends(require_internal_caller),
 ) -> UserResponse:
+    # Internal-only: the bot upserts Telegram users server-to-server
+    # over the compose network. External callers are rejected with a
+    # silent 404 by require_internal_caller; the public web/Mini App
+    # registers through the HMAC-verified /auth/telegram flow instead.
     structlog.contextvars.bind_contextvars(telegram_id=data.telegram_id)
     service = UserService(session)
     user, created = await service.register_or_update(data)
-    status_code = status.HTTP_201_CREATED if created else status.HTTP_200_OK
+    status_code = (
+        status.HTTP_201_CREATED if created else status.HTTP_200_OK
+    )
     logger.info(
         "user_endpoint_response",
         user_id=user.id,

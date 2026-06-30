@@ -1,3 +1,7 @@
+# NOTE: pin the base image by digest before production deploy, e.g.
+#   FROM python:3.12-slim@sha256:<digest>
+# (resolve with `docker buildx imagetools inspect python:3.12-slim`).
+# Left as a floating tag here so offline checkouts still build.
 FROM python:3.12-slim
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
@@ -35,6 +39,11 @@ WORKDIR /app
 
 COPY DotSoundPrivateCore /DotSoundPrivateCore
 
+# Defense-in-depth: the private core's local secret files must never
+# persist in an image layer. Dockerfile.dockerignore already excludes
+# them from the context under BuildKit; this also covers legacy builds.
+RUN rm -f /DotSoundPrivateCore/.env /DotSoundPrivateCore/.env.*
+
 COPY DotSoundBackend/pyproject.toml DotSoundBackend/poetry.lock ./
 RUN poetry lock --no-update && poetry install --no-interaction --no-ansi --no-root
 
@@ -45,6 +54,18 @@ RUN pip install --no-cache-dir \
 
 COPY DotSoundBackend/. .
 RUN poetry install --no-interaction --no-ansi
+
+# Drop root. uvicorn, ffmpeg and the stem-managed tor pool all run fine
+# unprivileged (tor uses a tempdir DataDirectory at runtime, and
+# PYTHONDONTWRITEBYTECODE=1 means no .pyc writes into /app). The prod
+# overlay runs the image code directly (no source bind-mount, DEBUG off),
+# so /app is owned by appuser.
+# NOTE for dev: the base compose bind-mounts the host repo over /app — if
+# you enable debug file logging there, make the host ./logs dir writable
+# by uid 10001 (or run the dev container as root).
+RUN useradd --create-home --uid 10001 appuser \
+    && chown -R appuser:appuser /app
+USER appuser
 
 ENV UVICORN_HOST=0.0.0.0 \
     UVICORN_PORT=8000

@@ -1,5 +1,8 @@
 from collections.abc import AsyncGenerator
 
+from dotsound_private_core.services.network_policy import (
+    is_ip_in_cidrs,
+)
 from fastapi import Depends, HTTPException, Request, status
 from fastapi.security import (
     HTTPAuthorizationCredentials,
@@ -13,6 +16,10 @@ from app.core.auth import (
     decode_access_token,
     decode_admin_token,
     is_token_revoked,
+)
+from app.core.client_ip import (
+    internal_api_trusted_proxy_cidrs,
+    resolve_request_client_ip,
 )
 from app.core.db import AsyncSessionLocal
 from app.models.user import User
@@ -44,6 +51,29 @@ async def get_db() -> AsyncGenerator[AsyncSession, None]:
 
 def get_settings() -> AppSettings:
     return settings
+
+
+def require_internal_caller(request: Request) -> None:
+    """Restrict an endpoint to internal callers only.
+
+    Resolves the real client IP behind any trusted proxy and rejects
+    anything outside ``settings.internal_api_allowed_cidrs_list`` with a
+    silent 404 (mirrors InternalApiAllowlistMiddleware so external
+    scanners cannot tell the route exists). Used by server-to-server
+    routes such as the bot's user upsert, which reaches the backend
+    directly over the internal compose network.
+    """
+    client_ip, _peer_ip = resolve_request_client_ip(
+        request,
+        internal_api_trusted_proxy_cidrs(),
+    )
+    if not is_ip_in_cidrs(
+        client_ip, settings.internal_api_allowed_cidrs_list
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Not Found",
+        )
 
 
 async def get_current_user(
