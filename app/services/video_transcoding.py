@@ -13,6 +13,7 @@ from app.core import s3
 from app.core.db import AsyncSessionLocal
 from app.core.tkq import broker
 from app.models.track import Track
+from app.services.transcoding import _TRANSCODE_SEMAPHORE
 
 if TYPE_CHECKING:
     from app.models.image_blob import ImageBlob
@@ -171,6 +172,20 @@ async def transcode_video(
     original_filename: str,
     expected_status: str | None = None,
 ) -> None:
+    # ffmpeg-тяжёлая задача: делит общий потолок параллельных
+    # транскодов с аудио-конвейером (см. TRANSCODE_MAX_CONCURRENT).
+    async with _TRANSCODE_SEMAPHORE:
+        await _transcode_video_impl(
+            track_id, raw_key, original_filename, expected_status
+        )
+
+
+async def _transcode_video_impl(
+    track_id: int,
+    raw_key: str,
+    original_filename: str,
+    expected_status: str | None = None,
+) -> None:
     structlog.contextvars.bind_contextvars(
         track_id=track_id
     )
@@ -183,11 +198,9 @@ async def transcode_video(
     thumb_path = os.path.join(tmp_dir, "thumb.jpg")
 
     try:
-        raw_data, _, _, _ = (
-            await s3.download_object_range(raw_key)
-        )
-        with open(input_path, "wb") as f:
-            f.write(raw_data)
+        # Стрим на диск: исходное видео может весить десятки-сотни МБ,
+        # полная буферизация тела в RAM недопустима.
+        await s3.download_object_to_file(raw_key, input_path)
 
         transcode_cmd = [
             "ffmpeg", "-i", input_path,

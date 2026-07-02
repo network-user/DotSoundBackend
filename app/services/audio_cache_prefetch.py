@@ -74,7 +74,9 @@ async def prefetch_track_urls(
     """
     if not track_ids:
         return
-    bound = max(1, min(int(parallelism), 16))
+    # Жёсткий потолок 16 -> 4: префетч - фоновый разогрев, ему некуда
+    # спешить, а каждый слот держит provider-ответы в памяти.
+    bound = max(1, min(int(parallelism), 4))
     semaphore = asyncio.Semaphore(bound)
     async with AsyncSessionLocal() as session:
         await asyncio.gather(

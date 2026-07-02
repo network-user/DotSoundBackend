@@ -13,7 +13,7 @@ _MOD = "app.services.transcoding"
 
 
 async def _put_cas_side(
-    _data: bytes, sha: str, ext: str, _ct: str
+    _path: str, sha: str, ext: str, _ct: str
 ) -> str:
     from app.core.s3 import build_cas_audio_key
 
@@ -65,7 +65,7 @@ async def _dl_to_file_side(
     return_value="hls/1/master.m3u8",
 )
 @patch(
-    "app.core.s3.put_cas_audio",
+    "app.core.s3.put_cas_audio_from_file",
     new_callable=AsyncMock,
     side_effect=_put_cas_side,
 )
@@ -285,7 +285,7 @@ async def test_update_track_status_not_found(
     return_value="hls/1/master.m3u8",
 )
 @patch(
-    "app.core.s3.put_cas_audio",
+    "app.core.s3.put_cas_audio_from_file",
     new_callable=AsyncMock,
     side_effect=_put_cas_side,
 )
@@ -375,9 +375,9 @@ def test_loudnorm_filter_in_ffmpeg_args() -> None:
 
     from app.services import transcoding as mod
 
-    src = inspect.getsource(mod.transcode_and_upload_local)
+    src = inspect.getsource(mod._transcode_and_upload_local_impl)
     assert "_LOUDNORM_FILTER" in src
-    src_hls = inspect.getsource(mod.transcode_hls_only)
+    src_hls = inspect.getsource(mod._transcode_hls_only_impl)
     assert "_LOUDNORM_FILTER" in src_hls
 
 
@@ -421,7 +421,7 @@ async def test_verify_hls_bundle_missing_segment(
     return_value="hls/1/master.m3u8",
 )
 @patch(
-    "app.core.s3.put_cas_audio",
+    "app.core.s3.put_cas_audio_from_file",
     new_callable=AsyncMock,
     side_effect=_put_cas_side,
 )

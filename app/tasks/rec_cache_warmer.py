@@ -33,7 +33,9 @@ logger: structlog.stdlib.BoundLogger = structlog.get_logger(__name__)
 
 _ACTIVE_WINDOW_DAYS = 7
 _DISPATCH_BATCH = 50
-_WARM_CONCURRENCY = 4
+# 4 -> 2: каждый прогрев строит полные rec-выдачи (списки ORM-треков)
+# в памяти; тёплый кэш некуда торопить, а пик RAM режется вдвое.
+_WARM_CONCURRENCY = 2
 
 
 async def _get_active_user_ids(days: int = _ACTIVE_WINDOW_DAYS) -> list[int]:

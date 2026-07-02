@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+import asyncio
 import hashlib
+import os
 
 import structlog
 from sqlalchemy import func, select
@@ -13,9 +15,19 @@ from app.models.track import Track
 
 logger: structlog.stdlib.BoundLogger = structlog.get_logger(__name__)
 
+_HASH_CHUNK = 1024 * 1024
+
 
 def _sha256_hex(data: bytes) -> str:
     return hashlib.sha256(data).hexdigest()
+
+
+def _sha256_file_hex(path: str) -> str:
+    sha = hashlib.sha256()
+    with open(path, "rb") as fh:
+        while chunk := fh.read(_HASH_CHUNK):
+            sha.update(chunk)
+    return sha.hexdigest()
 
 
 class AudioBlobService:
@@ -158,6 +170,62 @@ class AudioBlobService:
 
         audio_storage_metrics.log_blob_dedup_miss(
             size_bytes=len(data), content_sha256=sha
+        )
+        return row, True
+
+    async def get_or_create_from_file(
+        self,
+        file_path: str,
+        extension: str,
+        content_type: str,
+    ) -> tuple[AudioBlob, bool]:
+        """File-based twin of ``get_or_create_from_bytes``.
+
+        Hashes and uploads straight from disk so audio-sized payloads
+        (transcode outputs) never sit in RAM as one bytes object.
+        Same dedup/race semantics as the bytes variant.
+        """
+        sha = await asyncio.to_thread(_sha256_file_hex, file_path)
+        size = os.path.getsize(file_path)
+        res0 = await self._session.execute(
+            select(AudioBlob).where(AudioBlob.content_sha256 == sha)
+        )
+        existing0 = res0.scalars().first()
+        if existing0 is not None:
+            audio_storage_metrics.log_blob_dedup_hit(
+                size_bytes=size, content_sha256=sha
+            )
+            return existing0, False
+
+        s3_key = await s3.put_cas_audio_from_file(
+            file_path, sha, extension, content_type
+        )
+        row = AudioBlob(
+            content_sha256=sha,
+            s3_key=s3_key,
+            content_type=content_type,
+            size_bytes=size,
+            ref_count=0,
+        )
+        created = True
+        async with self._session.begin_nested():
+            self._session.add(row)
+            try:
+                await self._session.flush()
+            except IntegrityError:
+                created = False
+        if not created:
+            audio_storage_metrics.log_blob_dedup_hit(
+                size_bytes=size, content_sha256=sha
+            )
+            audio_storage_metrics.log_s3_put_skipped(content_sha256=sha)
+            r2 = await self._session.execute(
+                select(AudioBlob).where(AudioBlob.content_sha256 == sha)
+            )
+            return r2.scalars().one(), False
+
+        audio_storage_metrics.log_blob_dedup_miss(
+            size_bytes=size, content_sha256=sha
         )
         return row, True
 

@@ -12,7 +12,11 @@ from app.models.track_embedding import TrackEmbedding
 from app.models.user_embedding import UserEmbedding
 from app.repositories.track import TrackRepository
 
-_DEFAULT_NEIGHBOR_POOL = 5000
+# 5000 -> 2000: пул кандидатов целиком поднимается в память на каждый
+# similar/daily-mix запрос (списки float-векторов). 2000 сохраняет
+# запас по recall на текущем размере каталога и режет транзиентный
+# пик RAM в 2.5 раза; вернуть выше - только вместе с ростом каталога.
+_DEFAULT_NEIGHBOR_POOL = 2000
 
 
 class EmbeddingRepository:

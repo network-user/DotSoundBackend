@@ -176,10 +176,8 @@ async def _transcode_and_upload_local_impl(
         if stats:
             logger.info("ffmpeg_loudnorm_stats", **stats)
 
-        with open(temp_mp3_path, "rb") as f:
-            mp3_data = f.read()
-
-        if len(mp3_data) == 0:
+        mp3_size = os.path.getsize(temp_mp3_path)
+        if mp3_size == 0:
             logger.error("ffmpeg_zero_bytes")
             await _update_track_status(track_id, "error", None, None)
             return
@@ -210,8 +208,10 @@ async def _transcode_and_upload_local_impl(
             if not track:
                 await _update_track_status(track_id, "error", None, None)
                 return
-            ab, _ = await svc.get_or_create_from_bytes(
-                mp3_data, "mp3", "audio/mpeg"
+            # Хэш и загрузка стримятся с диска: полный MP3 (у длинных
+            # миксов - сотни МБ) больше не поднимается в RAM.
+            ab, _ = await svc.get_or_create_from_file(
+                temp_mp3_path, "mp3", "audio/mpeg"
             )
             if source_sha256:
                 await svc.claim_source(blob=ab, source_sha256=source_sha256)
@@ -229,7 +229,7 @@ async def _transcode_and_upload_local_impl(
                 track.blob_ref_freed = False
             await svc.attach_playback_blob(track, ab)
             track.processing_status = "active"
-            track.file_size_bytes = len(mp3_data)
+            track.file_size_bytes = mp3_size
             track.hls_manifest_key = manifest_key
             track.hls_segment_seconds = _HLS_TIME
             track.hls_bundle_version = _BUNDLE_VERSION
@@ -250,7 +250,7 @@ async def _transcode_and_upload_local_impl(
                 "transcoding_complete",
                 file_key=file_key_log,
                 manifest_key=manifest_key,
-                mp3_size=len(mp3_data),
+                mp3_size=mp3_size,
             )
             from app.services.search_index_notify import (
                 schedule_reindex_track,

@@ -53,6 +53,22 @@ async def put_cas_audio(
     return file_key
 
 
+async def put_cas_audio_from_file(
+    file_path: str,
+    content_sha256_hex: str,
+    extension: str,
+    content_type: str,
+) -> str:
+    """CAS put that streams from disk instead of holding bytes in RAM.
+
+    Use for transcode outputs and other audio-sized payloads that
+    already live in a temp file.
+    """
+    file_key = build_cas_audio_key(content_sha256_hex, extension)
+    await upload_object_from_file(file_key, file_path, content_type)
+    return file_key
+
+
 def build_cas_image_key(content_sha256_hex: str, extension: str) -> str:
     ext = extension.lstrip(".") if extension else "webp"
     prefix = content_sha256_hex[:2]
@@ -553,6 +569,32 @@ async def upload_object(key: str, data: bytes, content_type: str) -> None:
             ContentType=content_type,
         )
     logger.debug("s3_upload_object_complete", key=key)
+
+
+async def upload_object_from_file(
+    key: str,
+    file_path: str,
+    content_type: str,
+) -> None:
+    """Upload a local file to S3 without buffering it in RAM.
+
+    ``upload_fileobj`` reads the handle in chunks (multipart for big
+    payloads), so peak memory stays flat regardless of file size.
+    """
+    logger.debug(
+        "s3_upload_file_started",
+        key=key,
+        size_bytes=os.path.getsize(file_path),
+    )
+    async with get_s3_client() as s3:
+        with open(file_path, "rb") as fh:
+            await s3.upload_fileobj(
+                fh,
+                settings.minio_bucket,
+                key,
+                ExtraArgs={"ContentType": content_type},
+            )
+    logger.debug("s3_upload_file_complete", key=key)
 
 
 _BUCKET_RETRY_ATTEMPTS = 5

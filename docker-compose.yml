@@ -39,6 +39,10 @@ services:
     environment:
       MINIO_ROOT_USER: ${MINIO_ROOT_USER:-minioadmin}
       MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-minioadmin}
+      # Мягкий потолок Go-кучи: иначе MinIO разрастается кэшами до
+      # сотен МБ на 4GB-боксе. Стриминг это не ломает - при нехватке
+      # GC просто работает чаще.
+      GOMEMLIMIT: 256MiB
     ports:
       # Loopback-only on the host; prod overlay resets these ports.
       - "127.0.0.1:9000:9000"
@@ -245,9 +249,17 @@ services:
   # .env (раз в неделю; см. scripts/sc_id_refresher.py). Профиль sc-refresh
   # для локального `docker compose up` без профилей — контейнер не стартует.
   # В prod docker-compose.prod.yml снимает профиль; deploy.sh поднимает сервис.
+  # Антивирусный скан загрузок. Фича спит: UPLOAD_MALWARE_SCAN_MODE=none
+  # по умолчанию (для лёгкой проверки есть режим "lightweight" без
+  # отдельного контейнера). Профиль обязателен: сигнатурная БД ClamAV
+  # держит ~1GB+ RSS, а restart: unless-stopped воскрешал бы контейнер
+  # после каждого ребута, если он хоть раз стартовал случайным
+  # `docker compose up -d` без списка сервисов. На 4GB-боксе не включать.
   clamav:
     image: clamav/clamav:stable
     restart: unless-stopped
+    profiles:
+      - malware-scan
     environment:
       CLAMD_CONF_MaxFileSize: "200M"
       CLAMD_CONF_StreamMaxLength: "200M"
