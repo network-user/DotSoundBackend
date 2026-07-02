@@ -49,13 +49,14 @@ async def transcode_snippet_local(
             sn.error_message = "catalog_gated"
             await session.commit()
             return {"status": "failed", "error": "catalog_gated"}
-        data = await s3.download_object(tr.file_key)
+        file_key = tr.file_key
     tmpd = tempfile.mkdtemp()
     in_path = os.path.join(tmpd, "in")
     out_path = os.path.join(tmpd, "out.mp3")
     try:
-        with open(in_path, "wb") as f:
-            f.write(data)
+        # Исходник — полный трек; стримим на диск вместо полной
+        # буферизации в RAM (ffmpeg читает файл).
+        await s3.download_object_to_file(file_key, in_path)
         start = float(sn.start_ms) / 1000.0
         dur = (float(sn.end_ms) - float(sn.start_ms)) / 1000.0
         cmd = [

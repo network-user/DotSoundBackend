@@ -4,8 +4,12 @@
 # Left as a floating tag here so offline checkouts still build.
 FROM python:3.12-slim
 
+# MALLOC_ARENA_MAX=2 caps glibc per-thread malloc arenas; long-running
+# Python processes with thread pools (yt-dlp scans, to_thread) otherwise
+# grow one arena per thread and fragment RSS by tens of MB.
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
+    MALLOC_ARENA_MAX=2 \
     POETRY_VERSION=1.8.3 \
     POETRY_HOME="/opt/poetry" \
     POETRY_VIRTUALENVS_CREATE=false \

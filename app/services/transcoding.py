@@ -16,6 +16,7 @@ from dotsound_private_core.services.playback_streaming_policy import (
     build_master_playlist,
 )
 
+from app.config import settings
 from app.core import s3
 from app.core.db import AsyncSessionLocal
 from app.core.tkq import broker  # Добавлено
@@ -40,6 +41,14 @@ _LOUDNORM_STATS_RE = re.compile(r'\{\s*"input_i".*?\}', re.DOTALL)
 _MASTER_PLAYLIST = build_master_playlist()
 _BUNDLE_VERSION = LATEST_BUNDLE_VERSION
 
+# Bounds concurrent ffmpeg transcode pipelines inside one worker
+# process. Taskiq slots only bound *tasks*: an import burst would
+# otherwise stack N ffmpeg processes plus their I/O buffers at once.
+# Excess transcode tasks simply wait here.
+_TRANSCODE_SEMAPHORE = asyncio.Semaphore(
+    max(1, settings.transcode_max_concurrent)
+)
+
 
 async def transcode_and_upload_local(
     job: LocalComputeJob,
@@ -52,6 +61,13 @@ async def transcode_and_upload_local(
     Any other Track rows that claimed the same source while this transcode
     was running are reconciled at the end.
     """
+    async with _TRANSCODE_SEMAPHORE:
+        return await _transcode_and_upload_local_impl(job)
+
+
+async def _transcode_and_upload_local_impl(
+    job: LocalComputeJob,
+) -> dict | None:
     track_id = int(job.target_id or job.payload.get("track_id") or 0)
     raw_key = str(job.payload.get("raw_key") or "")
     original_filename = str(
@@ -77,11 +93,10 @@ async def transcode_and_upload_local(
     transcode_ok = False
 
     try:
-        # Скачиваем оригинальный файл из временного хранилища S3
-        raw_audio_data = await s3.download_object(raw_key)
-
-        with open(temp_in_path, "wb") as f:
-            f.write(raw_audio_data)
+        # Стримим оригинальный файл из временного хранилища S3 сразу
+        # на диск: сырые загрузки (WAV/FLAC) бывают в сотни МБ, и
+        # полная буферизация тела в RAM здесь недопустима.
+        await s3.download_object_to_file(raw_key, temp_in_path)
 
         process = await asyncio.create_subprocess_exec(
             "ffmpeg",
@@ -300,6 +315,15 @@ async def transcode_hls_only(
     one set of segments and the migration cost amortises across the
     catalogue.
     """
+    async with _TRANSCODE_SEMAPHORE:
+        await _transcode_hls_only_impl(track_id, file_key, source_sha256)
+
+
+async def _transcode_hls_only_impl(
+    track_id: int,
+    file_key: str,
+    source_sha256: str | None = None,
+) -> None:
     structlog.contextvars.bind_contextvars(track_id=track_id)
     logger.info(
         "hls_transcode_started",
@@ -315,9 +339,7 @@ async def transcode_hls_only(
     os.makedirs(lo_dir)
 
     try:
-        mp3_data = await s3.download_object(file_key)
-        with open(temp_in_path, "wb") as f:
-            f.write(mp3_data)
+        await s3.download_object_to_file(file_key, temp_in_path)
 
         process = await asyncio.create_subprocess_exec(
             "ffmpeg",

@@ -47,6 +47,14 @@ async def _make_track(
 _RAW = b"\xff\xfb" + b"\x00" * 100
 
 
+async def _dl_to_file_side(
+    _key: str, dest_path: str, **_kw: object
+) -> int:
+    """Mimic ``s3.download_object_to_file``: write _RAW to disk."""
+    Path(dest_path).write_bytes(_RAW)
+    return len(_RAW)
+
+
 @patch(
     f"{_MOD}._update_track_status",
     new_callable=AsyncMock,
@@ -62,9 +70,9 @@ _RAW = b"\xff\xfb" + b"\x00" * 100
     side_effect=_put_cas_side,
 )
 @patch(
-    f"{_MOD}.s3.download_object",
+    f"{_MOD}.s3.download_object_to_file",
     new_callable=AsyncMock,
-    return_value=_RAW,
+    side_effect=_dl_to_file_side,
 )
 @patch(
     f"{_MOD}.s3.delete_object",
@@ -122,9 +130,9 @@ async def test_transcode_and_upload_ffmpeg_fail(
     new_callable=AsyncMock,
 )
 @patch(
-    f"{_MOD}.s3.download_object",
+    f"{_MOD}.s3.download_object_to_file",
     new_callable=AsyncMock,
-    return_value=_RAW,
+    side_effect=_dl_to_file_side,
 )
 @patch(f"{_MOD}.asyncio.create_subprocess_exec")
 async def test_transcode_local_keeps_raw_on_ffmpeg_fail(
@@ -282,9 +290,9 @@ async def test_update_track_status_not_found(
     side_effect=_put_cas_side,
 )
 @patch(
-    f"{_MOD}.s3.download_object",
+    f"{_MOD}.s3.download_object_to_file",
     new_callable=AsyncMock,
-    return_value=_RAW,
+    side_effect=_dl_to_file_side,
 )
 @patch(
     f"{_MOD}.s3.delete_object",
@@ -418,9 +426,9 @@ async def test_verify_hls_bundle_missing_segment(
     side_effect=_put_cas_side,
 )
 @patch(
-    f"{_MOD}.s3.download_object",
+    f"{_MOD}.s3.download_object_to_file",
     new_callable=AsyncMock,
-    return_value=_RAW,
+    side_effect=_dl_to_file_side,
 )
 @patch(
     f"{_MOD}.s3.delete_object",
@@ -519,7 +527,7 @@ def test_parse_loudnorm_stats_no_json() -> None:
     new_callable=AsyncMock,
 )
 @patch(
-    f"{_MOD}.s3.download_object",
+    f"{_MOD}.s3.download_object_to_file",
     new_callable=AsyncMock,
     side_effect=Exception("S3 down"),
 )

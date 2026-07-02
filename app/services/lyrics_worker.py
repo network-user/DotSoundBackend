@@ -663,18 +663,20 @@ async def _fetch_audio_to_file(
     max_bytes = _max_audio_bytes()
 
     if track.file_key:
-        data = await s3.download_object(track.file_key)
-        if len(data) > max_bytes:
+        path = os.path.join(tmp_dir, "audio.mp3")
+        try:
+            # Стрим с капом вместо полной буферизации: трек может
+            # весить сотни МБ, а дальше он всё равно читается с диска.
+            await s3.download_object_to_file(
+                track.file_key, path, max_bytes=max_bytes
+            )
+        except ValueError:
             logger.warning(
                 "lyrics_s3_audio_oversize",
-                size=len(data),
                 max_bytes=max_bytes,
                 track_id=track.id,
             )
             return None
-        path = os.path.join(tmp_dir, "audio.mp3")
-        with open(path, "wb") as f:
-            f.write(data)
         return path
 
     if getattr(track, "sc_url", None):

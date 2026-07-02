@@ -34,6 +34,18 @@ def _reset_lyrics_cache():
         yield
 
 
+_FAKE_AUDIO = b"fake-audio-bytes"
+
+
+async def _fake_audio_to_file(
+    _key: str, dest_path: str, **_kw: object
+) -> int:
+    """Mimic ``s3.download_object_to_file``: write bytes to disk."""
+    with open(dest_path, "wb") as fh:
+        fh.write(_FAKE_AUDIO)
+    return len(_FAKE_AUDIO)
+
+
 @dataclass
 class _FakeTrack:
     id: int = 1
@@ -101,9 +113,9 @@ def _setup_track_query(
 class TestGenerateLyricsTask:
     @pytest.mark.anyio
     @patch(
-        "app.services.lyrics_worker.s3.download_object",
+        "app.services.lyrics_worker.s3.download_object_to_file",
         new_callable=AsyncMock,
-        return_value=b"fake-audio-bytes",
+        side_effect=_fake_audio_to_file,
     )
     @patch("dotsound_private_core.services" ".lyrics_provider.generate_lyrics")
     async def test_with_sync_downloads_audio(
@@ -129,7 +141,8 @@ class TestGenerateLyricsTask:
 
         assert result["status"] == "found"
         assert result["has_sync"] is True
-        mock_s3.assert_called_once_with("tracks/1/audio.mp3")
+        mock_s3.assert_called_once()
+        assert mock_s3.call_args[0][0] == "tracks/1/audio.mp3"
         mock_generate.assert_called_once()
         call_kwargs = mock_generate.call_args[1]
         assert call_kwargs["audio_path"] is not None
@@ -433,9 +446,9 @@ class TestGenerateLyricsTask:
 
     @pytest.mark.anyio
     @patch(
-        "app.services.lyrics_worker.s3.download_object",
+        "app.services.lyrics_worker.s3.download_object_to_file",
         new_callable=AsyncMock,
-        return_value=b"fake-audio-bytes",
+        side_effect=_fake_audio_to_file,
     )
     @patch("dotsound_private_core.services" ".lyrics_provider.generate_lyrics")
     async def test_source_name_propagates_to_repo(
@@ -481,9 +494,9 @@ class TestGenerateLyricsTask:
 
     @pytest.mark.anyio
     @patch(
-        "app.services.lyrics_worker.s3.download_object",
+        "app.services.lyrics_worker.s3.download_object_to_file",
         new_callable=AsyncMock,
-        return_value=b"fake-audio-bytes",
+        side_effect=_fake_audio_to_file,
     )
     @patch("dotsound_private_core.services" ".lyrics_provider.generate_lyrics")
     async def test_sync_source_name_propagates_to_repo(

@@ -4,18 +4,43 @@ x-logging: &default-logging
     max-size: "100m"
     max-file: "5"
 
+# Явные upstream-DNS для контейнеров. Без них контейнер наследует хостовый
+# systemd-resolved (127.0.0.53), который ВНУТРИ контейнера недоступен - тогда
+# Caddy не резолвит ACME-серверы Let's Encrypt/ZeroSSL и не может выпустить
+# сертификаты (ERR_SSL_PROTOCOL_ERROR), а backend/worker не достают внешние API.
+# Docker всё равно оставляет embedded-resolver 127.0.0.11 для service discovery
+# (postgres/minio/... по именам продолжают резолвиться), эти адреса - только
+# upstream для внешних имён.
+x-dns: &dns
+  - 1.1.1.1
+  - 8.8.8.8
+
+# Per-container memory ceilings for the 3.8GB prod box. These are
+# caps, not reservations: they exist so one runaway service gets
+# OOM-restarted by itself instead of dragging the whole host into
+# the kernel OOM killer. Steady-state RSS is expected to sit well
+# below each cap; if a service starts hitting its limit (docker
+# inspect OOMKilled=true / restarts), investigate before raising.
 services:
   postgres:
     ports: !reset []
+    mem_limit: 512m
 
   minio:
     ports: !reset []
+    mem_limit: 384m
 
   redis:
     ports: !reset []
+    # maxmemory is 256mb (base compose); the extra headroom covers
+    # allocator fragmentation and RDB fork copy-on-write.
+    mem_limit: 384m
 
   elasticsearch:
     ports: !reset []
+    # Heap is 256m (base compose); the rest is JVM overhead, direct
+    # buffers and mmapped Lucene segments.
+    mem_limit: 896m
 
   clamav:
     ports: !reset []
@@ -25,27 +50,39 @@ services:
       DEBUG: "false"
     ports: !reset []
     volumes: !reset []
+    mem_limit: 768m
+    dns: *dns
 
   # Парсит SC_CLIENT_ID с soundcloud.com раз в неделю и пишет в .env на
   # хосте (bind-mount из базового compose). Профиль sc-refresh снят,
   # чтобы сервис поднимался вместе с prod-стеком и deploy.sh.
   sc_id_refresher:
     profiles: !reset []
+    mem_limit: 192m
 
   worker:
     volumes: !reset []
+    mem_limit: 896m
+    dns: *dns
 
   # Remove the backup profile in prod so the container starts automatically
   # with the rest of the stack (mirrors sc_id_refresher pattern above).
   backup:
     profiles: !reset []
+    mem_limit: 256m
 
   frontend:
     ports: !reset []
+    mem_limit: 64m
+
+  bot:
+    mem_limit: 256m
 
   caddy:
     image: caddy:2-alpine
     restart: unless-stopped
+    mem_limit: 128m
+    dns: *dns
     env_file:
       - .env
     ports:

@@ -57,6 +57,17 @@ services:
   redis:
     image: redis:7-alpine
     restart: unless-stopped
+    # Bound Redis so cache growth can never OOM the host. volatile-lru
+    # evicts only keys that carry a TTL (rec caches, rate limits,
+    # idempotency, file_id cache); queue/stream keys without TTL are
+    # never evicted. Built-in RDB snapshotting stays enabled (backup
+    # container reads dump.rdb from the redis_data volume).
+    command:
+      - redis-server
+      - --maxmemory
+      - 256mb
+      - --maxmemory-policy
+      - volatile-lru
     ports:
       # Loopback-only on the host; prod overlay resets this port.
       - "127.0.0.1:6379:6379"
@@ -77,7 +88,12 @@ services:
     environment:
       - discovery.type=single-node
       - xpack.security.enabled=false
-      - "ES_JAVA_OPTS=-Xms512m -Xmx512m"
+      # ML is unused; disabling it drops the native ML controller
+      # process. Heap 256m keeps the whole JVM near ~600MB RSS on the
+      # 4GB prod box; raise back to 512m only if ES logs show
+      # circuit_breaking_exception under real search/reindex load.
+      - xpack.ml.enabled=false
+      - "ES_JAVA_OPTS=-Xms256m -Xmx256m"
     ports:
       # Loopback-only on the host; prod overlay resets this port.
       - "127.0.0.1:9200:9200"
@@ -116,6 +132,11 @@ services:
       MINIO_ENDPOINT: minio:9000
       REDIS_URL: redis://redis:6379/0
       DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-dotsound}:${POSTGRES_PASSWORD:-dotsound}@postgres:5432/${POSTGRES_DB:-dotsound}
+      # API process needs far fewer connections than the worker; the
+      # config default (10/20) was sized before the worker got its own
+      # override and doubled Postgres per-connection RSS for nothing.
+      DB_POOL_SIZE: "5"
+      DB_MAX_OVERFLOW: "10"
       ELASTICSEARCH_URL: http://elasticsearch:9200
       INTERNAL_API_ALLOWED_CIDRS: ${INTERNAL_API_ALLOWED_CIDRS:-},172.16.0.0/12
       # Live sibling checkout overrides the PrivateCore baked into the
@@ -149,8 +170,12 @@ services:
       - worker
       - --workers
       - "1"
+      # 50 concurrent async tasks let transcode/import bursts stack
+      # hundreds of MB of buffers + ffmpeg processes on a 4GB box.
+      # 16 keeps the worker responsive while capping peak RAM; heavy
+      # ffmpeg work is additionally capped by TRANSCODE_MAX_CONCURRENT.
       - --max-async-tasks
-      - "${TASKIQ_MAX_ASYNC_TASKS:-50}"
+      - "${TASKIQ_MAX_ASYNC_TASKS:-16}"
       - app.core.tkq:broker
       - app.services.transcoding
       - app.services.video_transcoding
@@ -188,8 +213,11 @@ services:
       MINIO_ENDPOINT: minio:9000
       REDIS_URL: redis://redis:6379/0
       DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-dotsound}:${POSTGRES_PASSWORD:-dotsound}@postgres:5432/${POSTGRES_DB:-dotsound}
-      DB_POOL_SIZE: "15"
-      DB_MAX_OVERFLOW: "25"
+      # Sized with the 16-slot taskiq cap in mind (was 15/25 for 50
+      # slots): 8+12 bounds worker-side Postgres backends, each of
+      # which costs ~5-10MB RSS on the shared 4GB box.
+      DB_POOL_SIZE: "8"
+      DB_MAX_OVERFLOW: "12"
       ELASTICSEARCH_URL: http://elasticsearch:9200
       INTERNAL_API_ALLOWED_CIDRS: ${INTERNAL_API_ALLOWED_CIDRS:-},172.16.0.0/12
       PYTHONPATH: /DotSoundPrivateCore/src

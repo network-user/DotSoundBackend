@@ -1,6 +1,7 @@
 import asyncio
 import contextlib
 import hashlib
+import os
 import sys
 import uuid
 from collections.abc import AsyncGenerator
@@ -488,6 +489,54 @@ async def download_object(file_key: str) -> bytes:
             data: bytes = await stream.read()
     logger.debug("s3_download_complete", file_key=file_key)
     return data
+
+
+async def download_object_to_file(
+    file_key: str,
+    dest_path: str,
+    *,
+    chunk_size: int = _RANGE_STREAM_CHUNK,
+    max_bytes: int | None = None,
+) -> int:
+    """Stream an S3 object to a local file in ``chunk_size`` slices.
+
+    Unlike ``download_object`` this never materialises the body in
+    RAM — use it whenever the payload is audio-sized and the caller
+    needs a file on disk anyway (ffmpeg inputs, transcode sources).
+    Returns bytes written; raises ``ValueError("object_too_large")``
+    once ``max_bytes`` is exceeded. The partial file is removed on
+    any failure.
+    """
+    logger.debug("s3_download_to_file_requested", file_key=file_key)
+    written = 0
+    try:
+        async with get_s3_client() as s3:
+            response = await s3.get_object(
+                Bucket=settings.minio_bucket, Key=file_key
+            )
+            with open(dest_path, "wb") as fh:
+                async with response["Body"] as stream:
+                    while True:
+                        chunk = await stream.read(chunk_size)
+                        if not chunk:
+                            break
+                        fh.write(chunk)
+                        written += len(chunk)
+                        if (
+                            max_bytes is not None
+                            and written > max_bytes
+                        ):
+                            raise ValueError("object_too_large")
+    except BaseException:
+        with contextlib.suppress(OSError):
+            os.unlink(dest_path)
+        raise
+    logger.debug(
+        "s3_download_to_file_complete",
+        file_key=file_key,
+        size_bytes=written,
+    )
+    return written
 
 
 async def upload_object(key: str, data: bytes, content_type: str) -> None:

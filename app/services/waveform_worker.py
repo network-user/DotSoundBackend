@@ -57,19 +57,17 @@ async def _generate_for_track_id(track_id: int) -> bool:
 
     from app.core import s3
 
+    tmp = tempfile.NamedTemporaryFile(suffix=".mp3", delete=False)
+    tmp_path = tmp.name
+    tmp.close()
     try:
-        mp3_data = await s3.download_object(file_key)
+        # Стрим на диск: полный MP3 в RAM тут не нужен, ffmpeg всё
+        # равно читает файл. Хелпер сам удаляет частичный файл при
+        # ошибке скачивания.
+        await s3.download_object_to_file(file_key, tmp_path)
     except Exception:
         logger.warning("waveform_s3_download_failed", track_id=track_id)
         return False
-
-    tmp = tempfile.NamedTemporaryFile(suffix=".mp3", delete=False)
-    try:
-        tmp.write(mp3_data)
-        tmp.flush()
-        tmp_path = tmp.name
-    finally:
-        tmp.close()
 
     try:
         process = await asyncio.create_subprocess_exec(

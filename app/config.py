@@ -161,13 +161,15 @@ class AppSettings(BaseSettings):
     # global cap eats the SC_CLIENT_ID quota fast. The lyrics
     # per-track lock prevents two workers from running the same
     # generate_lyrics_task for the same track_id at the same time.
-    # Bumped 4 -> 10 to match the configured Tor pool size. The
-    # legacy "4 in flight" cap pre-dated the multi-circuit pool and
-    # was the dominant source of ``sc_semaphore_timeout`` warnings
-    # under the artist-catalog-sync sweep load. Increase further
-    # only if you also widen ``tor_pool_size`` and the Tor SOCKS
-    # ports are reachable.
-    soundcloud_global_concurrency: int = 10
+    # History: 4 -> 10 (to match the Tor pool and stop
+    # ``sc_semaphore_timeout`` warnings under artist-catalog-sync
+    # sweeps) -> 6 (RAM diet for the 4GB prod box: every in-flight
+    # slot can hold response buffers, so the cap directly bounds
+    # transient memory). Background sweeps already yield above
+    # ``soundcloud_background_slot_fraction``, so live user traffic
+    # keeps priority. Raise back toward 10 only on a bigger host and
+    # only together with ``tor_pool_size``/reachable SOCKS ports.
+    soundcloud_global_concurrency: int = 6
     soundcloud_slot_acquire_timeout_seconds: float = 30.0
     # Background sweeps (repair, enrichment) skip their SC calls when
     # the slot pool is at or above this fraction of the cap, yielding
@@ -475,7 +477,16 @@ class AppSettings(BaseSettings):
     # Max threads dedicated to blocking yt-dlp playlist scan calls.
     # Prevents exhausting the default ThreadPoolExecutor under load
     # (100 concurrent scans × 1 thread each = thread starvation).
-    scan_executor_max_workers: int = 8
+    # 8 -> 4: each scan thread holds full playlist metadata dicts in
+    # RAM; 4 halves the peak while excess scans just queue.
+    scan_executor_max_workers: int = 4
+
+    # Max ffmpeg transcodes running at once inside the taskiq worker
+    # (audio upload/import pipeline). Each transcode holds a full
+    # decoded pipeline (ffmpeg RSS + output buffers), so this — not
+    # the generic taskiq slot count — is the real ceiling on
+    # transcode memory. Excess transcode tasks wait on the semaphore.
+    transcode_max_concurrent: int = 2
 
     # Hard ceiling on a single ``fetch_external_playlist`` call.
     # yt-dlp can hang for minutes on a slow upstream; without a cap

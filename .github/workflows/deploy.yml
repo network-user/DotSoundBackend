@@ -35,4 +35,8 @@ jobs:
             set -e
             cd /opt/dotsound/DotSoundBackend
             chmod +x ./scripts/deploy.sh
-            OBSERVABILITY=1 ./scripts/deploy.sh full
+            # OBSERVABILITY отключён намеренно: на 3.8GB боксе стек мониторинга
+            # (Grafana/Prometheus/Loki/Tempo/cAdvisor/...) не оставляет памяти
+            # под сборку frontend и валит деплой в OOM. Вернуть OBSERVABILITY=1
+            # только после апгрейда RAM.
+            ./scripts/deploy.sh full
