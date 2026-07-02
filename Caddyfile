@@ -38,6 +38,42 @@
 	}
 }
 
+# === Co-hosted sites behind this same Caddy (temporary shared front) =========
+# Эти сайты - ОТДЕЛЬНЫЕ проекты (портфолио DotBioSite и DotLearn), временно
+# делят этот фронт-Caddy, потому что порты 80/443 хоста уже за ним. Их
+# контейнеры живут в этой же сети dotsound; Caddy только терминирует TLS и
+# проксирует по имени контейнера. К данным/сервисам DotSound отношения нет.
+#
+# ВАЖНО: замени домены-плейсхолдеры ниже на свои реальные поддомены и держи
+# эти строки в git (origin/main) - deploy.sh делает `git reset --hard`, любые
+# только-локальные правки сотрутся при следующем деплое DotSound.
+
+# Портфолио (DotBioSite) - контейнер portfolio, статика.
+portfolio.example.com {
+	encode zstd gzip
+	reverse_proxy portfolio:80 {
+		header_up X-Forwarded-Proto {scheme}
+		header_up X-Real-IP {remote_host}
+	}
+	log {
+		output stdout
+		format console
+	}
+}
+
+# DotLearn - контейнер dotlearn-web (свой nginx сам проксирует /api -> api:3000).
+learn.example.com {
+	encode zstd gzip
+	reverse_proxy dotlearn-web:8080 {
+		header_up X-Forwarded-Proto {scheme}
+		header_up X-Real-IP {remote_host}
+	}
+	log {
+		output stdout
+		format console
+	}
+}
+
 # === Uncomment when MinIO subdomain is ready ===
 #
 # media.your-domain.com {
