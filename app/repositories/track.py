@@ -1,3 +1,4 @@
+from collections.abc import Collection
 from datetime import UTC, datetime
 
 import structlog
@@ -298,6 +299,72 @@ class TrackRepository(BaseRepository[Track]):
         )
         by_id = {t.id: t for t in result.scalars().all()}
         return [by_id[i] for i in track_ids if i in by_id]
+
+    @staticmethod
+    def _swipe_fill_predicate() -> ColumnElement[bool]:
+        return (
+            Track.is_active.is_(True)
+            & Track.is_public.is_(True)
+            & TrackRepository._playback_listing_allowed()
+            & TrackRepository._playable_filter()
+        )
+
+    async def list_random_swipe_candidates(
+        self,
+        *,
+        limit: int,
+        genres: list[str] | None,
+        exclude_ids: Collection[int],
+        pool_size: int,
+    ) -> list[Track]:
+        """Randomized fill for the onboarding swipe candidate pool.
+
+        Samples up to ``limit`` playable tracks out of the most-played
+        ``pool_size`` rows matching the filters, so the ``random()``
+        sort is bounded to that pool instead of ordering the whole
+        catalogue by ``random()``.
+        """
+        if limit <= 0:
+            return []
+        condition = self._swipe_fill_predicate()
+        if genres:
+            condition = condition & Track.genre.in_(genres)
+        if exclude_ids:
+            condition = condition & Track.id.not_in(exclude_ids)
+        pool = (
+            select(Track.id)
+            .where(condition)
+            .order_by(Track.play_count.desc(), Track.id.desc())
+            .limit(pool_size)
+            .subquery()
+        )
+        result = await self._session.execute(
+            select(Track)
+            .join(pool, Track.id == pool.c.id)
+            .order_by(func.random())
+            .limit(limit)
+        )
+        return list(result.scalars().all())
+
+    async def list_top_played_swipe_candidates(
+        self,
+        *,
+        limit: int,
+        exclude_ids: Collection[int] | None = None,
+    ) -> list[Track]:
+        """Most-played playable tracks — the swipe pool fallback fill."""
+        if limit <= 0:
+            return []
+        condition = self._swipe_fill_predicate()
+        if exclude_ids:
+            condition = condition & Track.id.not_in(exclude_ids)
+        result = await self._session.execute(
+            select(Track)
+            .where(condition)
+            .order_by(Track.play_count.desc())
+            .limit(limit)
+        )
+        return list(result.scalars().all())
 
     async def list_internal_pending_hls(self) -> list[Track]:
         """Active internal-source tracks that still lack an HLS manifest."""

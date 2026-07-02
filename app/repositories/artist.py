@@ -5,6 +5,7 @@ from sqlalchemy.sql import Select
 
 from app.models.artist import Artist, TrackArtist
 from app.models.artist_similarity import ArtistSimilarity
+from app.models.track import Track
 from app.repositories.base import BaseRepository
 
 logger = structlog.get_logger(__name__)
@@ -393,6 +394,69 @@ class ArtistRepository(BaseRepository[Artist]):
         )
         result = await self._session.execute(stmt)
         return list(result.scalars().all())
+
+    async def get_top_billed_track_ids_for_artists(
+        self,
+        artist_ids: list[int],
+        *,
+        per_artist_limit: int,
+    ) -> dict[int, list[int]]:
+        """Batched form of :meth:`get_artist_track_ids` for many artists.
+
+        For every artist in ``artist_ids`` returns the ids of tracks
+        where that artist shares top billing (minimum credit position),
+        capped at ``per_artist_limit`` per artist and ordered
+        most-played first. Collapses N per-artist round-trips into a
+        single window-function query; ids are grouped per artist so
+        callers keep their own artist ordering.
+        """
+        if not artist_ids or per_artist_limit <= 0:
+            return {}
+        relevant_tracks = select(TrackArtist.track_id).where(
+            TrackArtist.artist_id.in_(artist_ids)
+        )
+        min_pos = (
+            select(
+                TrackArtist.track_id.label("tid"),
+                func.min(TrackArtist.position).label("mp"),
+            )
+            .where(TrackArtist.track_id.in_(relevant_tracks))
+            .group_by(TrackArtist.track_id)
+            .subquery()
+        )
+        ranked = (
+            select(
+                TrackArtist.artist_id.label("artist_id"),
+                TrackArtist.track_id.label("track_id"),
+                func.row_number()
+                .over(
+                    partition_by=TrackArtist.artist_id,
+                    order_by=(
+                        Track.play_count.desc(),
+                        Track.id.desc(),
+                    ),
+                )
+                .label("rn"),
+            )
+            .join(
+                min_pos,
+                (TrackArtist.track_id == min_pos.c.tid)
+                & (TrackArtist.position == min_pos.c.mp),
+            )
+            .join(Track, Track.id == TrackArtist.track_id)
+            .where(TrackArtist.artist_id.in_(artist_ids))
+            .subquery()
+        )
+        stmt = (
+            select(ranked.c.artist_id, ranked.c.track_id)
+            .where(ranked.c.rn <= per_artist_limit)
+            .order_by(ranked.c.artist_id, ranked.c.rn)
+        )
+        result = await self._session.execute(stmt)
+        out: dict[int, list[int]] = {}
+        for artist_id, track_id in result.all():
+            out.setdefault(int(artist_id), []).append(int(track_id))
+        return out
 
     async def update_soundcloud_identity(
         self,

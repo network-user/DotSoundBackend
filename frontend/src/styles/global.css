@@ -6326,7 +6326,7 @@ body.ds-perf-lite .eq-spectrum__canvas canvas {
 
 .onboarding-artists-grid {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
+  grid-template-columns: repeat(auto-fill, minmax(96px, 1fr));
   gap: 12px;
 }
 .onb-v2-artists-empty {
@@ -6369,6 +6369,7 @@ body.ds-perf-lite .eq-spectrum__canvas canvas {
   border: 1px solid var(--border);
   background: transparent;
   transition: all 0.2s;
+  min-width: 0;
 }
 
 .onboarding-artist-card__toggle {

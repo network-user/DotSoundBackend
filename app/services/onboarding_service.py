@@ -61,6 +61,9 @@ _ACTIVATION_USERS_PREFIX = "activation:users:"
 _ACTIVATION_RETENTION_SECONDS = 35 * 24 * 60 * 60
 _DICEBEAR_IDENTICON = "https://api.dicebear.com/9.x/identicon/svg?seed={seed}"
 _TASTE_CANDIDATE_MULTIPLIER = 4
+# Cap for the randomized swipe fill: sample from the top-N most-played
+# matches instead of ordering the whole catalogue by random().
+_TASTE_RANDOM_POOL_SIZE = 500
 
 
 class OnboardingService:
@@ -305,24 +308,34 @@ class OnboardingService:
         seen: set[int] = set(excluded)
 
         if artist_ids:
+            selected_artists = artist_ids[:24]
             per_artist = max(
                 2,
                 candidate_count // max(len(artist_ids), 1),
             )
-            for artist_id in artist_ids[:24]:
-                track_ids = await self._artist_repo.get_artist_track_ids(
-                    artist_id,
-                    limit=per_artist * 3,
+            tracks_by_artist = (
+                await self._artist_repo.get_top_billed_track_ids_for_artists(
+                    selected_artists,
+                    per_artist_limit=per_artist * 3,
                 )
-                if not track_ids:
-                    continue
-                tracks = (
-                    await self._track_repo.list_active_by_ids_preserve_order(
-                        track_ids,
-                    )
+            )
+            fetch_ids: list[int] = []
+            fetch_seen: set[int] = set()
+            for artist_id in selected_artists:
+                for tid in tracks_by_artist.get(artist_id, []):
+                    if tid not in fetch_seen:
+                        fetch_seen.add(tid)
+                        fetch_ids.append(tid)
+            fetched = (
+                await self._track_repo.list_active_by_ids_preserve_order(
+                    fetch_ids,
                 )
-                for track in tracks:
-                    if track.id in seen:
+            )
+            fetched_by_id = {t.id: t for t in fetched}
+            for artist_id in selected_artists:
+                for tid in tracks_by_artist.get(artist_id, []):
+                    track = fetched_by_id.get(tid)
+                    if track is None or track.id in seen:
                         continue
                     if not self._is_swipe_playable_track(track):
                         continue
@@ -335,38 +348,23 @@ class OnboardingService:
 
         remaining = candidate_count - len(candidates)
         if remaining > 0:
-            q = select(Track).where(
-                Track.is_active.is_(True),
-                Track.is_public.is_(True),
-                TrackRepository._playback_listing_allowed(),
-                TrackRepository._playable_filter(),
+            random_fill = await self._track_repo.list_random_swipe_candidates(
+                limit=remaining,
+                genres=genres,
+                exclude_ids=seen,
+                pool_size=_TASTE_RANDOM_POOL_SIZE,
             )
-            if genres:
-                q = q.where(Track.genre.in_(genres))
-            if seen:
-                q = q.where(Track.id.not_in(seen))
-            q = q.order_by(func.random()).limit(remaining)
-
-            result = await self._session.execute(q)
-            for track in result.scalars().all():
+            for track in random_fill:
                 if not self._is_swipe_playable_track(track):
                     continue
                 candidates.append(track)
                 seen.add(track.id)
 
         if len(candidates) < candidate_count:
-            fallback = await self._session.execute(
-                select(Track)
-                .where(
-                    Track.is_active.is_(True),
-                    Track.is_public.is_(True),
-                    TrackRepository._playback_listing_allowed(),
-                    TrackRepository._playable_filter(),
-                )
-                .order_by(Track.play_count.desc())
-                .limit(candidate_count)
+            fallback = await self._track_repo.list_top_played_swipe_candidates(
+                limit=candidate_count,
             )
-            for track in fallback.scalars().all():
+            for track in fallback:
                 if track.id in seen:
                     continue
                 if not self._is_swipe_playable_track(track):

@@ -46,7 +46,7 @@ export function TelegramAuth({
   const startOnCode = params.get('auth') === 'code'
 
   const [step, setStep] = useState<Step>(
-    initialStep ?? (startOnCode ? 'code' : 'welcome'),
+    startOnCode ? 'code' : (initialStep ?? 'welcome'),
   )
   const [botUsername, setBotUsername] = useState(
     botUsernameProp ?? '',
