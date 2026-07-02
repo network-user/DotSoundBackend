@@ -44,12 +44,14 @@
 # контейнеры живут в этой же сети dotsound; Caddy только терминирует TLS и
 # проксирует по имени контейнера. К данным/сервисам DotSound отношения нет.
 #
-# ВАЖНО: замени домены-плейсхолдеры ниже на свои реальные поддомены и держи
-# эти строки в git (origin/main) - deploy.sh делает `git reset --hard`, любые
-# только-локальные правки сотрутся при следующем деплое DotSound.
+# Домены задаются переменными PORTFOLIO_DOMAIN / DOTLEARN_DOMAIN в .env
+# (Caddy читает их через env_file в docker-compose.prod.yml). Плюс: .env НЕ в
+# git, поэтому реальные домены не раскрываются в репозитории и переживают
+# `git reset --hard` в deploy.sh. Если переменная пуста, блок падает на
+# безопасный дефолт *.localhost (внутренний сайт без ACME, DotSound не задет).
 
 # Портфолио (DotBioSite) - контейнер portfolio, статика.
-portfolio.example.com {
+{$PORTFOLIO_DOMAIN:portfolio.localhost} {
 	encode zstd gzip
 	reverse_proxy portfolio:80 {
 		header_up X-Forwarded-Proto {scheme}
@@ -62,7 +64,7 @@ portfolio.example.com {
 }
 
 # DotLearn - контейнер dotlearn-web (свой nginx сам проксирует /api -> api:3000).
-learn.example.com {
+{$DOTLEARN_DOMAIN:learn.localhost} {
 	encode zstd gzip
 	reverse_proxy dotlearn-web:8080 {
 		header_up X-Forwarded-Proto {scheme}

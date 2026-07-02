@@ -37,19 +37,25 @@ RUN curl -sSL https://install.python-poetry.org | python3 -
 
 WORKDIR /app
 
-# Install backend dependencies first — before PrivateCore is copied — so this
-# expensive layer stays cached whenever only PrivateCore changes (it's pulled
-# fresh on most deploys). The lockfile is committed and kept in sync with
-# pyproject, so install straight from it rather than regenerating on build.
-COPY DotSoundBackend/pyproject.toml DotSoundBackend/poetry.lock ./
-RUN poetry install --no-interaction --no-ansi --no-root
-
+# PrivateCore is a path-dependency declared in pyproject.toml
+# (dotsound-private-core = { path = "../DotSoundPrivateCore", ... }), so it must
+# exist BEFORE `poetry install` can resolve it. Copy it first, then install.
+# Trade-off: the dependency layer no longer stays cached across PrivateCore-only
+# changes (poetry re-runs when PrivateCore is pulled fresh). The alternative -
+# keeping PrivateCore out of poetry's graph and installing it only via pip below
+# - would restore that caching but needs the path-dep removed from pyproject and
+# a regenerated lock.
 COPY DotSoundPrivateCore /DotSoundPrivateCore
 
-# Defense-in-depth: the private core's local secret files must never
-# persist in an image layer. Dockerfile.dockerignore already excludes
-# them from the context under BuildKit; this also covers legacy builds.
+# Defense-in-depth: the private core's local secret files must never persist in
+# an image layer. Dockerfile.dockerignore already excludes them under BuildKit;
+# this also covers legacy builds. Done before install so they never enter it.
 RUN rm -f /DotSoundPrivateCore/.env /DotSoundPrivateCore/.env.*
+
+# The lockfile is committed and kept in sync with pyproject, so install straight
+# from it rather than regenerating on build.
+COPY DotSoundBackend/pyproject.toml DotSoundBackend/poetry.lock ./
+RUN poetry install --no-interaction --no-ansi --no-root
 
 # PrivateCore runtime extras are installed separately so they never appear
 # in the backend's declarative dependency graph.
