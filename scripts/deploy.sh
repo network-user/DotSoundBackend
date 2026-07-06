@@ -67,10 +67,27 @@ build_serial() {
   done
 }
 
+# Frontend image is built by CI and pushed to GHCR (see
+# .github/workflows/deploy.yml) so this box never runs the RAM-heavy
+# vite build that used to OOM here. Pull it; if the pull fails (image
+# not published/public yet, or GHCR_OWNER wrong), fall back to an
+# on-server build so a deploy never hard-breaks on the registry.
+deploy_frontend() {
+  log "Pulling frontend image from registry"
+  if "${COMPOSE[@]}" pull frontend; then
+    log "Frontend image pulled"
+  else
+    log "Frontend pull failed - building on server (fallback)"
+    "${COMPOSE[@]}" build frontend
+  fi
+}
+
 # Buildable services active in the prod stack (postgres/redis/minio/
 # elasticsearch/clamav/caddy are pulled images, not built). backend, worker
 # and sc_id_refresher share one image, so the 2nd/3rd are cache hits.
-BUILD_SERVICES=(backend worker frontend bot sc_id_refresher backup)
+# frontend is intentionally absent: its image is pulled from GHCR (see
+# deploy_frontend), not built on this box.
+BUILD_SERVICES=(backend worker bot sc_id_refresher backup)
 
 pull_repo() {
   local name="$1"
@@ -113,6 +130,7 @@ case "${MODE}" in
 
     log "Building images"
     build_serial "${BUILD_SERVICES[@]}"
+    deploy_frontend
 
     log "Bringing up infrastructure (postgres/redis/minio/elasticsearch)"
     "${COMPOSE[@]}" up -d postgres redis minio elasticsearch
@@ -133,6 +151,7 @@ case "${MODE}" in
   skip-pull)
     log "Building images"
     build_serial "${BUILD_SERVICES[@]}"
+    deploy_frontend
     "${COMPOSE[@]}" up -d postgres redis minio elasticsearch
     wait_for_postgres
     run_migrations
@@ -164,7 +183,7 @@ case "${MODE}" in
 
   only-frontend)
     pull_repo DotSoundBackend
-    build_serial frontend
+    deploy_frontend
     "${COMPOSE[@]}" up -d frontend caddy
     ;;
 

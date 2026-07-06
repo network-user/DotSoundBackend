@@ -23,14 +23,10 @@ x-dns: &dns
 # inspect OOMKilled=true / restarts), investigate before raising.
 services:
   postgres:
-    environment:
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set a strong POSTGRES_PASSWORD in prod .env}
     ports: !reset []
     mem_limit: 512m
 
   minio:
-    environment:
-      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:?set a strong MINIO_ROOT_PASSWORD in prod .env}
     ports: !reset []
     mem_limit: 384m
 
@@ -76,6 +72,11 @@ services:
     mem_limit: 256m
 
   frontend:
+    # Image built and pushed by CI (.github/workflows/deploy.yml); the
+    # server pulls it instead of building the RAM-heavy vite bundle.
+    # Set GHCR_OWNER in the server .env if the GHCR owner differs from
+    # the default below.
+    image: ghcr.io/${GHCR_OWNER:-network-user}/dotsound-frontend:latest
     ports: !reset []
     mem_limit: 64m
 
