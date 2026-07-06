@@ -44,6 +44,12 @@ export function BeatPulse({
 
     const tick = (t: number) => {
       if (stopped) return
+      // Pause while the tab/webview is backgrounded; visibilitychange
+      // resumes. Keeps this loop off the CPU on locked/hidden screens.
+      if (typeof document !== 'undefined' && document.hidden) {
+        rafRef.current = null
+        return
+      }
       if (t - lastPaintRef.current < targetFrameMs) {
         rafRef.current = requestAnimationFrame(tick)
         return
@@ -62,9 +68,23 @@ export function BeatPulse({
       }
       rafRef.current = requestAnimationFrame(tick)
     }
+    const onVis = () => {
+      if (
+        !stopped &&
+        !document.hidden &&
+        rafRef.current === null
+      ) {
+        rafRef.current = requestAnimationFrame(tick)
+      }
+    }
+    document.addEventListener('visibilitychange', onVis)
     rafRef.current = requestAnimationFrame(tick)
     return () => {
       stopped = true
+      document.removeEventListener(
+        'visibilitychange',
+        onVis,
+      )
       if (rafRef.current !== null) {
         cancelAnimationFrame(rafRef.current)
         rafRef.current = null

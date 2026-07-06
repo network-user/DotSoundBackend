@@ -32,17 +32,32 @@ function deepMerge(
 
 function localizeRuBrand(v: unknown): unknown {
   if (typeof v === 'string') {
-    return v.split('.sound').join(BRAND_RU)
+    // Only reallocate strings that actually carry the brand token;
+    // the vast majority don't, so return them unchanged.
+    return v.includes('.sound')
+      ? v.split('.sound').join(BRAND_RU)
+      : v
   }
   if (Array.isArray(v)) {
-    return v.map(localizeRuBrand)
+    let changed = false
+    const out = v.map((item) => {
+      const next = localizeRuBrand(item)
+      if (next !== item) changed = true
+      return next
+    })
+    return changed ? out : v
   }
   if (isPlainObject(v)) {
+    let changed = false
     const out: JsonObj = {}
     for (const k of Object.keys(v)) {
-      out[k] = localizeRuBrand(v[k])
+      const next = localizeRuBrand(v[k])
+      if (next !== v[k]) changed = true
+      out[k] = next
     }
-    return out
+    // Preserve the original reference when nothing under it changed,
+    // avoiding a full re-allocation of the ~200KB locale tree per load.
+    return changed ? out : v
   }
   return v
 }

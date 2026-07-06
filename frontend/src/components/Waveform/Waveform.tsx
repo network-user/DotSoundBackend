@@ -141,11 +141,14 @@ export function Waveform({
       ? 'rgba(255,255,255,0.06)'
       : 'rgba(255,255,255,0.09)'
 
-    const render = (now: number) => {
-      rafRef.current = requestAnimationFrame(render)
-      if (now - lastTickRef.current < interval) return
-      lastTickRef.current = now
+    let onScreen = true
+    let pageVisible =
+      typeof document === 'undefined' || !document.hidden
+    let running = false
+    const shouldAnimate = () =>
+      isPlaying && onScreen && pageVisible
 
+    const drawFrame = (now: number) => {
       const w = canvas.width
       const h = canvas.height
       if (w === 0 || h === 0) return
@@ -263,16 +266,14 @@ export function Waveform({
         0.75,
         (baseTopWidth + swell * 1.1) * dpr,
       )
-      const glowBlur =
-        ((isRadio ? 14 : 10) + swell * 10) * dpr
-
-      // Glow underlay
+      // Soft glow underlay — a wider translucent stroke instead of
+      // ctx.shadowBlur. Canvas shadowBlur is one of the most expensive
+      // 2D ops and ran here every frame; the wider stroke reads the same
+      // at a fraction of the GPU cost.
       if (!perfLite) {
         ctx.save()
-        ctx.shadowColor = glowColor
-        ctx.shadowBlur = glowBlur
-        ctx.lineWidth = glowLw
-        ctx.strokeStyle = lineColor
+        ctx.lineWidth = glowLw + (isRadio ? 3 : 2) * dpr
+        ctx.strokeStyle = glowColor
         ctx.lineCap = 'round'
         ctx.lineJoin = 'round'
         drawPath()
@@ -291,20 +292,69 @@ export function Waveform({
       ctx.restore()
     }
 
-    resize()
-    const ro = new ResizeObserver(() => {
-      resize()
-    })
-    ro.observe(canvas)
-
-    rafRef.current = requestAnimationFrame(render)
-
-    return () => {
-      ro.disconnect()
+    const loop = (now: number) => {
+      if (!shouldAnimate()) {
+        running = false
+        rafRef.current = null
+        drawFrame(now)
+        return
+      }
+      rafRef.current = requestAnimationFrame(loop)
+      if (now - lastTickRef.current < interval) return
+      lastTickRef.current = now
+      drawFrame(now)
+    }
+    const start = () => {
+      if (running) return
+      running = true
+      lastTickRef.current = 0
+      rafRef.current = requestAnimationFrame(loop)
+    }
+    const stop = () => {
+      running = false
       if (rafRef.current !== null) {
         cancelAnimationFrame(rafRef.current)
         rafRef.current = null
       }
+    }
+    const sync = () => {
+      if (shouldAnimate()) start()
+      else {
+        stop()
+        drawFrame(0)
+      }
+    }
+
+    resize()
+    const ro = new ResizeObserver(() => {
+      resize()
+      if (!running) drawFrame(0)
+    })
+    ro.observe(canvas)
+
+    const io = new IntersectionObserver(
+      (entries) => {
+        onScreen = entries[0]?.isIntersecting ?? true
+        sync()
+      },
+      { threshold: 0 },
+    )
+    io.observe(canvas)
+
+    const onVis = () => {
+      pageVisible = !document.hidden
+      if (shouldAnimate()) start()
+      else stop()
+    }
+    document.addEventListener('visibilitychange', onVis)
+
+    sync()
+
+    return () => {
+      ro.disconnect()
+      io.disconnect()
+      document.removeEventListener('visibilitychange', onVis)
+      stop()
     }
   }, [getAnalyser, isPlaying, bars, overlay, variant, color])
 

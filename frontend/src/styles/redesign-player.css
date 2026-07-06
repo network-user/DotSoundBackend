@@ -1133,7 +1133,11 @@
   background-image: var(--mp-cover-image);
   background-position: center;
   background-size: cover;
-  filter: blur(22px) saturate(1.05);
+  /* blur radius reduced 22->12: at opacity 0.20 the difference is
+     imperceptible, and blur cost grows ~quadratically with radius.
+     This is the one live filter:blur layer the mobile kill-switch
+     (backdrop-filter only) does not cover. */
+  filter: blur(12px) saturate(1.05);
   opacity: 0.20;
   transform: scale(1.04);
 }
@@ -1602,10 +1606,12 @@
 }
 
 .mp-btn--playing {
+  /* Static glow kept; the animated box-shadow pulse (mpPlayGlow) was
+     removed — animating box-shadow repaints every frame on this
+     always-on player button. */
   box-shadow:
     0 4px 24px rgba(255, 255, 255, 0.38),
     inset 0 1px 0 rgba(255, 255, 255, 0.44);
-  animation: mpPlayGlow 3s var(--ease-soft) infinite;
 }
 
 .mp-btn--loading {
@@ -1901,7 +1907,7 @@ body.ds-perf-lite .mp-btn--playing {
 
 .mp-shell::before {
   opacity: 0.26;
-  filter: blur(24px) saturate(1.1);
+  filter: blur(14px) saturate(1.1);
 }
 
 .mp-shell::after {

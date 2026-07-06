@@ -237,7 +237,10 @@
 .ambient-layer {
   position: absolute;
   inset: -10%;
-  filter: blur(40px);
+  /* blur 40->22: on a full-bleed low-detail backdrop the visual
+     difference is negligible, but blur cost grows ~quadratically
+     with radius (~3x cheaper here). */
+  filter: blur(22px);
   opacity: 0.95;
 }
 

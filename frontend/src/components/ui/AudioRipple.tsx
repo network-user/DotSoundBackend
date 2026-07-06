@@ -81,12 +81,24 @@ export function AudioRipple({
 
     const tick = (now: number) => {
       if (stopped) return
+      // Pause while the tab/webview is backgrounded; visibilitychange
+      // resumes the loop.
+      if (typeof document !== 'undefined' && document.hidden) {
+        rafRef.current = null
+        return
+      }
 
       const analyser = getAnalyser?.() ?? null
       const canvas = canvasRef.current
       let phase: number
 
       if (analyser) {
+        // Cap the analyser path to ~30fps (previously uncapped 60fps).
+        if (now - fpsGateRef.current < 33) {
+          rafRef.current = requestAnimationFrame(tick)
+          return
+        }
+        fpsGateRef.current = now
         analyser.getByteFrequencyData(freqData)
         let sum = 0
         for (let i = 0; i < BASS_BINS; i++) sum += freqData[i]
@@ -187,9 +199,20 @@ export function AudioRipple({
       rafRef.current = requestAnimationFrame(tick)
     }
 
+    const onVis = () => {
+      if (
+        !stopped &&
+        !document.hidden &&
+        rafRef.current === null
+      ) {
+        rafRef.current = requestAnimationFrame(tick)
+      }
+    }
+    document.addEventListener('visibilitychange', onVis)
     rafRef.current = requestAnimationFrame(tick)
     return () => {
       stopped = true
+      document.removeEventListener('visibilitychange', onVis)
       if (rafRef.current !== null) {
         cancelAnimationFrame(rafRef.current)
         rafRef.current = null

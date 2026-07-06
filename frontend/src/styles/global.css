@@ -200,7 +200,6 @@ body.monochrome #app {
   min-width: 0;
   max-width: calc(100% - 8px);
   overflow: hidden;
-  will-change: transform;
   -webkit-tap-highlight-color: transparent;
 }
 .track-card-main-row {
@@ -266,12 +265,10 @@ body.monochrome #app {
 @keyframes coverReveal {
   from {
     opacity: 0;
-    filter: blur(10px) saturate(120%);
     transform: scale(1.04);
   }
   to {
     opacity: 1;
-    filter: blur(0) saturate(100%);
     transform: scale(1);
   }
 }
@@ -1490,10 +1487,11 @@ body.ds-perf-lite .playing-indicator span {
     inset 0 1px 0 rgba(255, 255, 255, 0.44);
 }
 .play-btn.play-btn--playing {
+  /* Static glow only; animated box-shadow pulse removed (per-frame
+     repaint on an always-on button). */
   box-shadow:
     0 4px 24px rgba(255, 255, 255, 0.38),
     inset 0 1px 0 rgba(255, 255, 255, 0.44);
-  animation: pbPlayGlow 3s var(--ease-soft) infinite;
 }
 body.ds-perf-lite .play-btn.play-btn--playing {
   animation: none;

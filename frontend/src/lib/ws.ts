@@ -46,7 +46,9 @@ export function connectWS(token: string) {
       ) as Record<string, unknown>
       const event = data.event as string
       if (event) {
-        console.debug('[WS] <<', event, data)
+        if (import.meta.env.DEV) {
+          console.debug('[WS] <<', event, data)
+        }
         const set = handlers.get(event)
         if (set)
           set.forEach((fn) => fn(data))
