@@ -9,6 +9,13 @@
 
 <img src="docs/cover.svg" width="720" alt="DotSound Backend" />
 
+<!-- audit:start -->
+<p>
+  <a href="docs/audit/latest.md"><img src="https://img.shields.io/badge/security_audit-passed-3fb950?style=flat" alt="security audit passed - full, leaks + code" /></a>
+  <a href="docs/audit/2026-07-06-iron-gate.md"><img src="https://img.shields.io/badge/date-2026--07--06-555?style=flat" alt="audit date" /></a>
+</p>
+<!-- audit:end -->
+
 Бэкенд музыкальной платформы DotSound: загрузка и стриминг UGC-аудио, импорт внешних треков, рекомендации, плейлисты, тексты песен и админ-панель. Архитектура Telegram-style - открытый клиент и транспорт, закрытое ядро: этот репозиторий публикует API, хранение и оркестрацию, а бизнес-правила и security-константы живут в закрытом ядре и подключаются как opaque-зависимость. Раздаёт React Mini App, метаданные в PostgreSQL, медиа - в MinIO.
 
 ## Что внутри

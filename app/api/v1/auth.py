@@ -257,7 +257,9 @@ async def generate_auth_code(
             detail="Internal secret not configured",
         )
     secret = request.headers.get(INTERNAL_SECRET_HEADER, "")
-    if secret != settings.bot_internal_secret:
+    if not hmac.compare_digest(
+        secret.encode(), settings.bot_internal_secret.encode()
+    ):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Forbidden",

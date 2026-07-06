@@ -1007,6 +1007,8 @@ export const adminApi = {
       method: 'POST',
       body: { artist_ids: artistIds, bypass_cache: true },
     }),
+  deleteArtist: (artistId: number) =>
+    adminFetch<void>(`/artists/${artistId}`, { method: 'DELETE' }),
   getQueueDepth: () =>
     adminFetch<{ queue_length: number | null; available: boolean }>(
       '/system/queue-depth',

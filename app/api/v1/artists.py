@@ -18,6 +18,7 @@ from app.dependencies import (
     get_current_user,
     get_db,
     require_admin,
+    require_admin_session,
 )
 from app.models.user import User
 from app.repositories.artist_follow import (
@@ -401,7 +402,7 @@ async def delete_artist(
     request: Request,
     artist_id: int,
     db: AsyncSession = Depends(get_db),
-    _admin: User = Depends(require_admin),
+    _admin: User = Depends(require_admin_session),
 ) -> None:
     from sqlalchemy import delete, select
 
@@ -531,7 +532,7 @@ async def artist_supplemental_batch_prompt(
     request: Request,
     data: ArtistSupplementalBatchPromptRequest,
     db: AsyncSession = Depends(get_db),
-    _admin: User = Depends(require_admin),
+    _admin: User = Depends(require_admin_session),
 ) -> ArtistSupplementalBatchPromptResponse:
     svc = AdminArtistSupplementalService(db)
     prompt, count = await svc.batch_prompt(data.artist_ids)
@@ -551,7 +552,7 @@ async def artist_supplemental_batch_import(
     request: Request,
     data: ArtistSupplementalBatchImportRequest,
     db: AsyncSession = Depends(get_db),
-    _admin: User = Depends(require_admin),
+    _admin: User = Depends(require_admin_session),
 ) -> ArtistSupplementalBatchImportResponse:
     svc = AdminArtistSupplementalService(db)
     imported, errors = await svc.batch_import(data.raw_response)

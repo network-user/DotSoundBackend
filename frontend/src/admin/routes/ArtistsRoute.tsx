@@ -101,16 +101,7 @@ async function enrichArtist(
 }
 
 async function deleteArtist(artistId: number): Promise<void> {
-  const token = api.getToken()
-  const res = await fetch(`/api/v1/artists/${artistId}`, {
-    method: 'DELETE',
-    headers: token
-      ? { Authorization: `Bearer ${token}` }
-      : undefined,
-  })
-  if (!res.ok && res.status !== 204) {
-    throw new Error(`HTTP ${res.status}`)
-  }
+  await adminApi.deleteArtist(artistId)
 }
 
 function fmtArtistUpdated(row: ArtistRow): string {

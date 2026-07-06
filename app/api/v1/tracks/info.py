@@ -68,6 +68,9 @@ async def refresh_track_info(
     access = await info_repo.get_access_info(track_id)
     if access is None:
         raise HTTPException(status_code=404, detail="Track not found")
+    is_public, owner_id = access
+    if not is_public and user.id != owner_id:
+        raise HTTPException(status_code=403, detail="Access denied")
 
     svc = TrackInfoService(db)
     info = await svc.get_or_trigger(track_id, force=True)
