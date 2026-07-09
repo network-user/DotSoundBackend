@@ -1165,7 +1165,7 @@
   position: absolute;
   inset: 0;
   border-radius: inherit;
-  will-change: transform, opacity, filter;
+  will-change: transform, opacity;
 }
 
 .rh-radio-disc-slide .kenburns-cover,

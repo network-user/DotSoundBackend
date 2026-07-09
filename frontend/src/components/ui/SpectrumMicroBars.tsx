@@ -40,12 +40,12 @@ export function SpectrumMicroBars({
   ])
 
   useEffect(() => {
-    const setHeights = (a: number, b: number, c: number) => {
+    const setScales = (a: number, b: number, c: number) => {
       const xs = [a, b, c]
       for (let i = 0; i < 3; i++) {
         const el = refs[i].current
         if (el)
-          el.style.height = `${Math.round(xs[i]! * 100)}%`
+          el.style.transform = `scaleY(${Math.round(xs[i]! * 100) / 100})`
       }
     }
 
@@ -55,7 +55,7 @@ export function SpectrumMicroBars({
         IDLE_PCT / 100,
         IDLE_PCT / 100,
       ]
-      setHeights(
+      setScales(
         IDLE_PCT / 100,
         IDLE_PCT / 100,
         IDLE_PCT / 100,
@@ -113,7 +113,7 @@ export function SpectrumMicroBars({
         const alpha = t > prev ? attack : decay
         sm[i] = prev + (t - prev) * alpha
       }
-      setHeights(sm[0]!, sm[1]!, sm[2]!)
+      setScales(sm[0]!, sm[1]!, sm[2]!)
       raf = requestAnimationFrame(tick)
     }
     raf = requestAnimationFrame(tick)

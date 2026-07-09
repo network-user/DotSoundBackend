@@ -9303,7 +9303,10 @@ html.ds-low-glass .tcs-sheet {
 }
 .player-radio-pill__waves--spectrum > span {
   animation: none;
-  transition: height 48ms linear;
+  height: 100%;
+  transform: scaleY(0.3);
+  transform-origin: bottom;
+  transition: transform 48ms linear;
   align-self: flex-end;
 }
 .player-radio-pill__label {
@@ -11868,11 +11871,9 @@ html.ds-low-glass .tcs-sheet {
   border-radius: 3px 3px 1px 1px;
   transition: height 0.35s cubic-bezier(0.22, 1, 0.36, 1),
     opacity 0.18s ease,
-    box-shadow 0.22s ease,
-    filter 0.22s ease,
     transform 0.22s ease;
   transform-origin: bottom center;
-  will-change: height, transform;
+  will-change: transform;
 }
 
 .my-top-hours__bar-wrap.is-dimmed .my-top-hours__bar {

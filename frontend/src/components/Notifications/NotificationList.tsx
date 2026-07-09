@@ -154,8 +154,13 @@ export function NotificationList({
 
   useEffect(() => {
     if (menuOpenId == null) return
+    let rafId = 0
     const onReposition = () => {
-      placeMenu(menuOpenId)
+      if (rafId) return
+      rafId = requestAnimationFrame(() => {
+        rafId = 0
+        placeMenu(menuOpenId)
+      })
     }
     window.addEventListener('resize', onReposition)
     window.addEventListener('scroll', onReposition, true)
@@ -171,6 +176,7 @@ export function NotificationList({
         'scroll',
         onReposition,
       )
+      if (rafId) cancelAnimationFrame(rafId)
     }
   }, [menuOpenId, placeMenu])
 
