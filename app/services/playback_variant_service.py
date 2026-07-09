@@ -74,6 +74,54 @@ class PlaybackVariantService:
 
         return sorted(ids)
 
+    async def resolve_variant_track_ids_batch(
+        self,
+        tracks: list[Track],
+    ) -> dict[int, list[int]]:
+        """Resolve variant ids for many tracks with sequential DB I/O.
+
+        Semantics are 1:1 with :meth:`resolve_variant_track_ids` for
+        every track, but composition-group members are fetched in a
+        single query and no statement runs concurrently. Callers can
+        then fan out CPU-only work over the shared session without
+        tripping SQLAlchemy's one-statement-per-session rule.
+        """
+        if not tracks:
+            return {}
+
+        group_ids = {
+            t.composition_group_id for t in tracks if t.composition_group_id
+        }
+        members_by_group: dict[str, set[int]] = {}
+        if group_ids:
+            result = await self._session.execute(
+                select(Track.id, Track.composition_group_id).where(
+                    Track.composition_group_id.in_(group_ids),
+                    Track.is_active.is_(True),
+                    Track.is_public.is_(True),
+                )
+            )
+            for row in result.all():
+                gid = row[1]
+                if gid is None:
+                    continue
+                members_by_group.setdefault(gid, set()).add(row[0])
+
+        resolved: dict[int, list[int]] = {}
+        for track in tracks:
+            if track.id in resolved:
+                continue
+            group_id = track.composition_group_id
+            if group_id:
+                members = set(members_by_group.get(group_id, set()))
+                members.add(track.id)
+                resolved[track.id] = sorted(members)
+            else:
+                resolved[track.id] = await self.resolve_variant_track_ids(
+                    track
+                )
+        return resolved
+
     def pick_primary_track(self, tracks: list[Track]) -> Track:
         if len(tracks) == 1:
             return tracks[0]

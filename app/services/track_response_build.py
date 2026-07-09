@@ -91,18 +91,26 @@ async def build_track_response(
     include_has_lyrics: bool = True,
     preloaded_artists: list[tuple] | None = None,
     preloaded_album_covers: dict[int, str | None] | None = None,
+    preloaded_variant_ids: list[int] | None = None,
+    preloaded_variant_rows: list[Track] | None = None,
     viewer_id: int | None = None,
 ) -> TrackResponse:
     base = TrackResponse.model_validate(track)
     pvs = PlaybackVariantService(session)
-    ids = await pvs.resolve_variant_track_ids(track)
-    variant_rows: list[Track] | None = None
-    if len(ids) > 1:
-        variant_rows = await TrackRepository(
-            session
-        ).get_by_ids_preserve_order(
-            ids,
-        )
+    ids: list[int]
+    variant_rows: list[Track] | None
+    if preloaded_variant_ids is not None:
+        ids = preloaded_variant_ids
+        variant_rows = preloaded_variant_rows if len(ids) > 1 else None
+    else:
+        ids = await pvs.resolve_variant_track_ids(track)
+        variant_rows = None
+        if len(ids) > 1:
+            variant_rows = await TrackRepository(
+                session
+            ).get_by_ids_preserve_order(
+                ids,
+            )
     active: list[Track] = []
     if variant_rows is not None:
         active = [r for r in variant_rows if r.is_active and r.is_public]
@@ -201,6 +209,39 @@ async def build_track_responses(
         albums = await AlbumRepository(session).get_by_ids(album_ids)
         album_covers_by_id = {a.id: a.cover_key for a in albums}
 
+    # Resolve playback variants sequentially BEFORE the gather: the
+    # shared AsyncSession cannot be used concurrently, so all DB I/O
+    # (variant id resolution + variant-row fetch) must happen here and
+    # the gather below stays CPU-only.
+    variant_ids_by_track = await PlaybackVariantService(
+        session
+    ).resolve_variant_track_ids_batch(tracks)
+    needed_variant_ids: list[int] = []
+    seen_variant_ids: set[int] = set()
+    for t in tracks:
+        vids = variant_ids_by_track.get(t.id, [t.id])
+        if len(vids) <= 1:
+            continue
+        for vid in vids:
+            if vid not in seen_variant_ids:
+                seen_variant_ids.add(vid)
+                needed_variant_ids.append(vid)
+    variant_rows_by_id: dict[int, Track] = {}
+    if needed_variant_ids:
+        fetched_variants = await TrackRepository(
+            session
+        ).get_by_ids_preserve_order(needed_variant_ids)
+        variant_rows_by_id = {r.id: r for r in fetched_variants}
+    variant_rows_by_track: dict[int, list[Track] | None] = {}
+    for t in tracks:
+        vids = variant_ids_by_track.get(t.id, [t.id])
+        if len(vids) <= 1:
+            variant_rows_by_track[t.id] = None
+            continue
+        variant_rows_by_track[t.id] = [
+            variant_rows_by_id[i] for i in vids if i in variant_rows_by_id
+        ]
+
     results = await asyncio.gather(
         *[
             build_track_response(
@@ -209,6 +250,8 @@ async def build_track_responses(
                 include_has_lyrics=False,
                 preloaded_artists=artists_by_track.get(t.id, []),
                 preloaded_album_covers=album_covers_by_id,
+                preloaded_variant_ids=variant_ids_by_track.get(t.id, [t.id]),
+                preloaded_variant_rows=variant_rows_by_track.get(t.id),
             )
             for t in tracks
         ],
@@ -227,11 +270,15 @@ async def build_track_responses(
         ).latest_resume_position(viewer_id, resp_ids)
         if positions:
             final = [
-                r.model_copy(
-                    update={"resume_position_seconds": positions[int(r.id)]}
+                (
+                    r.model_copy(
+                        update={
+                            "resume_position_seconds": positions[int(r.id)]
+                        }
+                    )
+                    if positions.get(int(r.id))
+                    else r
                 )
-                if positions.get(int(r.id))
-                else r
                 for r in final
             ]
 
