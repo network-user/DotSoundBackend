@@ -117,7 +117,7 @@ export function EmailAuth({
 
   const handleRequestLink = async () => {
     if (!email.trim() || !email.includes('@')) {
-      setError('Введите корректный email')
+      setError(t('auth.email.invalidEmail'))
       return
     }
     setLoading(true)
@@ -127,7 +127,7 @@ export function EmailAuth({
       setStep('check_inbox')
     } catch {
       setError(
-        'Не удалось отправить ссылку',
+        t('auth.email.sendLinkError'),
       )
     } finally {
       setLoading(false)
@@ -156,7 +156,7 @@ export function EmailAuth({
       }
     } catch {
       setError(
-        'Ссылка недействительна или просрочена',
+        t('auth.email.linkExpired'),
       )
       setStep('email')
     } finally {
@@ -167,7 +167,7 @@ export function EmailAuth({
   const handleVerifyTotp = async () => {
     const digits = totpCode.replace(/\s/g, '')
     if (digits.length !== 6) {
-      setError('Введите 6-значный код')
+      setError(t('auth.email.totpLengthError'))
       return
     }
     setLoading(true)
@@ -196,7 +196,7 @@ export function EmailAuth({
         )
       }
     } catch {
-      setError('Неверный код')
+      setError(t('auth.email.totpWrong'))
     } finally {
       setLoading(false)
     }
@@ -213,7 +213,7 @@ export function EmailAuth({
       setTotpCode('')
     } catch {
       setError(
-        'Не удалось отправить код',
+        t('auth.email.fallbackSendError'),
       )
     }
   }
@@ -237,12 +237,12 @@ export function EmailAuth({
         {step === 'email' && (
           <>
             <h2 className="auth-title">
-              Вход по email
+              {t('auth.email.title')}
             </h2>
             <p className="auth-hint">
-              Введите email — мы отправим
+              {t('auth.email.enterHintLine1')}
               <br />
-              ссылку для входа
+              {t('auth.email.enterHintLine2')}
             </p>
             <input
               className="form-input"
@@ -272,8 +272,8 @@ export function EmailAuth({
               disabled={loading}
             >
               {loading
-                ? 'Отправка...'
-                : 'Получить ссылку'}
+                ? t('auth.email.sending')
+                : t('auth.email.getLink')}
             </MotionPress>
             <MotionPress
               type="button"
@@ -282,7 +282,7 @@ export function EmailAuth({
               className="btn-secondary auth-back"
               onClick={onBack}
             >
-              Назад
+              {t('auth.email.back')}
             </MotionPress>
           </>
         )}
@@ -290,14 +290,14 @@ export function EmailAuth({
         {step === 'check_inbox' && (
           <>
             <h2 className="auth-title">
-              Проверьте почту
+              {t('auth.email.checkInboxTitle')}
             </h2>
             <p className="auth-hint">
-              Мы отправили ссылку на
+              {t('auth.email.checkInboxLine1')}
               <br />
               <strong>{email}</strong>
               <br />
-              Перейдите по ней для входа
+              {t('auth.email.checkInboxLine2')}
             </p>
             <MotionPress
               type="button"
@@ -309,7 +309,7 @@ export function EmailAuth({
                 setError('')
               }}
             >
-              Отправить заново
+              {t('auth.email.resend')}
             </MotionPress>
           </>
         )}
@@ -318,13 +318,13 @@ export function EmailAuth({
           <>
             <h2 className="auth-title">
               {fallbackMode
-                ? 'Код из email'
-                : 'Двухфакторная аутентификация'}
+                ? t('auth.email.totpFallbackTitle')
+                : t('auth.email.totpTitle')}
             </h2>
             <p className="auth-hint">
               {fallbackMode
-                ? 'Введите код из письма'
-                : 'Введите код из приложения-аутентификатора'}
+                ? t('auth.email.totpFallbackHint')
+                : t('auth.email.totpHint')}
             </p>
             <input
               className="form-input auth-code-input"
@@ -370,8 +370,8 @@ export function EmailAuth({
               disabled={loading}
             >
               {loading
-                ? 'Проверка...'
-                : 'Подтвердить'}
+                ? t('auth.email.checking')
+                : t('auth.email.confirm')}
             </MotionPress>
             {!fallbackMode && (
               <MotionPress
@@ -383,8 +383,8 @@ export function EmailAuth({
                 disabled={fallbackSent}
               >
                 {fallbackSent
-                  ? 'Код отправлен на email'
-                  : 'Получить код на email'}
+                  ? t('auth.email.fallbackSentLabel')
+                  : t('auth.email.getFallbackCode')}
               </MotionPress>
             )}
           </>
@@ -395,10 +395,10 @@ export function EmailAuth({
             <div className="auth-success-icon" />
 
             <h2 className="auth-title">
-              Вход выполнен
+              {t('auth.email.successTitle')}
             </h2>
             <p className="auth-hint">
-              Добро пожаловать в {brandLabel}
+              {t('auth.email.successHint', { brand: brandLabel })}
             </p>
           </>
         )}

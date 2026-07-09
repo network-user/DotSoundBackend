@@ -6,7 +6,35 @@
     "loginTelegram": "Войти через Telegram",
     "loginEmail": "Войти по email",
     "tgMicrocopy": "Один тап, без пароля и подтверждений по почте",
-    "afterLogin": "После входа сразу подберём подборки под вас"
+    "afterLogin": "После входа сразу подберём подборки под вас",
+    "email": {
+      "title": "Вход по email",
+      "enterHintLine1": "Введите email — мы отправим",
+      "enterHintLine2": "ссылку для входа",
+      "invalidEmail": "Введите корректный email",
+      "sendLinkError": "Не удалось отправить ссылку",
+      "getLink": "Получить ссылку",
+      "sending": "Отправка...",
+      "back": "Назад",
+      "checkInboxTitle": "Проверьте почту",
+      "checkInboxLine1": "Мы отправили ссылку на",
+      "checkInboxLine2": "Перейдите по ней для входа",
+      "resend": "Отправить заново",
+      "totpTitle": "Двухфакторная аутентификация",
+      "totpFallbackTitle": "Код из email",
+      "totpHint": "Введите код из приложения-аутентификатора",
+      "totpFallbackHint": "Введите код из письма",
+      "totpLengthError": "Введите 6-значный код",
+      "confirm": "Подтвердить",
+      "checking": "Проверка...",
+      "totpWrong": "Неверный код",
+      "getFallbackCode": "Получить код на email",
+      "fallbackSentLabel": "Код отправлен на email",
+      "fallbackSendError": "Не удалось отправить код",
+      "successTitle": "Вход выполнен",
+      "successHint": "Добро пожаловать в {{brand}}",
+      "linkExpired": "Ссылка недействительна или просрочена"
+    }
   },
   "nav": {
     "home": "Главная",
@@ -40,7 +68,8 @@
     "publicBadge": "Публичный",
     "privateBadge": "Приватный",
     "genresTabEmpty": "Жанров не найдено",
-    "genreTracksCount": "{{count}} треков в жанре «{{genre}}»"
+    "genreTracksCount": "{{count}} треков в жанре «{{genre}}»",
+    "genresSearchPlaceholder": "Поиск по жанрам…"
   },
   "liked": {
     "title": "Мне нравится",

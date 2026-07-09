@@ -6,7 +6,35 @@
     "loginTelegram": "Sign in with Telegram",
     "loginEmail": "Sign in with email",
     "tgMicrocopy": "One tap — no password or email confirmation",
-    "afterLogin": "We will pick playlists for you right after sign-in"
+    "afterLogin": "We will pick playlists for you right after sign-in",
+    "email": {
+      "title": "Sign in with email",
+      "enterHintLine1": "Enter your email and we'll send",
+      "enterHintLine2": "you a sign-in link",
+      "invalidEmail": "Enter a valid email address",
+      "sendLinkError": "Couldn't send the link",
+      "getLink": "Get link",
+      "sending": "Sending...",
+      "back": "Back",
+      "checkInboxTitle": "Check your inbox",
+      "checkInboxLine1": "We sent a link to",
+      "checkInboxLine2": "Follow it to sign in",
+      "resend": "Send again",
+      "totpTitle": "Two-factor authentication",
+      "totpFallbackTitle": "Code from email",
+      "totpHint": "Enter the code from your authenticator app",
+      "totpFallbackHint": "Enter the code from the email",
+      "totpLengthError": "Enter the 6-digit code",
+      "confirm": "Confirm",
+      "checking": "Checking...",
+      "totpWrong": "Incorrect code",
+      "getFallbackCode": "Send code by email",
+      "fallbackSentLabel": "Code sent by email",
+      "fallbackSendError": "Couldn't send the code",
+      "successTitle": "Signed in",
+      "successHint": "Welcome to {{brand}}",
+      "linkExpired": "This link is invalid or has expired"
+    }
   },
   "nav": {
     "home": "Home",
@@ -40,7 +68,8 @@
     "publicBadge": "Public",
     "privateBadge": "Private",
     "genresTabEmpty": "No genres found",
-    "genreTracksCount": "{{count}} tracks in genre \"{{genre}}\""
+    "genreTracksCount": "{{count}} tracks in genre \"{{genre}}\"",
+    "genresSearchPlaceholder": "Search genres…"
   },
   "liked": {
     "title": "Liked",

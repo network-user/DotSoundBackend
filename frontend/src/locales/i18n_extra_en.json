@@ -199,7 +199,8 @@
     "featuredPlaylists": "Editorial picks",
     "openPlaylistAria": "Open playlist: {{name}}",
     "playlistsTabEmpty": "No playlists match this search",
-    "pinnedPromotions": "Featured"
+    "pinnedPromotions": "Featured",
+    "genresSearchPlaceholder": "Search genres…"
   },
   "myTop": {
     "title": "Your top",

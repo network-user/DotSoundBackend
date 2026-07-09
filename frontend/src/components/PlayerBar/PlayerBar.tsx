@@ -505,7 +505,7 @@ export function PlayerBar() {
               variant="icon"
               className="ctrl-btn pb-prev"
               onClick={handlePrev}
-              ariaLabel="Предыдущий"
+              ariaLabel={t('redesign.player.prevAria')}
               haptic="light"
             >
               <Icon name="skip-back" size={18} />
@@ -523,7 +523,9 @@ export function PlayerBar() {
               onClick={handlePlay}
               aria-busy={playButtonLoading}
               ariaLabel={
-                isPlaying ? 'Пауза' : 'Воспроизвести'
+                isPlaying
+                  ? t('redesign.player.pauseAria')
+                  : t('redesign.player.playAria')
               }
               haptic="light"
             >
@@ -549,7 +551,7 @@ export function PlayerBar() {
               variant="icon"
               className="ctrl-btn"
               onClick={handleNext}
-              ariaLabel="Следующий"
+              ariaLabel={t('redesign.player.nextAria')}
               haptic="light"
             >
               <Icon name="skip-forward" size={18} />
@@ -592,7 +594,7 @@ export function PlayerBar() {
                     setVolumePinned((v) => !v)
                     setOverflowOpen(false)
                   }}
-                  ariaLabel="Громкость"
+                  ariaLabel={t('redesign.player.volumeAria')}
                   aria-expanded={volumeOpen}
                   aria-haspopup="dialog"
                 >
@@ -644,7 +646,9 @@ export function PlayerBar() {
               }`}
               onClick={handleLike}
               ariaLabel={
-                liked ? 'Убрать лайк' : 'Лайк'
+                liked
+                  ? t('redesign.player.unlikeAria')
+                  : t('redesign.player.likeAria')
               }
               aria-pressed={liked}
               haptic={liked ? 'light' : 'medium'}
@@ -673,7 +677,7 @@ export function PlayerBar() {
                   setVolumePinned(false)
                   setVolumeHover(false)
                 }}
-                ariaLabel="Дополнительно"
+                ariaLabel={t('redesign.player.moreAria')}
                 aria-expanded={overflowOpen}
                 aria-haspopup="menu"
               >
@@ -827,7 +831,7 @@ export function PlayerBar() {
           className="pb-error-toast"
           onClick={clearHlsError}
           role="button"
-          aria-label="Закрыть ошибку"
+          aria-label={t('redesign.player.dismissErrorAria')}
         >
           <span>{hlsError}</span>
           <Icon name="x" size={14} />

@@ -209,6 +209,10 @@ export const i18nReady: Promise<typeof i18n> =
         interpolation: {
           escapeValue: false,
         },
+        react: {
+          bindI18n: 'languageChanged loaded',
+          bindI18nStore: 'added removed',
+        },
       })
     i18n.on('languageChanged', (lng) => {
       void ensureLocale(lng)

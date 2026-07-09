@@ -199,7 +199,8 @@
     "featuredPlaylists": "Подборки редакции",
     "openPlaylistAria": "Открыть плейлист: {{name}}",
     "playlistsTabEmpty": "Плейлисты по запросу не найдены",
-    "pinnedPromotions": "Рекомендуем"
+    "pinnedPromotions": "Рекомендуем",
+    "genresSearchPlaceholder": "Поиск по жанрам…"
   },
   "myTop": {
     "title": "Ваш топ",

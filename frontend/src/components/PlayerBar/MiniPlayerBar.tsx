@@ -310,7 +310,7 @@ export function MiniPlayerBar() {
           max={100}
           step={0.1}
           defaultValue={0}
-          aria-label="Перемотка"
+          aria-label={t('redesign.player.seekAria')}
           onPointerDown={() => {
             seekDraggingRef.current = true
           }}
@@ -473,7 +473,7 @@ export function MiniPlayerBar() {
               haptic('light')
               void playPrev()
             }}
-            aria-label="Предыдущий"
+            aria-label={t('redesign.player.prevAria')}
           >
             <Icon name="skip-back" size={16} />
           </button>
@@ -492,7 +492,9 @@ export function MiniPlayerBar() {
             }}
             aria-busy={playButtonLoading}
             aria-label={
-              isPlaying ? 'Пауза' : 'Воспроизвести'
+              isPlaying
+                ? t('redesign.player.pauseAria')
+                : t('redesign.player.playAria')
             }
           >
             {playButtonLoading ? (
@@ -517,7 +519,7 @@ export function MiniPlayerBar() {
               haptic('light')
               void playNext()
             }}
-            aria-label="Следующий"
+            aria-label={t('redesign.player.nextAria')}
           >
             <Icon name="skip-forward" size={16} />
           </button>
