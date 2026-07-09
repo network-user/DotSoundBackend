@@ -4,6 +4,7 @@ import asyncio
 import contextlib
 
 import structlog
+from sqlalchemy import select
 
 from app.config import settings
 from app.core.db import AsyncSessionLocal
@@ -12,9 +13,7 @@ from app.models.track import Track
 from app.search.es_client import es_available
 from app.services.search_index_service import index_track_document
 
-logger: structlog.stdlib.BoundLogger = structlog.get_logger(
-    __name__
-)
+logger: structlog.stdlib.BoundLogger = structlog.get_logger(__name__)
 _DIRTY_KEY = "es:playcount_dirty"
 
 
@@ -45,26 +44,34 @@ async def _drain_batch() -> int:
         ids_str = [str(x) for x in raw if x is not None]
     if not ids_str:
         return 0
-    try:
-        await r.srem(_DIRTY_KEY, *ids_str)
-    except Exception as exc:  # noqa: BLE001
-        logger.warning("es_drain_srem_failed", error=str(exc))
     tid_list = []
     for s in ids_str:
         try:
             tid_list.append(int(s))
         except (TypeError, ValueError):
             continue
-    if not tid_list:
-        return 0
+    # Index first, drop dirty-set membership only after a successful
+    # commit. If the process crashes mid-batch the ids simply stay in
+    # the set and get picked up (and re-indexed) on the next drain
+    # pass instead of silently losing the signal — re-indexing an
+    # already up-to-date track is harmless, so this is safe to repeat.
     n = 0
-    async with AsyncSessionLocal() as session:
-        for tid in tid_list:
-            t = await session.get(Track, tid)
-            if t and t.is_active and t.is_public:
-                await index_track_document(session, t)
-                n += 1
-        await session.commit()
+    if tid_list:
+        async with AsyncSessionLocal() as session:
+            result = await session.execute(
+                select(Track).where(Track.id.in_(tid_list))
+            )
+            tracks_by_id = {t.id: t for t in result.scalars().all()}
+            for tid in tid_list:
+                t = tracks_by_id.get(tid)
+                if t and t.is_active and t.is_public:
+                    await index_track_document(session, t)
+                    n += 1
+            await session.commit()
+    try:
+        await r.srem(_DIRTY_KEY, *ids_str)
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("es_drain_srem_failed", error=str(exc))
     if n:
         logger.debug("es_playcount_drain", updated=n)
     return n
@@ -75,9 +82,7 @@ async def playcount_drain_loop(stop: asyncio.Event) -> None:
         return
     interval = max(
         20.0,
-        float(
-            settings.elasticsearch_playcount_flush_interval_seconds
-        ),
+        float(settings.elasticsearch_playcount_flush_interval_seconds),
     )
     while not stop.is_set():
         try:
@@ -85,6 +90,4 @@ async def playcount_drain_loop(stop: asyncio.Event) -> None:
         except Exception:  # noqa: BLE001
             logger.exception("es_playcount_drain_batch_failed")
         with contextlib.suppress(asyncio.TimeoutError):
-            await asyncio.wait_for(
-                stop.wait(), timeout=interval
-            )
+            await asyncio.wait_for(stop.wait(), timeout=interval)

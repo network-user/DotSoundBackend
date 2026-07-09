@@ -44,13 +44,17 @@ from app.repositories.audio_compute import (
 )
 from app.services import compute_worker_service as cws
 
-logger: structlog.stdlib.BoundLogger = structlog.get_logger(
-    __name__
-)
+logger: structlog.stdlib.BoundLogger = structlog.get_logger(__name__)
 
 FLAG_KEY_PREFIX = "worker:anomaly_flags:"
 RECENT_RESULT_KEY_PREFIX = "worker:recent_results:"
 RECENT_RESULT_HISTORY = 50
+# Operational retention only (not a policy threshold): worker ids are
+# ephemeral, so without a TTL this list would live in Redis forever
+# after a worker is retired. A few days comfortably covers a worker
+# that is briefly offline (restart, maintenance window) while still
+# bounding storage.
+RECENT_RESULT_TTL_SECONDS = 3 * 24 * 3600
 
 
 def _flag_key(worker_id: str) -> str:
@@ -62,9 +66,7 @@ def _recent_result_key(worker_id: str) -> str:
 
 
 def _hash_text(text: str) -> str:
-    return hashlib.sha256(
-        text.encode("utf-8", errors="ignore")
-    ).hexdigest()
+    return hashlib.sha256(text.encode("utf-8", errors="ignore")).hexdigest()
 
 
 async def _record_flag(
@@ -82,9 +84,7 @@ async def _record_flag(
     key = _flag_key(worker_id)
     count = await redis.incr(key)
     if count == 1:
-        await redis.expire(
-            key, DEFAULT_FLAG_WINDOW_SECONDS
-        )
+        await redis.expire(key, DEFAULT_FLAG_WINDOW_SECONDS)
     await cws._log_audit(
         session,
         worker_id=worker_id,
@@ -103,9 +103,7 @@ async def _record_flag(
             worker_anomaly_observed,
         )
 
-        worker_anomaly_observed(
-            anomaly_type=anomaly_type
-        )
+        worker_anomaly_observed(anomaly_type=anomaly_type)
     except Exception:
         pass
     return int(count)
@@ -122,9 +120,7 @@ async def _maybe_auto_suspend(
         threshold=DEFAULT_FLAG_THRESHOLD,
     ):
         return
-    until = datetime.now(UTC) + timedelta(
-        minutes=DEFAULT_AUTO_SUSPEND_MINUTES
-    )
+    until = datetime.now(UTC) + timedelta(minutes=DEFAULT_AUTO_SUSPEND_MINUTES)
     repo = AudioComputeRepository(session)
     await repo.suspend_worker_until(
         worker_id,
@@ -157,9 +153,7 @@ async def _maybe_auto_suspend(
         await send_alert(
             event_type="worker_auto_suspended",
             severity="warning",
-            title=(
-                f"Worker {worker_id} auto-suspended"
-            ),
+            title=(f"Worker {worker_id} auto-suspended"),
             details=(
                 f"Anomaly threshold reached "
                 f"({flags_in_window} flags in "
@@ -174,20 +168,17 @@ async def _maybe_auto_suspend(
         )
 
 
-async def _push_recent_result(
-    worker_id: str, text_hash: str
-) -> list[str]:
+async def _push_recent_result(worker_id: str, text_hash: str) -> list[str]:
     redis = get_redis_client()
     key = _recent_result_key(worker_id)
-    await redis.lpush(key, text_hash)
-    await redis.ltrim(key, 0, RECENT_RESULT_HISTORY - 1)
-    raw = await redis.lrange(
-        key, 0, RECENT_RESULT_HISTORY - 1
-    )
-    return [
-        item.decode() if isinstance(item, bytes) else item
-        for item in raw
-    ]
+    pipe = redis.pipeline()
+    pipe.lpush(key, text_hash)
+    pipe.ltrim(key, 0, RECENT_RESULT_HISTORY - 1)
+    pipe.expire(key, RECENT_RESULT_TTL_SECONDS)
+    pipe.lrange(key, 0, RECENT_RESULT_HISTORY - 1)
+    results = await pipe.execute()
+    raw = results[-1] if results else []
+    return [item.decode() if isinstance(item, bytes) else item for item in raw]
 
 
 async def record_remote_result(
@@ -214,15 +205,11 @@ async def record_remote_result(
         count = await _record_flag(
             session,
             worker_id=worker_id,
-            anomaly_type=(
-                ANOMALY_PROCESSING_TOO_FAST
-            ),
+            anomaly_type=(ANOMALY_PROCESSING_TOO_FAST),
             job_id=job_id,
             details={
                 "audio_seconds": audio_seconds,
-                "processing_seconds": (
-                    processing_seconds
-                ),
+                "processing_seconds": (processing_seconds),
             },
         )
         fired.append(ANOMALY_PROCESSING_TOO_FAST)
@@ -232,12 +219,8 @@ async def record_remote_result(
             flags_in_window=count,
         )
 
-    text_hash = (
-        _hash_text(plain_text) if plain_text else ""
-    )
-    history = await _push_recent_result(
-        worker_id, text_hash
-    )
+    text_hash = _hash_text(plain_text) if plain_text else ""
+    history = await _push_recent_result(worker_id, text_hash)
     if text_hash and is_duplicate_result(
         new_text_sha256=text_hash,
         recent_text_sha256=history[1:],

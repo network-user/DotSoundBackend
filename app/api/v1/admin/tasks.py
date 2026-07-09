@@ -173,16 +173,21 @@ async def list_queues(
 ) -> dict[str, Any]:
     redis = get_redis_client()
     try:
-        keys = await redis.keys("taskiq:*")
+        keys = [key async for key in redis.scan_iter(match="taskiq:*")]
     except Exception:
         keys = []
     queues: list[dict[str, Any]] = []
-    for key in keys:
+    if keys:
+        pipe = redis.pipeline(transaction=False)
+        for key in keys:
+            pipe.llen(key)
         try:
-            length = await redis.llen(key)
+            raw_lengths = await pipe.execute(raise_on_error=False)
         except Exception:
-            length = None
-        queues.append({"name": key, "length": length})
+            raw_lengths = [None] * len(keys)
+        for key, raw_length in zip(keys, raw_lengths, strict=True):
+            length = raw_length if isinstance(raw_length, int) else None
+            queues.append({"name": key, "length": length})
     queues.sort(
         key=lambda q: (
             q["length"] is None,
@@ -246,9 +251,7 @@ async def get_lyrics_job(
         "tiers_planned": row.tiers_planned,
         "request_with_sync": row.request_with_sync,
         "request_bypass_cache": row.request_bypass_cache,
-        "request_align_existing_text": (
-            row.request_align_existing_text
-        ),
+        "request_align_existing_text": (row.request_align_existing_text),
         "live": progress,
     }
 
@@ -749,20 +752,31 @@ async def _purge_bgjob_messages(job_ids: set[str]) -> int:
 
     redis = get_redis_client()
     keys: list[str] = [broker.queue_name]
+    discovered: list[str] = []
     try:
-        discovered = await redis.keys(f"{broker.queue_name}:*")
+        async for raw_key in redis.scan_iter(match=f"{broker.queue_name}:*"):
+            discovered.append(
+                raw_key.decode()
+                if isinstance(raw_key, bytes)
+                else str(raw_key)
+            )
     except Exception:
         discovered = []
-    for raw_key in discovered:
-        key = raw_key.decode() if isinstance(raw_key, bytes) else str(raw_key)
+    for key in discovered:
         if key not in keys:
             keys.append(key)
 
-    removed = 0
+    lrange_pipe = redis.pipeline(transaction=False)
     for key in keys:
-        try:
-            messages = await redis.lrange(key, 0, -1)
-        except Exception:
+        lrange_pipe.lrange(key, 0, -1)
+    try:
+        per_key_messages = await lrange_pipe.execute(raise_on_error=False)
+    except Exception:
+        per_key_messages = [None] * len(keys)
+
+    to_remove: list[tuple[str, Any, str | None]] = []
+    for key, messages in zip(keys, per_key_messages, strict=True):
+        if not isinstance(messages, list):
             continue
         for raw in messages:
             try:
@@ -774,9 +788,23 @@ async def _purge_bgjob_messages(job_ids: set[str]) -> int:
             bgjob_id = str(raw_bgjob_id) if raw_bgjob_id else None
             if bgjob_id not in job_ids:
                 continue
-            try:
-                removed += int(await redis.lrem(key, 0, raw) or 0)
-            except Exception:
+            to_remove.append((key, raw, bgjob_id))
+
+    removed = 0
+    if to_remove:
+        lrem_pipe = redis.pipeline(transaction=False)
+        for key, raw, _bgjob_id in to_remove:
+            lrem_pipe.lrem(key, 0, raw)
+        try:
+            lrem_results = await lrem_pipe.execute(raise_on_error=False)
+        except Exception:
+            lrem_results = [None] * len(to_remove)
+        for (key, _raw, bgjob_id), result in zip(
+            to_remove, lrem_results, strict=True
+        ):
+            if isinstance(result, int):
+                removed += result
+            else:
                 logger.debug(
                     "admin_bgjob_queue_message_purge_failed",
                     job_id=bgjob_id,
@@ -813,13 +841,15 @@ async def tasks_overview(
     redis = get_redis_client()
     queues: list[dict[str, Any]] = []
     try:
-        keys = await redis.keys("taskiq:*")
-        for key in keys:
-            try:
-                length = await redis.llen(key)
-            except Exception:
-                length = None
-            queues.append({"name": key, "length": length})
+        keys = [key async for key in redis.scan_iter(match="taskiq:*")]
+        if keys:
+            pipe = redis.pipeline(transaction=False)
+            for key in keys:
+                pipe.llen(key)
+            raw_lengths = await pipe.execute(raise_on_error=False)
+            for key, raw_length in zip(keys, raw_lengths, strict=True):
+                length = raw_length if isinstance(raw_length, int) else None
+                queues.append({"name": key, "length": length})
         queues.sort(
             key=lambda q: (
                 q["length"] is None,
