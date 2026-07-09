@@ -5,9 +5,10 @@ import {
   useState,
 } from 'react'
 import { useTranslation } from 'react-i18next'
-import { api } from '@/lib/api'
+import { api, getApiErrorMessage } from '@/lib/api'
 import { getInternalUserId } from '@/lib/telegram'
 import { onWS } from '@/lib/ws'
+import { showIsland } from '@/lib/island'
 import { CommentCard } from '@/components/Comments/CommentCard'
 import { CommentInput } from '@/components/Comments/CommentInput'
 import { MotionPress } from '@/components/ui/MotionPress'
@@ -128,6 +129,11 @@ export function CommentSection({
         fc,
       )
       setComments(data)
+    } catch (e) {
+      // Keep whatever list we already have; a WS event or the next
+      // open retries. Swallowing here also means a post-mutation
+      // reload can never reject into the mutation handlers below.
+      console.error('loadComments failed', e)
     } finally {
       setLoading(false)
     }
@@ -186,48 +192,90 @@ export function CommentSection({
     }
   }, [trackId, myId, load])
 
-  const handleAdd = async (text: string) => {
+  const notifyError = useCallback(
+    (e: unknown, fallbackKey: string, fallbackText: string) => {
+      showIsland({
+        kind: 'error',
+        title: getApiErrorMessage(
+          e,
+          t(fallbackKey, { defaultValue: fallbackText }),
+        ),
+        durationMs: 3500,
+      })
+    },
+    [t],
+  )
+
+  // Runs a comment mutation, refreshes the thread, and surfaces any
+  // failure through the island toast so it never rejects unhandled.
+  const runMutation = useCallback(
+    async (
+      action: () => Promise<void>,
+      fallbackKey: string,
+      fallbackText: string,
+    ) => {
+      try {
+        await action()
+        await load()
+      } catch (e) {
+        notifyError(e, fallbackKey, fallbackText)
+      }
+    },
+    [load, notifyError],
+  )
+
+  // Returns true only when the comment was accepted, so CommentInput
+  // keeps the draft (and stays focused) on failure instead of losing it.
+  const handleAdd = async (text: string): Promise<boolean> => {
     try {
-      await api.addComment(
-        trackId,
-        text,
-        replyTo?.id,
-      )
-      setReplyTo(null)
-      await load()
+      await api.addComment(trackId, text, replyTo?.id)
     } catch (e) {
-      console.error('addComment failed', e)
+      notifyError(
+        e,
+        'trackSheet.commentSendFail',
+        'Не удалось отправить комментарий',
+      )
+      return false
     }
+    setReplyTo(null)
+    await load()
+    return true
   }
 
-  const handleDelete = async (id: number) => {
-    await api.deleteComment(id)
-    await load()
-  }
+  const handleDelete = (id: number) =>
+    runMutation(
+      () => api.deleteComment(id),
+      'trackSheet.commentDeleteFail',
+      'Не удалось удалить комментарий',
+    )
 
-  const handlePin = async (id: number, pinned: boolean) => {
-    if (pinned) await api.unpinComment(id)
-    else await api.pinComment(id)
-    await load()
-  }
+  const handlePin = (id: number, pinned: boolean) =>
+    runMutation(
+      () => (pinned ? api.unpinComment(id) : api.pinComment(id)),
+      'trackSheet.commentActionFail',
+      'Не удалось выполнить действие',
+    )
 
-  const handleHide = async (id: number) => {
-    await api.hideComment(id)
-    await load()
-  }
+  const handleHide = (id: number) =>
+    runMutation(
+      () => api.hideComment(id),
+      'trackSheet.commentActionFail',
+      'Не удалось выполнить действие',
+    )
 
-  const handleHideForMe = async (id: number) => {
-    await api.hideCommentForMe(id)
-    await load()
-  }
+  const handleHideForMe = (id: number) =>
+    runMutation(
+      () => api.hideCommentForMe(id),
+      'trackSheet.commentActionFail',
+      'Не удалось выполнить действие',
+    )
 
-  const handleVote = async (
-    id: number,
-    isLike: boolean,
-  ) => {
-    await api.voteComment(id, isLike)
-    await load()
-  }
+  const handleVote = (id: number, isLike: boolean) =>
+    runMutation(
+      () => api.voteComment(id, isLike),
+      'trackSheet.commentActionFail',
+      'Не удалось выполнить действие',
+    )
 
   return (
     <div className="comment-section slide-up">

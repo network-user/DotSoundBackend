@@ -78,6 +78,15 @@ export function LikesProvider({ children }: { children: ReactNode }) {
 
   const catchUpRanRef = useRef(false)
 
+  // FB-2: track the latest in-flight toggle per track id (shared by
+  // like and dislike, since both mutate the same track). Only the
+  // newest action for a given id applies its server result or rolls
+  // back — an older, superseded request becomes a no-op, and a rollback
+  // touches only its own track, never the whole set. This prevents a
+  // failed toggle from wiping concurrent likes/dislikes of other tracks.
+  const toggleSeqRef = useRef(0)
+  const inFlightToggleRef = useRef<Map<number, number>>(new Map())
+
   useEffect(() => {
     const uid = getUserId()
     if (!uid) return
@@ -175,9 +184,20 @@ export function LikesProvider({ children }: { children: ReactNode }) {
     const uid = getUserId()
     if (!uid) return
 
-    const prevLiked = likedIds
-    const prevDisliked = dislikedIds
-    const willLike = !prevLiked.has(trackId)
+    // Snapshot only THIS track's prior membership (per-item), never the
+    // whole set, so a rollback can't wipe concurrent toggles of others.
+    const prevLikedHas = likedIds.has(trackId)
+    const prevDislikedHas = dislikedIds.has(trackId)
+    const willLike = !prevLikedHas
+
+    // Claim latest-action ownership for this track id.
+    const token = ++toggleSeqRef.current
+    inFlightToggleRef.current.set(trackId, token)
+    const isCurrent = () =>
+      inFlightToggleRef.current.get(trackId) === token
+    const clearIfCurrent = () => {
+      if (isCurrent()) inFlightToggleRef.current.delete(trackId)
+    }
 
     setLikedIds((prev) => _withIds(prev, [trackId], willLike))
     if (willLike) {
@@ -187,6 +207,8 @@ export function LikesProvider({ children }: { children: ReactNode }) {
     try {
       const { liked, playback_variant_track_ids } =
         await api.toggleLike(uid, trackId)
+      // A newer toggle of this track superseded us: drop our result.
+      if (!isCurrent()) return
       const ids =
         playback_variant_track_ids.length > 0
           ? playback_variant_track_ids
@@ -203,16 +225,26 @@ export function LikesProvider({ children }: { children: ReactNode }) {
         cancelAutoCache(trackId)
         void removeOfflineTrack(trackId)
       }
+      clearIfCurrent()
     } catch (e) {
       if (_isNetworkError(e)) {
+        clearIfCurrent()
         await queueMutation(
           'POST',
           `/api/v1/likes/${uid}/${trackId}`,
         )
         return
       }
-      setLikedIds(prevLiked)
-      setDislikedIds(prevDisliked)
+      // Superseded by a newer action: leave its optimistic state alone.
+      if (!isCurrent()) return
+      // Per-item rollback: revert ONLY this track to its prior value.
+      setLikedIds((prev) => _withIds(prev, [trackId], prevLikedHas))
+      if (willLike) {
+        setDislikedIds((prev) =>
+          _withIds(prev, [trackId], prevDislikedHas),
+        )
+      }
+      clearIfCurrent()
       showIsland({
         kind: 'error',
         title: getApiErrorMessage(
@@ -228,9 +260,17 @@ export function LikesProvider({ children }: { children: ReactNode }) {
     const uid = getUserId()
     if (!uid) return
 
-    const prevLiked = likedIds
-    const prevDisliked = dislikedIds
-    const willDislike = !prevDisliked.has(trackId)
+    const prevLikedHas = likedIds.has(trackId)
+    const prevDislikedHas = dislikedIds.has(trackId)
+    const willDislike = !prevDislikedHas
+
+    const token = ++toggleSeqRef.current
+    inFlightToggleRef.current.set(trackId, token)
+    const isCurrent = () =>
+      inFlightToggleRef.current.get(trackId) === token
+    const clearIfCurrent = () => {
+      if (isCurrent()) inFlightToggleRef.current.delete(trackId)
+    }
 
     setDislikedIds((prev) => _withIds(prev, [trackId], willDislike))
     if (willDislike) {
@@ -240,6 +280,7 @@ export function LikesProvider({ children }: { children: ReactNode }) {
     try {
       const { disliked, playback_variant_track_ids } =
         await api.toggleDislike(uid, trackId)
+      if (!isCurrent()) return
       const ids =
         playback_variant_track_ids.length > 0
           ? playback_variant_track_ids
@@ -248,16 +289,25 @@ export function LikesProvider({ children }: { children: ReactNode }) {
       if (disliked) {
         setLikedIds((prev) => _withIds(prev, ids, false))
       }
+      clearIfCurrent()
     } catch (e) {
       if (_isNetworkError(e)) {
+        clearIfCurrent()
         await queueMutation(
           'POST',
           `/api/v1/dislikes/${uid}/${trackId}`,
         )
         return
       }
-      setLikedIds(prevLiked)
-      setDislikedIds(prevDisliked)
+      if (!isCurrent()) return
+      // Per-item rollback: revert ONLY this track to its prior value.
+      setDislikedIds((prev) =>
+        _withIds(prev, [trackId], prevDislikedHas),
+      )
+      if (willDislike) {
+        setLikedIds((prev) => _withIds(prev, [trackId], prevLikedHas))
+      }
+      clearIfCurrent()
       showIsland({
         kind: 'error',
         title: getApiErrorMessage(
