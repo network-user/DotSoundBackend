@@ -198,7 +198,9 @@ async def upload_image(
     """
     from app.services.media_service import process_image
 
-    processed, thumb, w, h = process_image(data, max_size)
+    processed, thumb, w, h = await asyncio.to_thread(
+        process_image, data, max_size
+    )
 
     owner = str(user_id) if user_id else "anon"
     thumb_key = f"{prefix}/{owner}/{uuid.uuid4().hex}_thumb.webp"

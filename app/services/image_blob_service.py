@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import hashlib
 from typing import TYPE_CHECKING
 
@@ -33,7 +34,7 @@ class ImageBlobService:
         content_type: str,
     ) -> tuple[ImageBlob, bool]:
         """Return (row, created). `created` is True for a new DB row; False on reuse."""
-        sha = _sha256_hex(data)
+        sha = await asyncio.to_thread(_sha256_hex, data)
         res = await self._session.execute(
             select(ImageBlob).where(ImageBlob.content_sha256 == sha)
         )

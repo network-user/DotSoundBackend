@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import hashlib
 
 import structlog
@@ -30,7 +31,7 @@ class VideoBlobService:
         content_type: str,
     ) -> tuple[VideoBlob, bool]:
         """Return (row, created). `created` is True for a new DB row; False on reuse."""
-        sha = _sha256_hex(data)
+        sha = await asyncio.to_thread(_sha256_hex, data)
         res = await self._session.execute(
             select(VideoBlob).where(VideoBlob.content_sha256 == sha)
         )
