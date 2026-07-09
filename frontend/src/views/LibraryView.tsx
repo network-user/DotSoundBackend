@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useSearchParams, useNavigate } from 'react-router-dom'
+import { useMainScrollRestore } from '@/hooks/useMainScrollRestore'
 import { LikedView } from '@/views/LikedView'
 import { PlaylistsView } from '@/views/PlaylistsView'
 import { ImportedView } from '@/views/ImportedView'
@@ -125,6 +126,8 @@ export function LibraryView() {
     : urlTab === null
       ? tabFromStorageDefault()
       : 'liked'
+
+  useMainScrollRestore(`library:${tab}`)
 
   const handleTab = useCallback(
     (next: Tab) => {

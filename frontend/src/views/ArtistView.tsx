@@ -26,11 +26,11 @@ import '@/styles/redesign-artist.css'
 
 import { api, getApiErrorMessage } from '@/lib/api'
 import { coverProxyUrl } from '@/lib/coverProxy'
+import { useTelegramBackButton } from '@/hooks/useTelegramBackButton'
 import { VARIANTS_FADE_UP, m } from '@/lib/motion'
 import {
   getIsAdmin,
   hapticNotification,
-  setBackButton,
 } from '@/lib/telegram'
 
 import {
@@ -147,16 +147,15 @@ export function ArtistView() {
     }
   }, [navigate])
 
-  useEffect(() => {
-    const handler =
-      selectedReleaseId !== null
-        ? () => setSelectedReleaseId(null)
-        : goBack
-    setBackButton(true, handler)
-    return () => {
-      setBackButton(false)
+  const handleBack = useCallback(() => {
+    if (selectedReleaseId !== null) {
+      setSelectedReleaseId(null)
+      return
     }
+    goBack()
   }, [goBack, selectedReleaseId])
+
+  useTelegramBackButton(handleBack)
 
   useEffect(() => {
     const el = heroRef.current

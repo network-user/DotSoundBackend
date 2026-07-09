@@ -68,6 +68,7 @@ export function ChatView() {
       ]),
     [],
   )
+  const rootRef = useRef<HTMLDivElement>(null)
   const listRef = useRef<HTMLDivElement>(null)
   const activityTimer =
     useRef<ReturnType<typeof setTimeout>>()
@@ -416,6 +417,34 @@ export function ChatView() {
     }
   }, [messages])
 
+  // Lift the chat above the on-screen keyboard. In a plain browser the
+  // layout viewport (window.innerHeight) stays full while the keyboard
+  // shrinks visualViewport, so a fixed, inset:0 chat is covered by the
+  // keyboard. We expose that gap as --kb-offset; the container consumes
+  // it as padding-bottom (see .chat-view in animations.css). In Telegram
+  // WebView the WebView itself usually resizes, so the gap is ~0 and this
+  // is a no-op — the existing --vh handling is untouched.
+  useEffect(() => {
+    const vv = window.visualViewport
+    const root = rootRef.current
+    if (!vv || !root) return
+    const update = () => {
+      const offset = Math.max(
+        0,
+        Math.round(window.innerHeight - vv.height - vv.offsetTop),
+      )
+      root.style.setProperty('--kb-offset', `${offset}px`)
+    }
+    update()
+    vv.addEventListener('resize', update)
+    vv.addEventListener('scroll', update)
+    return () => {
+      vv.removeEventListener('resize', update)
+      vv.removeEventListener('scroll', update)
+      root.style.removeProperty('--kb-offset')
+    }
+  }, [])
+
   const addMessage = (msg: ChatMessage) => {
     setMessages((prev) => {
       if (prev.some((m) => m.id === msg.id)) return prev
@@ -615,7 +644,7 @@ export function ChatView() {
   if (!active) return null
 
   return (
-    <div className="chat-view re-chat slide-in">
+    <div ref={rootRef} className="chat-view re-chat slide-in">
       <m.div
         className="chat-view-header re-chat-header glass--liquid"
         initial={

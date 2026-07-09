@@ -15,6 +15,7 @@ import { api } from '@/lib/api'
 import { usePlayerActions } from '@/store/PlayerContext'
 import { useLikes } from '@/store/LikesContext'
 import { useDebounce } from '@/hooks/useDebounce'
+import { useMainScrollRestore } from '@/hooks/useMainScrollRestore'
 import { useDesktopFinePointer } from '@/hooks/useDesktopFinePointer'
 import { useNavigateToArtistByName } from '@/hooks/useNavigateToArtistByName'
 import { Icon } from '@/components/Icon/Icon'
@@ -314,6 +315,12 @@ export function SearchView({ onOpenArtist }: SearchViewProps) {
   >([])
 
   const debouncedQuery = useDebounce(query, SEARCH_DEBOUNCE_MS)
+
+  // Restore #main scroll when returning to the same query (e.g. back
+  // from /track/:id). A different/empty query is a distinct key, so a
+  // fresh search never jumps to a stale position. This is orthogonal
+  // to the debounced fetch below — it never re-triggers a request.
+  useMainScrollRestore(`search:${debouncedQuery.trim()}`)
 
   useEffect(() => {
     let active = true

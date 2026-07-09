@@ -21,6 +21,7 @@ import { usePlayerActions } from '@/store/PlayerContext'
 import { usePrefetchTracks } from '@/store/PrefetchContext'
 import { trackActivationEvent } from '@/lib/activation'
 import { useAutoLoadMore } from '@/hooks/useAutoLoadMore'
+import { useMainScrollRestore } from '@/hooks/useMainScrollRestore'
 import { usePullToRefresh } from '@/hooks/usePullToRefresh'
 import { PullToRefreshIndicator } from '@/components/ui/PullToRefreshIndicator'
 import { useDesktopFinePointer } from '@/hooks/useDesktopFinePointer'
@@ -745,39 +746,7 @@ export function HomeView({ onOpenArtist }: HomeViewProps) {
     return () => io.disconnect()
   }, [])
 
-  useEffect(() => {
-    const main = document.getElementById('main')
-    if (!main) return
-    const saved = sessionStorage.getItem('home-scroll')
-    if (saved) {
-      const y = Number(saved)
-      if (Number.isFinite(y) && y > 0) {
-        requestAnimationFrame(() => {
-          main.scrollTop = y
-        })
-      }
-    }
-    let raf = 0
-    const onScroll = () => {
-      if (raf) return
-      raf = requestAnimationFrame(() => {
-        raf = 0
-        try {
-          sessionStorage.setItem(
-            'home-scroll',
-            String(Math.round(main.scrollTop)),
-          )
-        } catch {
-          /* quota / privacy */
-        }
-      })
-    }
-    main.addEventListener('scroll', onScroll, { passive: true })
-    return () => {
-      if (raf) cancelAnimationFrame(raf)
-      main.removeEventListener('scroll', onScroll)
-    }
-  }, [])
+  useMainScrollRestore('home')
 
   const handlePlay = useCallback(
     async (track: Track) => {

@@ -12,8 +12,8 @@ import '@/styles/redesign-artist.css'
 
 import { api, getApiErrorMessage } from '@/lib/api'
 import { coverProxyUrl } from '@/lib/coverProxy'
+import { useTelegramBackButton } from '@/hooks/useTelegramBackButton'
 import { VARIANTS_FADE_UP, m } from '@/lib/motion'
-import { setBackButton } from '@/lib/telegram'
 
 import {
   usePlayerActions,
@@ -67,12 +67,7 @@ export function ExternalTrackView() {
     }
   }, [navigate])
 
-  useEffect(() => {
-    setBackButton(true, goBack)
-    return () => {
-      setBackButton(false)
-    }
-  }, [goBack])
+  useTelegramBackButton(goBack)
 
   useEffect(() => {
     if (!Number.isFinite(trackId)) return

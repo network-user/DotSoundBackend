@@ -14,8 +14,8 @@ import '@/styles/redesign-artist.css'
 import { api, getApiErrorMessage } from '@/lib/api'
 import { coverProxyUrl } from '@/lib/coverProxy'
 import { useAutoLoadMore } from '@/hooks/useAutoLoadMore'
+import { useTelegramBackButton } from '@/hooks/useTelegramBackButton'
 import { VARIANTS_FADE_UP, m } from '@/lib/motion'
-import { setBackButton } from '@/lib/telegram'
 
 import {
   usePlayerActions,
@@ -57,12 +57,7 @@ export function AlbumView() {
     }
   }, [navigate])
 
-  useEffect(() => {
-    setBackButton(true, goBack)
-    return () => {
-      setBackButton(false)
-    }
-  }, [goBack])
+  useTelegramBackButton(goBack)
 
   useEffect(() => {
     if (!Number.isFinite(albumId)) return

@@ -10,8 +10,8 @@ import { showIsland } from '@/lib/island'
 import '@/styles/redesign-artist.css'
 
 import { api, getApiErrorMessage } from '@/lib/api'
+import { useTelegramBackButton } from '@/hooks/useTelegramBackButton'
 import { VARIANTS_FADE_UP, m, SPRING_GENTLE } from '@/lib/motion'
-import { setBackButton } from '@/lib/telegram'
 
 import {
   usePlayerActions,
@@ -50,12 +50,7 @@ export function GenreView() {
     }
   }, [navigate])
 
-  useEffect(() => {
-    setBackButton(true, goBack)
-    return () => {
-      setBackButton(false)
-    }
-  }, [goBack])
+  useTelegramBackButton(goBack)
 
   useEffect(() => {
     if (!slug) return

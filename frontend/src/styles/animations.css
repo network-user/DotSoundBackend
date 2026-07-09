@@ -177,6 +177,12 @@
   background: var(--bg, #0a0a0a);
   display: flex;
   flex-direction: column;
+  box-sizing: border-box;
+  /* Lifts the composer above the on-screen keyboard. --kb-offset is
+     set from visualViewport in ChatView and defaults to 0 (no-op in
+     Telegram WebView, where the WebView itself resizes). */
+  padding-bottom: var(--kb-offset, 0px);
+  transition: padding-bottom 0.22s var(--ease-standard, ease);
 }
 
 .chat-view-header {
@@ -539,13 +545,11 @@
   border-radius: 12px;
   display: block;
   opacity: 0;
-  filter: blur(8px);
-  transition: opacity 0.3s ease, filter 0.4s ease;
+  transition: opacity 0.3s ease;
 }
 
 .bubble-photo-img.loaded {
   opacity: 1;
-  filter: blur(0);
 }
 
 .bubble-photo-upload {
