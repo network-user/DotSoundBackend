@@ -202,22 +202,6 @@ function _hlsErrorTelemetry(data: HlsErrorData) {
 
 type HlsErrorTelemetry = ReturnType<typeof _hlsErrorTelemetry>
 
-function _hlsErrorMessage(data: HlsErrorData) {
-  const telemetry = _hlsErrorTelemetry(data)
-  const detail =
-    telemetry.details ||
-    telemetry.reason ||
-    telemetry.message ||
-    'unknown'
-  return `HLS playback failed: ${detail}`
-}
-
-function _isRecoverableHlsMediaError(
-  telemetry: HlsErrorTelemetry,
-) {
-  return telemetry.type === 'mediaError'
-}
-
 function _loadEqState() {
   try {
     const rawBands = localStorage.getItem(
@@ -1415,6 +1399,9 @@ export function PlayerProvider({
   const listenSignalSentRef = useRef(false)
   const listenStartTimeRef = useRef(0)
   const restoredRef = useRef(false)
+  // Flipped to false by the unmount teardown effect so late async
+  // callbacks (radio refills in particular) can skip their setState.
+  const isMountedRef = useRef(true)
   const playerTimeUiLastRef = useRef(0)
 
   const clearPlaybackLoadingTimer = useCallback(() => {
@@ -1913,6 +1900,9 @@ export function PlayerProvider({
         const cachedUrl = await getCachedAudioUrl(
           restoredTrack.id,
         )
+        // FB-3: a user tap during restore already bumped the active
+        // track; do not overwrite its src with this stale restore.
+        if (lastTrackIdRef.current !== restoredTrack.id) return
         if (cachedUrl) {
           srcAssignedAtRef.current = Date.now()
           audio.src = cachedUrl
@@ -1936,8 +1926,12 @@ export function PlayerProvider({
         ) {
           api.getStream(restoredTrack.id)
             .then(async (stream) => {
+              // FB-3: discard a stale stream URL if the active track
+              // changed while getStream was in flight.
+              if (lastTrackIdRef.current !== restoredTrack.id) return
               srcAssignedAtRef.current = Date.now()
               const HlsMod = await loadHlsClass()
+              if (lastTrackIdRef.current !== restoredTrack.id) return
               if (
                 stream.stream_type === 'hls' &&
                 HlsMod.isSupported()
@@ -1962,6 +1956,10 @@ export function PlayerProvider({
 
           if (shouldUseInternalHlsPlayback(restoredTrack)) {
             const HlsMod = await loadHlsClass()
+            // FB-3: bail if the restore was superseded during the
+            // hls.js import (startHlsPlayback is itself guarded, but
+            // the direct-src fallback below is not).
+            if (lastTrackIdRef.current !== restoredTrack.id) return
             const hlsUrl = (
               `/api/v1/tracks/${restoredTrack.id}/hls/master.m3u8`
             )
@@ -2739,11 +2737,25 @@ export function PlayerProvider({
       autoplay = true,
       trackId?: number | null,
     ) => {
+      // FB-1: capture the playback session at entry. A later
+      // playTrack/stop bumps ``playSessionRef`` (and reassigns
+      // ``lastTrackIdRef``), so any callback from this now-superseded
+      // launch must not touch the shared audio element or overwrite
+      // ``hlsRef`` with a stale instance.
+      const startSession = playSessionRef.current
+      const isStale = () =>
+        playSessionRef.current !== startSession ||
+        (trackId != null && lastTrackIdRef.current !== trackId)
       const Hls = await loadHlsClass()
       const qualityPref = getHlsQualityPreference()
       return new Promise<void>((resolve, reject) => {
         let settled = false
         let readyTimer: number | null = null
+        let mediaRecoveryAttempted = false
+        let networkRecoveryAttempted = false
+        const playbackErrorText = i18n.t(
+          'redesign.playerErrors.playback',
+        )
         const hls = new Hls({
           enableWorker: true,
           // -1 = ABR auto. With ``testBandwidth: false`` hls.js skips
@@ -2777,10 +2789,31 @@ export function PlayerProvider({
           abrEwmaFastVoD: 1.0,
           abrEwmaSlowVoD: 3.0,
         })
+        // Superseded while hls.js was importing: drop the fresh
+        // instance before it can attach to the shared audio element.
+        if (isStale()) {
+          try {
+            hls.destroy()
+          } catch {
+            /* ignore */
+          }
+          resolve()
+          return
+        }
         const onReady = () => {
           if (settled) return
           settled = true
           cleanupReady()
+          if (isStale()) {
+            if (hlsRef.current === hls) hlsRef.current = null
+            try {
+              hls.destroy()
+            } catch {
+              /* ignore */
+            }
+            resolve()
+            return
+          }
           setHlsError(null)
           audio.volume = volume
           if (autoplay) void requestPlayback(audio)
@@ -2817,8 +2850,12 @@ export function PlayerProvider({
           const resumeAt = Number.isFinite(audio.currentTime)
             ? audio.currentTime
             : 0
-          hls.destroy()
-          hlsRef.current = null
+          try {
+            hls.destroy()
+          } catch {
+            /* ignore */
+          }
+          if (hlsRef.current === hls) hlsRef.current = null
           audio.crossOrigin = 'anonymous'
           if (resumeAt > 0) {
             const restorePosition = () => {
@@ -2850,6 +2887,62 @@ export function PlayerProvider({
             startFallback()
             resolve()
           } else {
+            if (hlsRef.current === hls) hlsRef.current = null
+            try {
+              hls.destroy()
+            } catch {
+              /* ignore */
+            }
+            reject(new Error(message))
+          }
+        }
+        // Tear down this instance when a newer session/track has taken
+        // over — but never a foreign instance that already replaced us
+        // in ``hlsRef``.
+        const bailStale = () => {
+          cleanupReady()
+          if (hlsRef.current === hls) hlsRef.current = null
+          try {
+            hls.destroy()
+          } catch {
+            /* ignore */
+          }
+          if (!settled) {
+            settled = true
+            resolve()
+          }
+        }
+        // FB-4: final rung of the recovery ladder. Reached once an
+        // in-place recovery has been tried (or does not apply). Prefers
+        // a direct-audio fallback; otherwise surfaces a localized
+        // error. The hls instance is always destroyed on this path.
+        const finalizeFatal = (
+          message: string,
+          telemetry: HlsErrorTelemetry,
+        ) => {
+          recordHlsFatalTelemetry(trackId, telemetry)
+          if (fallbackUrl) {
+            setHlsError(null)
+            if (!settled) {
+              settled = true
+              cleanupReady()
+              startFallback()
+              resolve()
+            } else {
+              startFallback()
+            }
+            return
+          }
+          if (hlsRef.current === hls) hlsRef.current = null
+          try {
+            hls.destroy()
+          } catch {
+            /* ignore */
+          }
+          setHlsError(message)
+          if (!settled) {
+            settled = true
+            cleanupReady()
             reject(new Error(message))
           }
         }
@@ -2872,9 +2965,12 @@ export function PlayerProvider({
         audio.addEventListener('canplay', onReady, { once: true })
         audio.addEventListener('playing', onReady, { once: true })
         readyTimer = window.setTimeout(() => {
-          const message = 'HLS playback failed: startup timeout'
-          setHlsError(message)
-          failBeforeReady(message)
+          if (isStale()) {
+            bailStale()
+            return
+          }
+          setHlsError(playbackErrorText)
+          failBeforeReady(playbackErrorText)
         }, HLS_READY_TIMEOUT_MS)
         hls.on(Hls.Events.ERROR, (_e, d) => {
           const telemetry = _hlsErrorTelemetry(d)
@@ -2882,35 +2978,44 @@ export function PlayerProvider({
             console.debug('dotsound:hls_nonfatal_error', telemetry)
             return
           }
-          const message = _hlsErrorMessage(d)
+          if (isStale()) {
+            bailStale()
+            return
+          }
           console.warn('dotsound:hls_fatal_error', telemetry)
+          // FB-4: try a single in-place recovery per error type before
+          // tearing the instance down. recoverMediaError() walks back
+          // decode/append failures; startLoad() re-drives a stalled
+          // segment/manifest fetch. If recovery does not take, the next
+          // fatal finds the attempt flag set (or the readyTimer
+          // watchdog fires) and routes to finalizeFatal → fallback.
           if (
-            fallbackUrl &&
-            _isRecoverableHlsMediaError(telemetry)
+            telemetry.type === Hls.ErrorTypes.MEDIA_ERROR &&
+            !mediaRecoveryAttempted
           ) {
-            setHlsError(null)
-            if (!settled) {
-              settled = true
-              cleanupReady()
-              startFallback()
-              resolve()
-              return
-            }
-            startFallback()
-            return
-          }
-          recordHlsFatalTelemetry(trackId, telemetry)
-          if (settled) {
-            if (fallbackUrl) {
+            mediaRecoveryAttempted = true
+            try {
               setHlsError(null)
-              startFallback()
+              hls.recoverMediaError()
               return
+            } catch {
+              /* fall through to finalizeFatal */
             }
-            setHlsError(message)
-            return
           }
-          setHlsError(message)
-          failBeforeReady(message)
+          if (
+            telemetry.type === Hls.ErrorTypes.NETWORK_ERROR &&
+            !networkRecoveryAttempted
+          ) {
+            networkRecoveryAttempted = true
+            try {
+              setHlsError(null)
+              hls.startLoad()
+              return
+            } catch {
+              /* fall through to finalizeFatal */
+            }
+          }
+          finalizeFatal(playbackErrorText, telemetry)
         })
       })
     },
@@ -2924,6 +3029,7 @@ export function PlayerProvider({
       atSec: number,
     ) => {
       if (tr.access_mode !== 'third_party_stream') return
+      const startSession = playSessionRef.current
       if (hlsRef.current) {
         try {
           hlsRef.current.destroy()
@@ -2934,6 +3040,15 @@ export function PlayerProvider({
       }
       const stream = await api.getStream(tr.id)
       if (!stream?.url) return
+      // FB-3: the active track/session may have changed while
+      // getStream was in flight; a stale URL must not clobber it.
+      if (
+        playSessionRef.current !== startSession ||
+        lastTrackIdRef.current !== tr.id ||
+        audioRef.current !== audio
+      ) {
+        return
+      }
       lastStreamUrlRef.current = stream.url
       streamExpiresAtRef.current = stream.expires_in
         ? Date.now() + stream.expires_in * 1000
@@ -3228,6 +3343,10 @@ export function PlayerProvider({
           api
             .getStream(track.id)
             .then((stream) => {
+              // FB-3: ignore a stale re-resolve if the active track or
+              // element changed while getStream was in flight.
+              if (lastTrackIdRef.current !== track.id) return
+              if (audioRef.current !== a) return
               if (a && stream?.url) {
                 const t = a.currentTime
                 a.src = stream.url
@@ -3673,6 +3792,20 @@ export function PlayerProvider({
     const isInjectedAdvance = playTrackSlideInjectRef.current !== null
     const hasContextTracks =
       contextTracks !== undefined && contextTracks.length > 0
+    // FB-9: in-flight dedup. A second, non-programmatic tap on the
+    // track we are *already* loading must not restart the pipeline
+    // (which would re-reset the queue, re-fire telemetry, re-arm the
+    // fade). Different-track taps fall through and supersede the
+    // previous load via the monotonic ``playSessionRef`` guard below.
+    // ``playbackLoadingTrackIdRef`` is set by beginPlaybackLoading and
+    // cleared by finishPlaybackLoading (first play, error, or the
+    // switch-hold timeout), so it spans exactly the loading phase.
+    if (
+      !isInjectedAdvance &&
+      playbackLoadingTrackIdRef.current === newTrack.id
+    ) {
+      return
+    }
     if (!isInjectedAdvance && !preserveQueue) {
       prefetchCacheRef.current = null
       if (!hasContextTracks) {
@@ -4466,6 +4599,7 @@ export function PlayerProvider({
         buildRadioExcludeIds([seedTrack.id]),
       )
       .then((result) => {
+        if (!isMountedRef.current) return
         if (!radioModeRef.current) return
         if (radioSeedTrackIdRef.current !== seedTrack.id) return
         const newTracks = result.tracks.filter(
@@ -4655,6 +4789,7 @@ export function PlayerProvider({
           const topUp: Promise<void> = api
             .getRadio(seedId, RADIO_BATCH_SIZE, excludeIds)
             .then((result) => {
+              if (!isMountedRef.current) return
               if (!radioModeRef.current) return
               if (radioSeedTrackIdRef.current !== seedId) return
               const fresh = result.tracks.filter(
@@ -4741,7 +4876,15 @@ export function PlayerProvider({
               !radioPlayedIdsRef.current.has(t.id) &&
               !unavailableTrackIdsRef.current.has(t.id),
           )
-          if (newTracks.length > 0) {
+          // FB-13: discard a stale batch if the seed changed, radio
+          // was stopped, or the provider unmounted during the await —
+          // otherwise we would advance to a track from the old seed.
+          if (
+            newTracks.length > 0 &&
+            isMountedRef.current &&
+            radioModeRef.current &&
+            radioSeedTrackIdRef.current === seedId
+          ) {
             const next = newTracks[0]
             rememberRadioTrackIds(newTracks.map((t) => t.id))
             manualQueueRef.current = newTracks.slice(1)
@@ -5171,6 +5314,13 @@ export function PlayerProvider({
             fragLoadingTimeOut: 8000,
             manifestLoadingTimeOut: 5000,
           })
+          // FB-11: the effect may have been torn down (cancelled)
+          // while hls.js was importing; drop the fresh instance
+          // instead of leaking it past this effect's lifetime.
+          if (cancelled) {
+            try { hls.destroy() } catch { /* ignore */ }
+            return
+          }
           hls.loadSource(
             `/api/v1/tracks/${next.id}/hls/master.m3u8`,
           )
@@ -5187,6 +5337,18 @@ export function PlayerProvider({
           sink.volume = 0
           sink.preload = 'auto'
           hls.attachMedia(sink)
+          if (cancelled) {
+            try { hls.destroy() } catch { /* ignore */ }
+            return
+          }
+          // Evict any preload instance we are about to replace so a
+          // rapid re-run cannot orphan the previous detached hls.js.
+          if (
+            preloadHlsRef.current &&
+            preloadHlsRef.current !== hls
+          ) {
+            try { preloadHlsRef.current.destroy() } catch { /* ignore */ }
+          }
           preloadHlsRef.current = hls
           preloadHlsTrackIdRef.current = next.id
           hls.on(HlsMod.Events.ERROR, (_e, d) => {
@@ -5698,6 +5860,91 @@ export function PlayerProvider({
     },
     [],
   )
+
+  // FB-10: full provider teardown on unmount. The per-track audio-
+  // events effect and the prefetch effect already drop their own
+  // listeners/aborts; this covers the long-lived singletons that
+  // otherwise outlive the provider — the active and preload hls.js
+  // instances, the silent-audio heartbeat, the OS wake-lock, and the
+  // one-shot timers not owned by another effect's cleanup. The effect
+  // body re-arms ``isMountedRef`` so a StrictMode remount stays live.
+  useEffect(() => {
+    isMountedRef.current = true
+    return () => {
+      isMountedRef.current = false
+      if (hlsRef.current) {
+        try {
+          hlsRef.current.destroy()
+        } catch {
+          /* ignore */
+        }
+        hlsRef.current = null
+      }
+      if (preloadHlsRef.current) {
+        try {
+          preloadHlsRef.current.destroy()
+        } catch {
+          /* ignore */
+        }
+        preloadHlsRef.current = null
+        preloadHlsTrackIdRef.current = null
+      }
+      const beat = silentHeartbeatRef.current
+      if (beat) {
+        silentHeartbeatRef.current = null
+        try {
+          beat.source.stop(0)
+        } catch {
+          /* ignore */
+        }
+        try {
+          beat.source.disconnect()
+        } catch {
+          /* ignore */
+        }
+        try {
+          beat.gain.disconnect()
+        } catch {
+          /* ignore */
+        }
+      }
+      _releaseWakeLock()
+      if (pendingPlaybackErrorRef.current != null) {
+        window.clearTimeout(pendingPlaybackErrorRef.current)
+        pendingPlaybackErrorRef.current = null
+      }
+      const retry = playbackRetryStateRef.current
+      if (retry.timeoutId != null) {
+        window.clearTimeout(retry.timeoutId)
+        retry.timeoutId = null
+      }
+      const batch = unavailableSkipBatchRef.current
+      if (batch.resetTimer != null) {
+        clearTimeout(batch.resetTimer)
+        batch.resetTimer = null
+      }
+      if (eqSaveTimerRef.current) {
+        clearTimeout(eqSaveTimerRef.current)
+        eqSaveTimerRef.current = null
+      }
+      for (const controller of _armedFullBodyControllers.values()) {
+        try {
+          controller.abort()
+        } catch {
+          /* ignore */
+        }
+      }
+      _armedFullBodyControllers.clear()
+      if (prefetchAudioRef.current) {
+        try {
+          prefetchAudioRef.current.src = ''
+        } catch {
+          /* ignore */
+        }
+        prefetchAudioRef.current = null
+      }
+    }
+  }, [])
 
   const stateValue = useMemo<PlayerStateValue>(
     () => ({
