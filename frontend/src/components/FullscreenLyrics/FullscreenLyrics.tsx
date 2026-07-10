@@ -104,14 +104,24 @@ export function FullscreenLyrics({
     if (!panelOpen || !track) {
       return
     }
+    let cancelled = false
     setSelectedLang('original')
     setVideoFailed(false)
     setLoading(true)
     api
       .getLyrics(track.id)
-      .then(setLyrics)
-      .catch(() => setLyrics(null))
-      .finally(() => setLoading(false))
+      .then((res) => {
+        if (!cancelled) setLyrics(res)
+      })
+      .catch(() => {
+        if (!cancelled) setLyrics(null)
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false)
+      })
+    return () => {
+      cancelled = true
+    }
   }, [panelOpen, track?.id])
 
   useEffect(() => {

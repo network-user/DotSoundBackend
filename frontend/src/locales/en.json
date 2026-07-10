@@ -189,6 +189,9 @@
     }
   },
   "lyrics": {
+    "statusNotFound": "Lyrics not found",
+    "statusError": "Couldn't detect lyrics. Please try again.",
+    "retry": "Retry",
     "detectText": "Detect lyrics",
     "detectTextWithSync": "Detect lyrics + timecodes",
     "addSync": "Add timecodes",
