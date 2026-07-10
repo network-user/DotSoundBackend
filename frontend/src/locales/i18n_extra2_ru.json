@@ -1011,6 +1011,11 @@
     }
   },
   "trackSheet": {
+    "commentPlaceholder": "Написать комментарий...",
+    "commentSend": "Отправить",
+    "commentSendFail": "Не удалось отправить комментарий",
+    "commentDeleteFail": "Не удалось удалить комментарий",
+    "commentActionFail": "Не удалось выполнить действие",
     "shareError": "Не удалось получить ссылку",
     "shareSent": "Отправлено",
     "linkCopied": "Ссылка скопирована",

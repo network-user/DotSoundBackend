@@ -1005,6 +1005,11 @@
     }
   },
   "trackSheet": {
+    "commentPlaceholder": "Write a comment...",
+    "commentSend": "Send",
+    "commentSendFail": "Couldn't send comment",
+    "commentDeleteFail": "Couldn't delete comment",
+    "commentActionFail": "Action failed",
     "shareError": "Could not get the link",
     "shareSent": "Sent",
     "linkCopied": "Link copied",
