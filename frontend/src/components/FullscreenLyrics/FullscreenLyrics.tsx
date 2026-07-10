@@ -3,7 +3,6 @@ import {
   useEffect,
   useRef,
   useState,
-  type CSSProperties,
 } from 'react'
 import { AnimatePresence } from 'framer-motion'
 import { useTranslation } from 'react-i18next'
@@ -12,12 +11,18 @@ import { getIsAdmin, getUserId } from '@/lib/telegram'
 import {
   usePlayerActions,
   usePlayerMeta,
-  usePlayerState,
+  usePlayerPlayback,
 } from '@/store/PlayerContext'
 import { Icon } from '@/components/Icon/Icon'
 import { MotionPress } from '@/components/ui/MotionPress'
 import { MorphIcon } from '@/components/ui/MorphIcon'
 import { BeatPulse } from '@/components/ui/BeatPulse'
+import {
+  PlaybackSeek,
+  PlaybackTime,
+  PlaybackLeadIn,
+  PausedTimeSync,
+} from '@/components/ui/PlaybackProgress'
 import { CoverImage } from '@/components/CoverImage/CoverImage'
 import { useExitTransition } from '@/hooks/useExitTransition'
 import type { LyricsResponse } from '@/types/api'
@@ -53,8 +58,7 @@ export function FullscreenLyrics({
 }: FullscreenLyricsProps) {
   const { t } = useTranslation()
   const lyricsReduce = useReducedMotion()
-  const { currentTime, duration, isPlaying } =
-    usePlayerState()
+  const { duration, isPlaying } = usePlayerPlayback()
   const { track, isLyricsOpen } = usePlayerMeta()
   const {
     closeLyrics,
@@ -141,14 +145,6 @@ export function FullscreenLyrics({
     selectedTranslation?.translated_text ??
     lyrics?.plain_text ??
     ''
-  const firstLineLeadInMs =
-    lyrics?.synced_lines?.length && activeIdx < 0
-      ? Math.max(
-          0,
-          lyrics.synced_lines[0].time_ms - currentTime * 1000,
-        )
-      : null
-
   const tickLyrics = useCallback(
     (ms: number) => {
       const lines = lyrics?.synced_lines
@@ -194,6 +190,13 @@ export function FullscreenLyrics({
     [lyrics, karaokeActive, duration],
   )
 
+  const handlePausedTick = useCallback(
+    (sec: number) => {
+      tickLyrics(sec * 1000)
+    },
+    [tickLyrics],
+  )
+
   useEffect(() => {
     const lines = lyrics?.synced_lines
     if (!panelOpen || !lines || lines.length === 0) {
@@ -219,13 +222,6 @@ export function FullscreenLyrics({
   }, [panelOpen, isPlaying, lyrics, tickLyrics, getPreciseTime])
 
   useEffect(() => {
-    const lines = lyrics?.synced_lines
-    if (!panelOpen || !lines || lines.length === 0) return
-    if (isPlaying) return
-    tickLyrics(currentTime * 1000)
-  }, [panelOpen, isPlaying, lyrics, currentTime, tickLyrics])
-
-  useEffect(() => {
     const container = contentRef.current
     const node = activeLineNodeRef.current
     if (!container || !node || activeIdx < 0) return
@@ -246,8 +242,6 @@ export function FullscreenLyrics({
   }, [activeIdx, lyricsReduce])
 
   if (!exit.mounted || !track) return null
-
-  const pct = duration ? (currentTime / duration) * 100 : 0
 
   const videoEnabled =
     localStorage.getItem('setting-video-enabled') !== 'false'
@@ -327,22 +321,26 @@ export function FullscreenLyrics({
     >
       {loading && <div className="loader" />}
 
-      {firstLineLeadInMs !== null && firstLineLeadInMs > 250 && (
-        <button
-          type="button"
-          className="fl-countdown"
-          onClick={() =>
+      {!isPlaying &&
+      lyrics?.synced_lines &&
+      lyrics.synced_lines.length > 0 ? (
+        <PausedTimeSync onTick={handlePausedTick} />
+      ) : null}
+
+      {lyrics?.synced_lines &&
+      lyrics.synced_lines.length > 0 &&
+      activeIdx < 0 ? (
+        <PlaybackLeadIn
+          firstLineTimeMs={lyrics.synced_lines[0].time_ms}
+          onSeek={() =>
             handleLineClick(lyrics!.synced_lines![0].time_ms)
           }
-        >
-          <span className="fl-countdown__label">
-            {t('lyrics.startsIn', 'Starts in')}
-          </span>
-          <span className="fl-countdown__time">
-            {(firstLineLeadInMs / 1000).toFixed(1)}
-          </span>
-        </button>
-      )}
+          wrapClassName="fl-countdown"
+          labelClassName="fl-countdown__label"
+          timeClassName="fl-countdown__time"
+          label={t('lyrics.startsIn', 'Starts in')}
+        />
+      ) : null}
 
       <AnimatePresence mode="wait" initial={false}>
         {!loading && lyrics?.synced_lines?.length ? (
@@ -460,27 +458,19 @@ export function FullscreenLyrics({
     <div
       className={`fl-controls${embed ? ' fl-controls--embed' : ''}`}
     >
-      <div className="fl-seek-wrap">
-        <input
-          type="range"
-          className="fl-seek"
-          min={0}
-          max={100}
-          step={0.1}
-          value={pct}
-          style={
-            {
-              ['--progress']: `${pct}%`,
-            } as CSSProperties
-          }
-          aria-label={t('redesign.player.seekAria', 'Seek')}
-          onChange={(e) =>
-            seek(Number(e.target.value))
-          }
-        />
-      </div>
+      <PlaybackSeek
+        trackId={track.id}
+        duration={duration}
+        isPlaying={isPlaying}
+        getPreciseTime={getPreciseTime}
+        onSeek={seek}
+        wrapClassName="fl-seek-wrap"
+        inputClassName="fl-seek"
+        writeProgressVar
+        ariaLabel={t('redesign.player.seekAria', 'Seek')}
+      />
       <div className="fl-controls-row">
-        <span className="fl-time">{fmt(currentTime)}</span>
+        <PlaybackTime className="fl-time" />
         <div className="fl-btns">
           <MotionPress
             type="button"

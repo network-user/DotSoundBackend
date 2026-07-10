@@ -10,12 +10,20 @@ interface TaskState {
   percent: number | null
   startedAt: number
   debugLog: string[]
+  // FB-5: populated only when genStatus === 'error' so the UI can show a
+  // real error message + retry, distinct from the neutral 'not_found' state.
+  errorMessage: string | null
 }
 
 type Listener = () => void
 
 const TERMINAL = new Set(['found', 'not_found', 'error', 'cancelled'])
 const POLLING_INTERVAL_MS = 2000
+// FB-14: transient-failure grace before we fall back / surface an error, so a
+// single blip (backend reload, proxy timeout, mobile network handoff) does not
+// abandon an in-flight generation.
+const MAX_POLL_FAILURES = 3
+const MAX_SSE_ERRORS = 3
 
 let tasks = new Map<number, TaskState>()
 const pollTimers = new Map<number, ReturnType<typeof setInterval>>()
@@ -101,6 +109,10 @@ function applyPayload(
       genStatus: terminal,
       stage: nextStage,
       percent: terminal === 'found' ? 100 : nextPercent,
+      errorMessage:
+        terminal === 'error'
+          ? payload.log ?? state.errorMessage ?? null
+          : null,
       debugLog: nextLogs,
     })
     stopSubscription(trackId)
@@ -118,6 +130,8 @@ function applyPayload(
 function startPolling(trackId: number): void {
   if (pollTimers.has(trackId)) return
 
+  let failCount = 0
+
   const timer = setInterval(async () => {
     const state = tasks.get(trackId)
     if (!state) {
@@ -130,6 +144,7 @@ function startPolling(trackId: number): void {
         state.trackId,
         state.taskId,
       )
+      failCount = 0
       applyPayload(trackId, {
         status: resp.status,
         stage: resp.stage ?? null,
@@ -137,8 +152,18 @@ function startPolling(trackId: number): void {
         logs: resp.logs ?? [],
       })
     } catch (err) {
-      stopSubscription(trackId)
+      failCount += 1
       const msg = err instanceof Error ? err.message : 'polling failed'
+      // FB-14: keep polling through transient failures; only surface an
+      // error after several consecutive misses.
+      if (failCount < MAX_POLL_FAILURES) {
+        appendClientLog(
+          trackId,
+          `[client] status poll failed (${failCount}/${MAX_POLL_FAILURES}), retrying: ${msg}`,
+        )
+        return
+      }
+      stopSubscription(trackId)
       const current = tasks.get(trackId)
       if (current) {
         tasks.set(trackId, {
@@ -146,6 +171,7 @@ function startPolling(trackId: number): void {
           generating: false,
           genStatus: 'error',
           stage: null,
+          errorMessage: msg,
           debugLog: [...current.debugLog, `[client] ERROR: ${msg}`],
         })
         notify()
@@ -173,8 +199,12 @@ function startSubscription(trackId: number): void {
   try {
     const url = api.lyricsAutoEventsUrl(state.trackId, state.taskId)
     const es = new EventSource(url, { withCredentials: true })
+    let sseErrorCount = 0
 
     const onMessage = (ev: MessageEvent) => {
+      // A delivered event means the stream is healthy again — reset the grace
+      // counter so a later, unrelated blip gets the full allowance.
+      sseErrorCount = 0
       try {
         const data = JSON.parse(ev.data as string)
         applyPayload(trackId, {
@@ -189,15 +219,36 @@ function startSubscription(trackId: number): void {
     es.addEventListener('snapshot', onMessage)
     es.addEventListener('progress', onMessage)
     es.addEventListener('error', () => {
+      const cur = tasks.get(trackId)
+      // Already terminal / cleared — just tear the socket down.
+      if (!cur?.generating) {
+        try {
+          es.close()
+        } catch {}
+        eventSources.delete(trackId)
+        return
+      }
+      // FB-14: EventSource auto-reconnects while readyState === CONNECTING.
+      // Let it retry a few times before dropping to polling, so a single
+      // transient disconnect doesn't prematurely change transport (or fail
+      // the task once polling exhausts its own grace).
+      sseErrorCount += 1
+      if (
+        es.readyState !== EventSource.CLOSED &&
+        sseErrorCount < MAX_SSE_ERRORS
+      ) {
+        appendClientLog(
+          trackId,
+          `[client] SSE reconnecting (${sseErrorCount}/${MAX_SSE_ERRORS})`,
+        )
+        return
+      }
       try {
         es.close()
       } catch {}
       eventSources.delete(trackId)
-      const cur = tasks.get(trackId)
-      if (cur?.generating) {
-        appendClientLog(trackId, '[client] SSE disconnected, polling')
-        startPolling(trackId)
-      }
+      appendClientLog(trackId, '[client] SSE disconnected, polling')
+      startPolling(trackId)
     })
 
     eventSources.set(trackId, es)
@@ -234,6 +285,7 @@ async function startGeneration(
     genStatus: null,
     percent: 0,
     startedAt: now,
+    errorMessage: null,
     debugLog: [
       `[client] started (${modeLabel}) track_id=${trackId}`,
       `[client] progress_id=${task_id}`,
@@ -277,6 +329,7 @@ function resumeTask(
     genStatus: null,
     percent: 0,
     startedAt: Date.now(),
+    errorMessage: null,
     debugLog: [
       '[client] redefine accepted by backend',
       `[client] request: with_sync=${withSync} | bypass_cache=${bypassCache}`,
@@ -390,6 +443,7 @@ export function useLyricsTask(trackId: number) {
     generating: state?.generating ?? false,
     stage: state?.stage ?? null,
     genStatus: state?.genStatus ?? null,
+    errorMessage: state?.errorMessage ?? null,
     percent: state?.percent ?? null,
     taskId: state?.taskId ?? null,
     startedAt: state?.startedAt ?? 0,

@@ -16,13 +16,17 @@ import {
 import {
   usePlayerActions,
   usePlayerMeta,
-  usePlayerState,
+  usePlayerPlayback,
 } from '@/store/PlayerContext'
 import { getInternalUserId, getIsAdmin } from '@/lib/telegram'
 import { useLikes } from '@/store/LikesContext'
 import { Icon } from '@/components/Icon/Icon'
 import { MotionPress } from '@/components/ui/MotionPress'
 import { MorphIcon } from '@/components/ui/MorphIcon'
+import {
+  PlaybackSeek,
+  PlaybackTime,
+} from '@/components/ui/PlaybackProgress'
 import { AmbientStage } from '@/components/ui/AmbientStage'
 import { KenBurnsCover } from '@/components/ui/KenBurnsCover'
 import { SharedCover } from '@/components/ui/SharedCover'
@@ -80,10 +84,9 @@ export function NowPlayingView() {
   const reduce = useReducedMotion()
   const { track, shuffleOn, repeatMode, queue } = usePlayerMeta()
   const {
-    currentTime,
     duration,
     isPlaying,
-  } = usePlayerState()
+  } = usePlayerPlayback()
   const {
     togglePlay,
     seek,
@@ -144,12 +147,6 @@ export function NowPlayingView() {
     ? coverProxySrcSet(track.cover_key)
     : undefined
 
-  const pct =
-    Number.isFinite(duration) &&
-    Number.isFinite(currentTime) &&
-    duration > 0
-      ? Math.max(0, Math.min(100, (currentTime / duration) * 100))
-      : 0
   const trackBpm = (track as unknown as { bpm?: number }).bpm
   const tabBpm =
     typeof trackBpm === 'number' ? trackBpm : 120
@@ -525,28 +522,19 @@ export function NowPlayingView() {
         </div>
 
         <div className="rp-now__seek">
-          <div className="rp-now__seek-bar">
-            <div
-              className="rp-now__seek-fill"
-              style={{ width: `${pct}%` }}
-            />
-            <input
-              className="rp-now__seek-input"
-              type="range"
-              min={0}
-              max={100}
-              step={0.1}
-              value={pct}
-              aria-label={t(
-                'redesign.player.seekAria',
-              )}
-              onChange={(e) =>
-                seek(Number(e.currentTarget.value))
-              }
-            />
-          </div>
+          <PlaybackSeek
+            trackId={track.id}
+            duration={duration}
+            isPlaying={isPlaying}
+            getPreciseTime={getPreciseTime}
+            onSeek={seek}
+            wrapClassName="rp-now__seek-bar"
+            fillClassName="rp-now__seek-fill"
+            inputClassName="rp-now__seek-input"
+            ariaLabel={t('redesign.player.seekAria')}
+          />
           <div className="rp-now__seek-times">
-            <span>{fmt(currentTime)}</span>
+            <PlaybackTime />
             <span>{fmt(duration)}</span>
           </div>
         </div>

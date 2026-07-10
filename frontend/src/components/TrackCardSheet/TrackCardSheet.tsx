@@ -23,13 +23,17 @@ import { useLikes } from '@/store/LikesContext'
 import {
   usePlayerActions,
   usePlayerMeta,
-  usePlayerState,
+  usePlayerPlayback,
 } from '@/store/PlayerContext'
 import { CoverImage } from '@/components/CoverImage/CoverImage'
 import { Icon } from '@/components/Icon/Icon'
 import { TrackInfoContent } from '@/components/TrackInfoContent/TrackInfoContent'
 import { Waveform } from '@/components/Waveform/Waveform'
-import { WaveformBar } from '@/components/Waveform/WaveformBar'
+import {
+  PlaybackSeek,
+  PlaybackTime,
+  PlaybackWaveform,
+} from '@/components/ui/PlaybackProgress'
 import { useExitTransition } from '@/hooks/useExitTransition'
 import { showIsland } from '@/lib/island'
 import {
@@ -69,7 +73,6 @@ import { buildTrackCardSummaryLine } from '@/lib/trackCardFormat'
 import { useDesktopFinePointer } from '@/hooks/useDesktopFinePointer'
 import { useSwipeX } from '@/hooks/useSwipeX'
 import { useTrackSlidePresence } from '@/hooks/useTrackSlidePresence'
-import { isPerfLiteActive } from '@/lib/glassPerformance'
 import {
   coverProxySrcSet as buildCoverProxySrcSet,
   coverProxyUrl as buildCoverProxyUrl,
@@ -176,11 +179,10 @@ export function TrackCardSheet({
 }: Props) {
   const navigate = useNavigate()
   const {
-    currentTime,
     duration,
     isPlaying,
     isPlaybackLoading,
-  } = usePlayerState()
+  } = usePlayerPlayback()
   const {
     track,
     isCardOpen,
@@ -253,7 +255,6 @@ export function TrackCardSheet({
     useState<Track[]>([])
   usePrefetchTracks(similarTracks, 'similar_in_card')
   const [loading, setLoading] = useState(false)
-  const [smoothCurrentTime, setSmoothCurrentTime] = useState(0)
   const [trackInfo, setTrackInfo] =
     useState<TrackInfoResponse | null>(null)
   const [trackInfoRefreshing, setTrackInfoRefreshing] =
@@ -1495,36 +1496,7 @@ export function TrackCardSheet({
     if (fromTrack && fromTrack.length > 0) return fromTrack
     return card?.playback_variants ?? []
   }, [track, card])
-  const pct = duration
-    ? (smoothCurrentTime / duration) * 100
-    : 0
-  const displayPct = Math.max(0, Math.min(100, pct))
   const playButtonLoading = isPlaybackLoading
-
-  useEffect(() => {
-    setSmoothCurrentTime(currentTime)
-  }, [currentTime, track?.id])
-
-  useEffect(() => {
-    if (!isPlaying) {
-      setSmoothCurrentTime(currentTime)
-      return
-    }
-    let rafId = 0
-    let lastPaint = 0
-    const frameMs = isPerfLiteActive() ? 1000 / 30 : 1000 / 60
-    const frame = (now: number) => {
-      if (now - lastPaint >= frameMs) {
-        lastPaint = now
-        setSmoothCurrentTime(getPreciseTime())
-      }
-      rafId = window.requestAnimationFrame(frame)
-    }
-    rafId = window.requestAnimationFrame(frame)
-    return () => {
-      window.cancelAnimationFrame(rafId)
-    }
-  }, [currentTime, getPreciseTime, isPlaying, track?.id])
 
   const [swipeDx, setSwipeDx] = useState(0)
   const swipeReleasingRef = useRef(false)
@@ -2160,30 +2132,31 @@ export function TrackCardSheet({
         <div className="tcs-player-controls">
           <div className="tcs-seek-wrap">
             {track.waveform_data && track.waveform_data.length > 0 ? (
-              <WaveformBar
-                data={track.waveform_data}
-                progress={displayPct}
+              <PlaybackWaveform
+                trackId={track.id}
+                duration={duration}
+                isPlaying={isPlaying}
+                getPreciseTime={getPreciseTime}
                 onSeek={seek}
+                data={track.waveform_data}
                 height={40}
                 className="tcs-waveform-bar"
                 durationSec={duration}
               />
             ) : (
-            <input
-              type="range"
-              className="tcs-seek"
-              min={0}
-              max={100}
-              step={0.1}
-              value={displayPct}
-              onChange={(e) =>
-                seek(Number(e.target.value))
-              }
-              style={{ ['--progress' as string]: `${displayPct}%` }}
-            />
+              <PlaybackSeek
+                trackId={track.id}
+                duration={duration}
+                isPlaying={isPlaying}
+                getPreciseTime={getPreciseTime}
+                onSeek={seek}
+                inputClassName="tcs-seek"
+                ariaLabel={t('redesign.player.seekAria')}
+                writeProgressVar
+              />
             )}
             <div className="tcs-time">
-              <span>{fmt(smoothCurrentTime)}</span>
+              <PlaybackTime />
               <span>{fmt(duration)}</span>
             </div>
           </div>

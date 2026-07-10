@@ -10,11 +10,15 @@ import { api } from '@/lib/api'
 import { getIsAdmin } from '@/lib/telegram'
 import {
   usePlayerActions,
-  usePlayerState,
+  usePlayerPlayback,
 } from '@/store/PlayerContext'
 import { useLyricsTask } from '@/store/lyricsTaskStore'
 import { Icon } from '@/components/Icon/Icon'
 import { MotionPress } from '@/components/ui/MotionPress'
+import {
+  PlaybackLeadIn,
+  PausedTimeSync,
+} from '@/components/ui/PlaybackProgress'
 import { m, useReducedMotion } from '@/lib/motion'
 import {
   computeLineProgress,
@@ -43,7 +47,7 @@ export function LyricsPanel({
   catalogType,
 }: Props) {
   const { t } = useTranslation()
-  const { currentTime, duration, isPlaying } = usePlayerState()
+  const { duration, isPlaying } = usePlayerPlayback()
   const { seek, getPreciseTime } = usePlayerActions()
   const lyricsReduce = useReducedMotion()
   const [lyrics, setLyrics] =
@@ -106,6 +110,7 @@ export function LyricsPanel({
     generating,
     stage,
     genStatus,
+    errorMessage,
     taskId: activeTaskId,
     startedAt,
     debugLog,
@@ -137,32 +142,40 @@ export function LyricsPanel({
   }, [trackId])
 
   useEffect(() => {
-    if (genStatus === 'found' && !lyrics) {
-      if (editing) return
-      console.debug('[LyricsPanel] fetching lyrics after detection', { trackId })
-      api
-        .getLyrics(trackId)
-        .then((updated) => {
-          console.debug('[LyricsPanel] lyrics loaded', { chars: updated.plain_text?.length })
-          appendDebugLog(
-            `[client] lyrics loaded chars=${updated.plain_text?.length ?? 0} synced=${updated.synced_lines?.length ?? 0}`,
-          )
-          setLyrics(updated)
-        })
-        .catch((err) => {
-          console.error(
-            '[LyricsPanel] Failed to load lyrics after detection:',
-            err,
-          )
-          const msg =
-            err instanceof Error
-              ? err.message
-              : 'load failed'
-          appendDebugLog(
-            `[client] ERROR loading lyrics after detection: ${msg}`,
-          )
-          clearTask()
-        })
+    if (genStatus !== 'found' || lyrics) return
+    if (editing) return
+    // FB-8: guard against a stale response for a previous track landing after
+    // a quick track switch. The cleanup flips ``cancelled`` on trackId change
+    // so a late ``getLyrics`` resolve for the old track is ignored.
+    let cancelled = false
+    console.debug('[LyricsPanel] fetching lyrics after detection', { trackId })
+    api
+      .getLyrics(trackId)
+      .then((updated) => {
+        if (cancelled) return
+        console.debug('[LyricsPanel] lyrics loaded', { chars: updated.plain_text?.length })
+        appendDebugLog(
+          `[client] lyrics loaded chars=${updated.plain_text?.length ?? 0} synced=${updated.synced_lines?.length ?? 0}`,
+        )
+        setLyrics(updated)
+      })
+      .catch((err) => {
+        if (cancelled) return
+        console.error(
+          '[LyricsPanel] Failed to load lyrics after detection:',
+          err,
+        )
+        const msg =
+          err instanceof Error
+            ? err.message
+            : 'load failed'
+        appendDebugLog(
+          `[client] ERROR loading lyrics after detection: ${msg}`,
+        )
+        clearTask()
+      })
+    return () => {
+      cancelled = true
     }
   }, [
     appendDebugLog,
@@ -176,17 +189,27 @@ export function LyricsPanel({
   useEffect(() => {
     if (!hasLyrics) return
     if (editing) return
+    // FB-8: ignore a stale response for a previous track after a quick switch.
+    let cancelled = false
     setLoading(true)
     api
       .getLyrics(trackId)
-      .then(setLyrics)
+      .then((res) => {
+        if (!cancelled) setLyrics(res)
+      })
       .catch(() => {
         // 404/ошибка загрузки не должна ломать UI —
         // считаем, что текста нет и показываем выбор/редактор.
+        if (cancelled) return
         setLyrics(null)
         setError(null)
       })
-      .finally(() => setLoading(false))
+      .finally(() => {
+        if (!cancelled) setLoading(false)
+      })
+    return () => {
+      cancelled = true
+    }
   }, [trackId, hasLyrics, t, editing])
 
   const hasWordTimes = !!lyrics?.synced_lines?.some(
@@ -205,17 +228,6 @@ export function LyricsPanel({
     selectedTranslation?.translated_text ??
     lyrics?.plain_text ??
     ''
-  const firstLineLeadInMs =
-    showSync &&
-    lyrics?.synced_lines?.length &&
-    activeIdx < 0
-      ? Math.max(
-          0,
-          lyrics.synced_lines[0].time_ms -
-            (currentTime * 1000 + offsetMs),
-        )
-      : null
-
   const tickLyrics = useCallback(
     (ms: number) => {
       const lines = lyrics?.synced_lines
@@ -268,6 +280,13 @@ export function LyricsPanel({
     [lyrics, showSync, karaokeActive, duration, offsetMs],
   )
 
+  const handlePausedTick = useCallback(
+    (sec: number) => {
+      tickLyrics(sec * 1000)
+    },
+    [tickLyrics],
+  )
+
   useEffect(() => {
     const lines = lyrics?.synced_lines
     if (!showSync || !lines || lines.length === 0) {
@@ -297,11 +316,6 @@ export function LyricsPanel({
     tickLyrics,
     getPreciseTime,
   ])
-
-  useEffect(() => {
-    if (isPlaying) return
-    tickLyrics(currentTime * 1000)
-  }, [isPlaying, currentTime, tickLyrics])
 
   useEffect(() => {
     const container = contentRef.current
@@ -700,20 +714,56 @@ export function LyricsPanel({
     const wasNotFound =
       genStatus === 'not_found' ||
       genStatus === 'error'
+    // FB-5: 'error' and 'not_found' used to render the same message. Split
+    // them: 'not_found' is a neutral "no lyrics" state, 'error' is a real
+    // failure that shows the error text and offers a retry.
+    const isError = genStatus === 'error'
+
+    const handleRetry = () => {
+      clearTask()
+      if (lastRequestMeta?.mode === 'redefine') {
+        handleRedefine(
+          lastRequestMeta.withSync,
+          lastRequestMeta.bypassCache,
+        )
+      } else {
+        handleGenerate(
+          lastRequestMeta?.withSync ?? false,
+          lastRequestMeta?.debugTier ?? undefined,
+        )
+      }
+    }
 
     return (
       <div className="lyrics-panel">
         <div className="lyrics-empty-state">
-          {(wasNotFound || error) && (
+          {isError ? (
+            <>
+              <p className="lyrics-empty-msg">
+                {errorMessage ||
+                  providerDiagnostic ||
+                  t(
+                    'lyrics.statusError',
+                    'Не удалось определить текст. Попробуйте ещё раз.',
+                  )}
+              </p>
+              <button
+                type="button"
+                className="btn-secondary"
+                onClick={handleRetry}
+              >
+                {t('lyrics.retry', 'Повторить')}
+              </button>
+            </>
+          ) : genStatus === 'not_found' || error ? (
             <p className="lyrics-empty-msg">
               {error ||
-                providerDiagnostic ||
                 t(
-                  'lyrics.notFound',
-                  'Текст не определён',
+                  'lyrics.statusNotFound',
+                  'Текст не найден',
                 )}
             </p>
-          )}
+          ) : null}
 
           <div className="lyrics-choice-grid">
             {lyricsChoiceStep === 'root' ? (
@@ -1148,22 +1198,22 @@ export function LyricsPanel({
       </div>
 
       <div ref={contentRef} className="lyrics-content">
-        {firstLineLeadInMs !== null && firstLineLeadInMs > 250 && (
-          <button
-            type="button"
-            className="lyrics-lead-in"
-            onClick={() =>
+        {showSync && hasSyncData && activeIdx < 0 ? (
+          <PlaybackLeadIn
+            firstLineTimeMs={lyrics.synced_lines![0].time_ms}
+            offsetMs={offsetMs}
+            onSeek={() =>
               handleLineClick(lyrics.synced_lines![0].time_ms)
             }
-          >
-            <span className="lyrics-lead-in__label">
-              {t('lyrics.startsIn', 'Starts in')}
-            </span>
-            <span className="lyrics-lead-in__time">
-              {(firstLineLeadInMs / 1000).toFixed(1)}
-            </span>
-          </button>
-        )}
+            wrapClassName="lyrics-lead-in"
+            labelClassName="lyrics-lead-in__label"
+            timeClassName="lyrics-lead-in__time"
+            label={t('lyrics.startsIn', 'Starts in')}
+          />
+        ) : null}
+        {!isPlaying && showSync && hasSyncData ? (
+          <PausedTimeSync onTick={handlePausedTick} />
+        ) : null}
         <AnimatePresence mode="wait" initial={false}>
           {showSync && hasSyncData ? (
             <m.div
