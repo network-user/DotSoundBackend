@@ -4,6 +4,7 @@ from dotsound_private_core.services.moderation import (
 )
 from fastapi import HTTPException, status
 from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.complaint import Complaint
@@ -38,15 +39,26 @@ class ComplaintService:
         if await self._repo.exists(user.id, track_id):
             raise ValueError("already_reported")
 
-        complaint = await self._repo.create(
-            track_id=track_id,
-            user_id=user.id,
-            reason=reason,
-            reason_type=reason_type,
-            contact_email=contact_email,
-            rightsholder_name=rightsholder_name,
-            proof_url=proof_url,
-        )
+        try:
+            complaint = await self._repo.create(
+                track_id=track_id,
+                user_id=user.id,
+                reason=reason,
+                reason_type=reason_type,
+                contact_email=contact_email,
+                rightsholder_name=rightsholder_name,
+                proof_url=proof_url,
+            )
+        except IntegrityError:
+            # Lost a race against a concurrent submit for the same
+            # (user, track) pair: the exists() check above and this
+            # insert are not atomic, so two in-flight requests can
+            # both pass the check. The uq_complaints_reported_by_
+            # user_track index (0122) catches what the precheck
+            # couldn't; fold this into the same idempotent outcome
+            # as the precheck instead of surfacing a 500.
+            await self._session.rollback()
+            raise ValueError("already_reported") from None
 
         # Lock the track row to prevent concurrent complaint races
         result = await self._session.execute(

@@ -1,6 +1,6 @@
 from typing import TYPE_CHECKING
 
-from sqlalchemy import BigInteger, Boolean, ForeignKey, String, Text
+from sqlalchemy import BigInteger, Boolean, ForeignKey, Index, String, Text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.models.base import Base, TimestampMixin
@@ -12,6 +12,14 @@ if TYPE_CHECKING:
 
 class Complaint(Base, TimestampMixin):
     __tablename__ = "complaints"
+    __table_args__ = (
+        Index(
+            "uq_complaints_reported_by_user_track",
+            "reported_by_user_id",
+            "track_id",
+            unique=True,
+        ),
+    )
 
     id: Mapped[int] = mapped_column(primary_key=True)
     track_id: Mapped[int] = mapped_column(

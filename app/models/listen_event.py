@@ -28,6 +28,7 @@ class ListenEvent(Base):
             "track_id",
             "created_at",
         ),
+        Index("ix_listen_events_created_at", "created_at"),
     )
 
     id: Mapped[int] = mapped_column(

@@ -72,6 +72,23 @@ class Track(Base, TimestampMixin):
             ),
             sqlite_where=text("playback_suppressed_until IS NOT NULL"),
         ),
+        Index(
+            "ix_tracks_active_public_play_count",
+            "play_count",
+            postgresql_where=text("is_active AND is_public"),
+            sqlite_where=text("is_active AND is_public"),
+        ),
+        Index(
+            "ix_tracks_active_public_created_at",
+            "created_at",
+            postgresql_where=text("is_active AND is_public"),
+            sqlite_where=text("is_active AND is_public"),
+        ),
+        Index(
+            "ix_tracks_uploaded_by_created",
+            "uploaded_by_id",
+            "created_at",
+        ),
     )
 
     id: Mapped[int] = mapped_column(primary_key=True)

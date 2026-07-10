@@ -59,6 +59,7 @@ class Playlist(Base, TimestampMixin):
 
 class PlaylistTrack(Base):
     __tablename__ = "playlist_tracks"
+    __table_args__ = (Index("ix_playlist_tracks_track_id", "track_id"),)
 
     playlist_id: Mapped[int] = mapped_column(
         ForeignKey("playlists.id", ondelete="CASCADE"),
