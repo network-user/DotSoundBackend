@@ -1,4 +1,9 @@
-import { useEffect, useRef, useState } from 'react'
+import {
+  useEffect,
+  useRef,
+  useState,
+  type CSSProperties,
+} from 'react'
 import { useTranslation } from 'react-i18next'
 import { useMatchMedia } from '@/hooks/useMatchMedia'
 
@@ -119,7 +124,11 @@ export function ListeningDayChart({ buckets }: ListeningDayChartProps) {
               >
                 <span
                   className="my-top-hours__bar"
-                  style={{ height: `${Math.max(2, pct)}%` }}
+                  style={
+                    {
+                      '--bar-scale': `${Math.max(2, pct) / 100}`,
+                    } as CSSProperties
+                  }
                 />
               </button>
             </div>
