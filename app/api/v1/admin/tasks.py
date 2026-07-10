@@ -172,8 +172,16 @@ async def list_queues(
     _admin: User = Depends(require_capability("tasks.manage")),
 ) -> dict[str, Any]:
     redis = get_redis_client()
+    keys: list[Any] = []
+    seen: set[Any] = set()
     try:
-        keys = [key async for key in redis.scan_iter(match="taskiq:*")]
+        async for key in redis.scan_iter(match="taskiq:*"):
+            # scan_iter can yield the same key twice across a rehash;
+            # dedup so a queue isn't listed (and llen'd) more than once.
+            if key in seen:
+                continue
+            seen.add(key)
+            keys.append(key)
     except Exception:
         keys = []
     queues: list[dict[str, Any]] = []
@@ -841,7 +849,15 @@ async def tasks_overview(
     redis = get_redis_client()
     queues: list[dict[str, Any]] = []
     try:
-        keys = [key async for key in redis.scan_iter(match="taskiq:*")]
+        keys: list[Any] = []
+        seen: set[Any] = set()
+        async for key in redis.scan_iter(match="taskiq:*"):
+            # scan_iter can yield the same key twice across a rehash;
+            # dedup so a queue isn't counted (and listed) more than once.
+            if key in seen:
+                continue
+            seen.add(key)
+            keys.append(key)
         if keys:
             pipe = redis.pipeline(transaction=False)
             for key in keys:

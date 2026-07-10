@@ -35,7 +35,16 @@ async def _drain_batch() -> int:
     if not es_available():
         return 0
     r = get_redis_client()
-    raw = await r.srandmember(_DIRTY_KEY, 200)  # type: ignore[call-arg]
+    # Atomically claim up to 200 dirty ids with SPOP: it removes the
+    # members as it returns them, so a concurrent re-mark (a SADD of the
+    # same id while we are mid-index, because its play_count changed
+    # again) survives instead of being clobbered by a trailing SREM of
+    # the whole snapshot. SRANDMEMBER + SREM had exactly that lost-update
+    # window. The trade-off is that the claimed ids are already gone from
+    # the set, so on failure we SADD them back (below) to keep the old
+    # crash-safety guarantee. Re-indexing an up-to-date track on the
+    # retry is harmless, so repeating is safe.
+    raw = await r.spop(_DIRTY_KEY, 200)  # type: ignore[misc]
     if not raw:
         return 0
     if isinstance(raw, str | bytes):
@@ -50,13 +59,10 @@ async def _drain_batch() -> int:
             tid_list.append(int(s))
         except (TypeError, ValueError):
             continue
-    # Index first, drop dirty-set membership only after a successful
-    # commit. If the process crashes mid-batch the ids simply stay in
-    # the set and get picked up (and re-indexed) on the next drain
-    # pass instead of silently losing the signal — re-indexing an
-    # already up-to-date track is harmless, so this is safe to repeat.
+    if not tid_list:
+        return 0
     n = 0
-    if tid_list:
+    try:
         async with AsyncSessionLocal() as session:
             result = await session.execute(
                 select(Track).where(Track.id.in_(tid_list))
@@ -68,10 +74,14 @@ async def _drain_batch() -> int:
                     await index_track_document(session, t)
                     n += 1
             await session.commit()
-    try:
-        await r.srem(_DIRTY_KEY, *ids_str)
-    except Exception as exc:  # noqa: BLE001
-        logger.warning("es_drain_srem_failed", error=str(exc))
+    except Exception:  # noqa: BLE001
+        # The ids were already popped out of the set; put them back so
+        # the signal is retried on the next pass instead of being lost
+        # (the previous code only dropped membership after a successful
+        # commit, so a failure left the ids in place; preserve that).
+        with contextlib.suppress(Exception):
+            await r.sadd(_DIRTY_KEY, *ids_str)  # type: ignore[misc]
+        raise
     if n:
         logger.debug("es_playcount_drain", updated=n)
     return n

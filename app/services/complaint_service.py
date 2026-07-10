@@ -50,15 +50,22 @@ class ComplaintService:
                 proof_url=proof_url,
             )
         except IntegrityError:
-            # Lost a race against a concurrent submit for the same
-            # (user, track) pair: the exists() check above and this
-            # insert are not atomic, so two in-flight requests can
-            # both pass the check. The uq_complaints_reported_by_
-            # user_track index (0122) catches what the precheck
-            # couldn't; fold this into the same idempotent outcome
-            # as the precheck instead of surfacing a 500.
+            # An IntegrityError here can mean two very different things:
+            # (a) we lost a race against a concurrent submit for the
+            # same (user, track) pair -- the exists() check above and
+            # this insert are not atomic, so two in-flight requests can
+            # both pass the check, and the uq_complaints_reported_by_
+            # user_track index (0122) catches what the precheck could
+            # not; or (b) a genuinely different violation, e.g. the FK
+            # to a track deleted between the precheck and the insert.
+            # Only (a) is the idempotent "already_reported" outcome;
+            # (b) must surface, not be masked as a duplicate. Re-run
+            # the same existence probe after rollback to tell them
+            # apart.
             await self._session.rollback()
-            raise ValueError("already_reported") from None
+            if await self._repo.exists(user.id, track_id):
+                raise ValueError("already_reported") from None
+            raise
 
         # Lock the track row to prevent concurrent complaint races
         result = await self._session.execute(
