@@ -4,7 +4,7 @@ import asyncio
 import contextlib
 import json
 import time
-from collections.abc import AsyncIterator
+from collections.abc import AsyncGenerator, AsyncIterator
 from datetime import datetime
 from email.utils import formatdate
 from typing import Any
@@ -338,7 +338,7 @@ def _proxy_expected_body_bytes(
 
 
 async def _asserted_body_stream(
-    source: AsyncIterator[bytes],
+    source: AsyncGenerator[bytes, None],
     *,
     expected_bytes: int | None,
     event_short: str,
@@ -359,6 +359,14 @@ async def _asserted_body_stream(
             raise RuntimeError(event_short)
     except asyncio.CancelledError:
         raise
+    finally:
+        # Deterministically release the upstream S3 connection when the
+        # client disconnects mid-stream (GeneratorExit) or the range
+        # short-read raises — mirrors the body_iter finally in
+        # ``_http_proxy_range_get``. Without this the underlying reader
+        # would only close on GC, holding the socket non-deterministically.
+        with contextlib.suppress(BaseException):
+            await source.aclose()
 
 
 async def _http_proxy_range_get(
@@ -776,6 +784,11 @@ async def _stream_s3_audio_object(
         )
     except ClientError as exc:
         code = exc.response["Error"]["Code"]
+        if code == "InvalidRange":
+            raise HTTPException(
+                status_code=status.HTTP_416_REQUESTED_RANGE_NOT_SATISFIABLE,
+                detail="Invalid audio range",
+            ) from exc
         if code == "NoSuchKey":
             track_id_raw = structlog.contextvars.get_contextvars().get(
                 "track_id"
@@ -1077,15 +1090,12 @@ async def play_track(
             detail="Playback temporarily unavailable for this track",
         )
     if current_user is not None:
-        fresh = await repo.get_by_id(track_id)
-        if not fresh:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail="Track not found",
-            )
+        # Reuse the row already loaded above: nothing between the two
+        # reads mutates the track (access + suppression checks are pure),
+        # and the signed-in branch does not bump the count.
         return PlayResponse(
             track_id=track_id,
-            play_count=fresh.play_count or 0,
+            play_count=track.play_count or 0,
         )
     client_ip = request.client.host if request.client else ""
     guest_svc = PublicPlayCountService(session)

@@ -394,6 +394,7 @@ class UgcPlaybackNormalizeService:
         urgent: bool = False,
         bypass_cooldown: bool = False,
         feature_version_override: str | None = None,
+        defer_enqueue: bool = False,
     ) -> UgcPlaybackNormalizeScheduleResult:
         if not settings.ugc_playback_normalize_on_playback_enabled:
             return UgcPlaybackNormalizeScheduleResult(
@@ -410,6 +411,16 @@ class UgcPlaybackNormalizeService:
                 action="unrecoverable",
                 detail="source previously marked missing",
             )
+        # Cheap gates first: the Redis cooldown runs BEFORE the S3 HEAD so
+        # the hot /audio path pays a storage round-trip only on the first
+        # request inside the cooldown window, not on every playback.
+        if not bypass_cooldown and not await _acquire_schedule_cooldown(
+            track.id
+        ):
+            return UgcPlaybackNormalizeScheduleResult(
+                action="cooldown",
+                detail="normalization recently scheduled",
+            )
         file_key = str(track.file_key or "")
         if not await _source_object_exists(file_key):
             await _mark_unrecoverable(
@@ -419,13 +430,6 @@ class UgcPlaybackNormalizeService:
             return UgcPlaybackNormalizeScheduleResult(
                 action="unrecoverable",
                 detail="audio object missing in storage",
-            )
-        if not bypass_cooldown and not await _acquire_schedule_cooldown(
-            track.id
-        ):
-            return UgcPlaybackNormalizeScheduleResult(
-                action="cooldown",
-                detail="normalization recently scheduled",
             )
         base_fv = (
             _URGENT_FEATURE_VERSION if urgent else _FEATURE_VERSION
@@ -452,27 +456,41 @@ class UgcPlaybackNormalizeService:
             and feature_version_override is None
         ):
             feature_version = _force_retry_feature_version(base_fv)
-        candidate = UgcPlaybackNormalizeCandidate(
-            track_id=track.id,
-            title=str(track.title or ""),
-            artist=track.artist,
-            file_key=file_key,
-            hls_manifest_key=track.hls_manifest_key,
-            source_sha256=track.source_sha256,
-            blob_content_sha256=None,
-        )
-        if track.blob_id is not None:
-            blob = await self._session.get(AudioBlob, track.blob_id)
-            if blob is not None:
-                candidate = UgcPlaybackNormalizeCandidate(
-                    track_id=candidate.track_id,
-                    title=candidate.title,
-                    artist=candidate.artist,
-                    file_key=candidate.file_key,
-                    hls_manifest_key=candidate.hls_manifest_key,
-                    source_sha256=candidate.source_sha256,
-                    blob_content_sha256=blob.content_sha256,
+        if defer_enqueue:
+            # Hot request path (playback hook): the RAM-heavy source copy
+            # (download whole object + sha256 + re-upload) must not run
+            # inline in the user's request. The cheap gates above already
+            # decided we should schedule; hand the copy to a worker.
+            try:
+                await enqueue_ugc_playback_normalize_source_task.kiq(
+                    track_id=track.id,
+                    urgent=urgent,
+                    feature_version=feature_version,
                 )
+            except Exception as exc:  # noqa: BLE001
+                logger.warning(
+                    "ugc_normalize_schedule_failed",
+                    track_id=track.id,
+                    trigger=trigger,
+                    error=str(exc),
+                )
+                return UgcPlaybackNormalizeScheduleResult(
+                    action="failed",
+                    detail=str(exc),
+                )
+            logger.info(
+                "ugc_normalize_scheduled",
+                track_id=track.id,
+                trigger=trigger,
+                urgent=urgent,
+                feature_version=feature_version,
+                deferred=True,
+            )
+            return UgcPlaybackNormalizeScheduleResult(
+                action="enqueued",
+                detail=trigger,
+            )
+        candidate = await self._build_candidate(track, file_key=file_key)
         try:
             item = await self._enqueue_candidate(
                 candidate,
@@ -622,6 +640,28 @@ class UgcPlaybackNormalizeService:
             items=items,
         )
 
+    async def _build_candidate(
+        self,
+        track: Track,
+        *,
+        file_key: str | None = None,
+    ) -> UgcPlaybackNormalizeCandidate:
+        fk = file_key if file_key is not None else str(track.file_key or "")
+        blob_content_sha256: str | None = None
+        if track.blob_id is not None:
+            blob = await self._session.get(AudioBlob, track.blob_id)
+            if blob is not None:
+                blob_content_sha256 = blob.content_sha256
+        return UgcPlaybackNormalizeCandidate(
+            track_id=track.id,
+            title=str(track.title or ""),
+            artist=track.artist,
+            file_key=fk,
+            hls_manifest_key=track.hls_manifest_key,
+            source_sha256=track.source_sha256,
+            blob_content_sha256=blob_content_sha256,
+        )
+
     async def _enqueue_candidate(
         self,
         candidate: UgcPlaybackNormalizeCandidate,
@@ -679,6 +719,7 @@ async def maybe_schedule_ugc_playback_normalize(
             track,
             trigger=trigger,
             urgent=True,
+            defer_enqueue=True,
         )
     except Exception as exc:  # noqa: BLE001
         logger.warning(
@@ -686,6 +727,54 @@ async def maybe_schedule_ugc_playback_normalize(
             track_id=track.id,
             trigger=trigger,
             error=str(exc),
+        )
+
+
+@broker.task
+async def enqueue_ugc_playback_normalize_source_task(
+    track_id: int,
+    urgent: bool = False,
+    feature_version: str = _FEATURE_VERSION,
+) -> None:
+    """Copy the source object and enqueue transcoding off the request path.
+
+    The playback hook runs only the cheap gates (cooldown, status,
+    storage HEAD, compute-job dedupe) inline and defers this RAM-heavy
+    download + re-upload to a worker, so a user's ``/audio`` request
+    never blocks on pulling the whole source blob through app memory.
+    Uses its own session/clients: the request-scoped session that
+    scheduled it is already gone by the time this runs.
+    """
+    async with AsyncSessionLocal() as session:
+        track = await session.get(Track, track_id)
+        if track is None:
+            logger.info(
+                "ugc_normalize_source_task_track_missing",
+                track_id=track_id,
+            )
+            return
+        svc = UgcPlaybackNormalizeService(session)
+        candidate = await svc._build_candidate(track)
+        try:
+            await svc._enqueue_candidate(
+                candidate,
+                urgent=urgent,
+                feature_version=feature_version,
+            )
+        except Exception as exc:  # noqa: BLE001
+            logger.warning(
+                "ugc_normalize_source_task_failed",
+                track_id=track_id,
+                feature_version=feature_version,
+                error=str(exc),
+            )
+            return
+        await session.commit()
+        logger.info(
+            "ugc_normalize_source_task_enqueued",
+            track_id=track_id,
+            urgent=urgent,
+            feature_version=feature_version,
         )
 
 
