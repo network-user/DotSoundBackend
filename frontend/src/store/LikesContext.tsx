@@ -228,6 +228,10 @@ export function LikesProvider({ children }: { children: ReactNode }) {
       clearIfCurrent()
     } catch (e) {
       if (_isNetworkError(e)) {
+        // Superseded by a newer toggle of this track: skip the offline
+        // enqueue, or a stale replay would later flip the like back.
+        // Symmetric with the success/rollback latest-action guards.
+        if (!isCurrent()) return
         clearIfCurrent()
         await queueMutation(
           'POST',
@@ -292,6 +296,10 @@ export function LikesProvider({ children }: { children: ReactNode }) {
       clearIfCurrent()
     } catch (e) {
       if (_isNetworkError(e)) {
+        // Superseded by a newer toggle of this track: skip the offline
+        // enqueue, or a stale replay would later flip the dislike back.
+        // Symmetric with the success/rollback latest-action guards.
+        if (!isCurrent()) return
         clearIfCurrent()
         await queueMutation(
           'POST',
