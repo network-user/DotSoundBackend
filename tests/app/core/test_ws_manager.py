@@ -416,7 +416,11 @@ class TestSlowConsumerEviction:
         for i in range(_SEND_QUEUE_MAXSIZE + 5):
             await mgr._deliver_local(9, {"event": "e", "i": i})
 
-        assert 9 not in mgr._connections
+        # Teardown+close now runs as a detached task off the hot path,
+        # so let the loop run it before asserting. Repeated overflows
+        # schedule several teardowns for the same socket; the idempotent
+        # guard means only the first does the work and close() fires once.
+        await _wait_for(lambda: 9 not in mgr._connections)
         assert ws not in mgr._ws_state
         ws.close.assert_awaited_once_with(code=_SLOW_CONSUMER_CLOSE_CODE)
         block.set()
@@ -438,8 +442,10 @@ class TestSlowConsumerEviction:
 
         for i in range(_SEND_QUEUE_MAXSIZE + 5):
             await mgr._deliver_local(9, {"event": "e", "i": i})
-            # Yield like the real listener does between bursts, so the
-            # healthy writer drains and only the stuck one fills up.
+            # Mirror the real burst loop in _listen_redis, which now
+            # yields (await asyncio.sleep(0)) after each message so the
+            # per-connection writers drain between enqueues. The healthy
+            # writer keeps up and only the stuck socket's queue fills.
             await asyncio.sleep(0)
 
         # slow one gone, healthy one still registered + draining.

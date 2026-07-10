@@ -55,6 +55,10 @@ class ConnectionManager:
         self._pubsub: PubSub | None = None
         self._pubsub_task: asyncio.Task[None] | None = None
         self._heartbeat_task: asyncio.Task[None] | None = None
+        # Slow-consumer evictions run as detached tasks so a hung
+        # ``ws.close()`` never blocks the redis listener. Keep strong
+        # refs (asyncio only holds weak ones) until each task finishes.
+        self._eviction_tasks: set[asyncio.Task[None]] = set()
         # Serializes pubsub subscribe/unsubscribe so parallel
         # (dis)connects cannot corrupt the shared pubsub command
         # stream with interleaved writes.
@@ -79,6 +83,11 @@ class ConnectionManager:
                 task.cancel()
                 with contextlib.suppress(asyncio.CancelledError):
                     await task
+        for evict_task in list(self._eviction_tasks):
+            evict_task.cancel()
+            with contextlib.suppress(asyncio.CancelledError):
+                await evict_task
+        self._eviction_tasks.clear()
         await self._cancel_all_writers()
         if self._pubsub:
             await self._pubsub.aclose()
@@ -156,8 +165,16 @@ class ConnectionManager:
         (used to actively evict a slow consumer).
         """
         state = self._ws_state.pop(ws, None)
-        if state is not None:
-            await self._stop_writer(state, user_id)
+        if state is None:
+            # Already torn down. Happens when a slow-consumer eviction
+            # is scheduled more than once (the bounded queue keeps
+            # overflowing before the detached teardown runs) or when an
+            # explicit disconnect races the writer's own failure
+            # teardown. The call that popped the state owns the full
+            # cleanup and completes it, so every later call is a no-op;
+            # this is what keeps ``ws.close()`` from firing twice.
+            return
+        await self._stop_writer(state, user_id)
         conns = self._connections.get(user_id, [])
         if ws in conns:
             conns.remove(ws)
@@ -199,6 +216,14 @@ class ConnectionManager:
                 "ws_writer_teardown_error",
                 user_id=user_id,
             )
+
+    def _on_eviction_done(self, task: asyncio.Task[None]) -> None:
+        """Drop the finished eviction task and log any real failure."""
+        self._eviction_tasks.discard(task)
+        if task.cancelled():
+            return
+        if task.exception() is not None:
+            logger.debug("ws_slow_consumer_teardown_error")
 
     def get_online_user_ids(self) -> set[int]:
         return set(self._connections.keys())
@@ -361,11 +386,20 @@ class ConnectionManager:
                 ws_event=data.get("event"),
                 maxsize=_SEND_QUEUE_MAXSIZE,
             )
-            await self._teardown_connection(
-                user_id,
-                ws,
-                close_code=_SLOW_CONSUMER_CLOSE_CODE,
+            # Detach teardown+close from the hot path: a hung
+            # ``ws.close()`` on the evicted socket must never block
+            # fan-out delivery to every other connection. The teardown
+            # is idempotent, so a repeat eviction before it runs is a
+            # no-op.
+            task = asyncio.create_task(
+                self._teardown_connection(
+                    user_id,
+                    ws,
+                    close_code=_SLOW_CONSUMER_CLOSE_CODE,
+                )
             )
+            self._eviction_tasks.add(task)
+            task.add_done_callback(self._on_eviction_done)
         logger.debug(
             "ws_enqueued",
             user_id=user_id,
@@ -477,6 +511,12 @@ class ConnectionManager:
                     if extra["type"] != "message":
                         continue
                     await self._safe_process(extra)
+                    # Yield so the per-connection writer tasks get a
+                    # turn to drain their queues between enqueues. Without
+                    # this, a burst enqueues faster than any writer can
+                    # run and a live, healthy client hits QueueFull and
+                    # is wrongly evicted as "slow".
+                    await asyncio.sleep(0)
         except asyncio.CancelledError:
             raise
 
