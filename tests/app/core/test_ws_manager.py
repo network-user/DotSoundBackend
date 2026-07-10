@@ -341,14 +341,18 @@ class TestPresence:
     ) -> None:
         mgr = _make_manager()
         mgr._redis = AsyncMock()
-        mgr._redis.get = AsyncMock(
-            return_value=json.dumps({"status": "online", "ts": 1.0})
+        mgr._redis.mget = AsyncMock(
+            return_value=[
+                json.dumps({"status": "online", "ts": 1.0}),
+                None,
+            ]
         )
 
         result = await mgr.get_presence_bulk([1, 2])
 
         assert len(result) == 2
         assert result[1]["status"] == "online"
+        assert result[2]["status"] == "offline"
 
     async def test_set_presence_online(
         self,
