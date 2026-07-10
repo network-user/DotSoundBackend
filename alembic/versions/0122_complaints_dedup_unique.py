@@ -16,14 +16,15 @@ rows removed by ``upgrade()`` are gone for good. That's an accepted,
 one-way cleanup: the deleted rows were true duplicates (same user,
 same track), so nothing of value is lost.
 
-The dedup DELETE runs transactionally in the migration's own
-transaction, *before* the ``autocommit_block``; the unique index is
-then built with ``CREATE UNIQUE INDEX CONCURRENTLY`` inside that block
-(``CONCURRENTLY`` is incompatible with a transaction), so ``complaints``
-is not write-locked while the index builds. Note: an interrupted
-concurrent build can leave an INVALID index behind; drop it manually
-before re-running, otherwise ``IF NOT EXISTS`` skips the rebuild and
-keeps the unusable index.
+Both the dedup DELETE and the unique index run in the migration's
+single transaction (plain ``CREATE UNIQUE INDEX``): the async
+``env.py`` runs migrations inside ``engine.begin()``, where alembic's
+``autocommit_block`` (required for ``CONCURRENTLY``) cannot take
+ownership of the transaction and fails with ``AssertionError``. The
+transactional variant is also safer here -- dedup and index land
+atomically. If ``complaints`` ever grows large enough that a locking
+build hurts, create the index manually with ``CREATE UNIQUE INDEX
+CONCURRENTLY`` outside alembic.
 
 Revision ID: 0122
 Revises: 0121
@@ -61,28 +62,19 @@ _DEDUP_SQL = text(
 
 
 def upgrade() -> None:
-    # Collapse duplicates transactionally FIRST, in the migration's own
-    # transaction, so the DELETE is atomic.
     op.execute(_DEDUP_SQL)
-    # Then build the unique index CONCURRENTLY, which cannot run inside
-    # a transaction, in an autocommit block.
-    with op.get_context().autocommit_block():
-        op.create_index(
-            "uq_complaints_reported_by_user_track",
-            "complaints",
-            ["reported_by_user_id", "track_id"],
-            unique=True,
-            postgresql_concurrently=True,
-            if_not_exists=True,
-        )
+    op.create_index(
+        "uq_complaints_reported_by_user_track",
+        "complaints",
+        ["reported_by_user_id", "track_id"],
+        unique=True,
+        if_not_exists=True,
+    )
 
 
 def downgrade() -> None:
-    # DROP INDEX CONCURRENTLY also cannot run in a transaction.
-    with op.get_context().autocommit_block():
-        op.drop_index(
-            "uq_complaints_reported_by_user_track",
-            table_name="complaints",
-            postgresql_concurrently=True,
-            if_exists=True,
-        )
+    op.drop_index(
+        "uq_complaints_reported_by_user_track",
+        table_name="complaints",
+        if_exists=True,
+    )

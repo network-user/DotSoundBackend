@@ -53,14 +53,14 @@ whole table once it grows past the retention window:
   and per-day aggregate/delete range scans
   (``WHERE created_at >= :day_start AND created_at < :day_end``).
 
-Every index is built with ``CREATE INDEX CONCURRENTLY`` inside an
-``autocommit_block`` (``CONCURRENTLY`` is incompatible with running
-inside a transaction), so these online tables are not write-locked
-for the duration of the build. Note: if a concurrent build is
-interrupted (crash, lock timeout, cancelled statement) Postgres can
-leave an INVALID index behind; drop it manually before re-running,
-otherwise ``IF NOT EXISTS`` skips the rebuild and keeps the unusable
-index.
+All indexes are built transactionally (plain ``CREATE INDEX``): the
+async ``env.py`` runs migrations inside ``engine.begin()``, where the
+outer transaction belongs to the engine, so alembic's
+``autocommit_block`` (required for ``CONCURRENTLY``) cannot take
+ownership and fails with ``AssertionError``. At current table sizes
+the exclusive lock is momentary. If a table grows large enough that
+a locking rebuild hurts, build the replacement index manually with
+``CREATE INDEX CONCURRENTLY`` outside alembic, then drop the old one.
 
 Revision ID: 0121
 Revises: 0120
@@ -82,104 +82,85 @@ depends_on: str | Sequence[str] | None = None
 
 
 def upgrade() -> None:
-    # CONCURRENTLY cannot run in a transaction: build each index in an
-    # autocommit block so writes to these hot tables keep flowing.
-    with op.get_context().autocommit_block():
-        op.create_index(
-            "ix_tracks_active_public_play_count",
-            "tracks",
-            ["play_count"],
-            postgresql_where=sa.text("is_active AND is_public"),
-            postgresql_concurrently=True,
-            if_not_exists=True,
-        )
-        op.create_index(
-            "ix_tracks_active_public_created_at",
-            "tracks",
-            ["created_at"],
-            postgresql_where=sa.text("is_active AND is_public"),
-            postgresql_concurrently=True,
-            if_not_exists=True,
-        )
-        op.create_index(
-            "ix_tracks_uploaded_by_created",
-            "tracks",
-            ["uploaded_by_id", "created_at"],
-            postgresql_concurrently=True,
-            if_not_exists=True,
-        )
-        op.create_index(
-            "ix_likes_track_id",
-            "likes",
-            ["track_id"],
-            postgresql_concurrently=True,
-            if_not_exists=True,
-        )
-        op.create_index(
-            "ix_likes_user_created",
-            "likes",
-            ["user_id", "created_at"],
-            postgresql_concurrently=True,
-            if_not_exists=True,
-        )
-        op.create_index(
-            "ix_playlist_tracks_track_id",
-            "playlist_tracks",
-            ["track_id"],
-            postgresql_concurrently=True,
-            if_not_exists=True,
-        )
-        op.create_index(
-            "ix_listen_events_created_at",
-            "listen_events",
-            ["created_at"],
-            postgresql_concurrently=True,
-            if_not_exists=True,
-        )
+    op.create_index(
+        "ix_tracks_active_public_play_count",
+        "tracks",
+        ["play_count"],
+        postgresql_where=sa.text("is_active AND is_public"),
+        if_not_exists=True,
+    )
+    op.create_index(
+        "ix_tracks_active_public_created_at",
+        "tracks",
+        ["created_at"],
+        postgresql_where=sa.text("is_active AND is_public"),
+        if_not_exists=True,
+    )
+    op.create_index(
+        "ix_tracks_uploaded_by_created",
+        "tracks",
+        ["uploaded_by_id", "created_at"],
+        if_not_exists=True,
+    )
+    op.create_index(
+        "ix_likes_track_id",
+        "likes",
+        ["track_id"],
+        if_not_exists=True,
+    )
+    op.create_index(
+        "ix_likes_user_created",
+        "likes",
+        ["user_id", "created_at"],
+        if_not_exists=True,
+    )
+    op.create_index(
+        "ix_playlist_tracks_track_id",
+        "playlist_tracks",
+        ["track_id"],
+        if_not_exists=True,
+    )
+    op.create_index(
+        "ix_listen_events_created_at",
+        "listen_events",
+        ["created_at"],
+        if_not_exists=True,
+    )
 
 
 def downgrade() -> None:
-    # DROP INDEX CONCURRENTLY also cannot run in a transaction.
-    with op.get_context().autocommit_block():
-        op.drop_index(
-            "ix_listen_events_created_at",
-            table_name="listen_events",
-            postgresql_concurrently=True,
-            if_exists=True,
-        )
-        op.drop_index(
-            "ix_playlist_tracks_track_id",
-            table_name="playlist_tracks",
-            postgresql_concurrently=True,
-            if_exists=True,
-        )
-        op.drop_index(
-            "ix_likes_user_created",
-            table_name="likes",
-            postgresql_concurrently=True,
-            if_exists=True,
-        )
-        op.drop_index(
-            "ix_likes_track_id",
-            table_name="likes",
-            postgresql_concurrently=True,
-            if_exists=True,
-        )
-        op.drop_index(
-            "ix_tracks_uploaded_by_created",
-            table_name="tracks",
-            postgresql_concurrently=True,
-            if_exists=True,
-        )
-        op.drop_index(
-            "ix_tracks_active_public_created_at",
-            table_name="tracks",
-            postgresql_concurrently=True,
-            if_exists=True,
-        )
-        op.drop_index(
-            "ix_tracks_active_public_play_count",
-            table_name="tracks",
-            postgresql_concurrently=True,
-            if_exists=True,
-        )
+    op.drop_index(
+        "ix_listen_events_created_at",
+        table_name="listen_events",
+        if_exists=True,
+    )
+    op.drop_index(
+        "ix_playlist_tracks_track_id",
+        table_name="playlist_tracks",
+        if_exists=True,
+    )
+    op.drop_index(
+        "ix_likes_user_created",
+        table_name="likes",
+        if_exists=True,
+    )
+    op.drop_index(
+        "ix_likes_track_id",
+        table_name="likes",
+        if_exists=True,
+    )
+    op.drop_index(
+        "ix_tracks_uploaded_by_created",
+        table_name="tracks",
+        if_exists=True,
+    )
+    op.drop_index(
+        "ix_tracks_active_public_created_at",
+        table_name="tracks",
+        if_exists=True,
+    )
+    op.drop_index(
+        "ix_tracks_active_public_play_count",
+        table_name="tracks",
+        if_exists=True,
+    )
