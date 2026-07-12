@@ -44,8 +44,8 @@
 # контейнеры живут в этой же сети dotsound; Caddy только терминирует TLS и
 # проксирует по имени контейнера. К данным/сервисам DotSound отношения нет.
 #
-# Домены задаются переменными PORTFOLIO_DOMAIN / DOTLEARN_DOMAIN в .env
-# (Caddy читает их через env_file в docker-compose.prod.yml). Плюс: .env НЕ в
+# Домены задаются переменными PORTFOLIO_DOMAIN / DOTLEARN_DOMAIN / ANALYTICS_DOMAIN
+# в .env (Caddy читает их через env_file в docker-compose.prod.yml). Плюс: .env НЕ в
 # git, поэтому реальные домены не раскрываются в репозитории и переживают
 # `git reset --hard` в deploy.sh. Если переменная пуста, блок падает на
 # безопасный дефолт *.localhost (внутренний сайт без ACME, DotSound не задет).
@@ -67,6 +67,22 @@
 {$DOTLEARN_DOMAIN:learn.localhost} {
 	encode zstd gzip
 	reverse_proxy dotlearn-web:8080 {
+		header_up X-Forwarded-Proto {scheme}
+		header_up X-Real-IP {remote_host}
+	}
+	log {
+		output stdout
+		format console
+	}
+}
+
+# Аналитика портфолио (Umami) - контейнер umami, дашборд под встроенным логином.
+# Стек поднимается в DotBioSite (deploy/analytics); контейнер umami живёт в этой
+# же сети dotsound. Трекер сайта проксируется его собственным Caddy (first-party
+# /stats/*), здесь - только дашборд на отдельном поддомене.
+{$ANALYTICS_DOMAIN:analytics.localhost} {
+	encode zstd gzip
+	reverse_proxy umami:3000 {
 		header_up X-Forwarded-Proto {scheme}
 		header_up X-Real-IP {remote_host}
 	}
