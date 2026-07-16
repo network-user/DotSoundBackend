@@ -42,6 +42,13 @@ jobs:
         with:
           context: ./frontend
           push: true
+          # Public client-side Umami id (не секрет: виден в HTML как
+          # data-website-id) - repo Variable. VITE_SITE_URL - публичный origin
+          # сайта для data-host-url/data-domains. Оба пустые -> трекер не
+          # инъектится, сборка не падает.
+          build-args: |
+            VITE_UMAMI_WEBSITE_ID=${{ vars.VITE_UMAMI_WEBSITE_ID }}
+            VITE_SITE_URL=${{ vars.VITE_SITE_URL }}
           tags: |
             ghcr.io/${{ steps.owner.outputs.owner }}/dotsound-frontend:latest
             ghcr.io/${{ steps.owner.outputs.owner }}/dotsound-frontend:${{ github.sha }}

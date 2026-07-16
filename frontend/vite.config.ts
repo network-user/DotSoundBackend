@@ -133,9 +133,62 @@ const redirectRootToMiniApp = (): PluginOption => {
   }
 }
 
+// Self-hosted Umami: инъекция трекера в <head> только на билд-сборке и только
+// когда задан VITE_UMAMI_WEBSITE_ID (public client-side id). Скрипт отдаётся
+// first-party через /stats/* (см. frontend/nginx.conf), поэтому по умолчанию
+// src=/stats/script.js. Если известен origin сайта (VITE_SITE_URL), берём
+// абсолютный URL и проставляем data-host-url/data-domains; иначе трекер сам
+// возьмёт origin скрипта. Пусто -> плагин ничего не инъектит (dev/CI без ключа).
+const umamiPlugin = (): PluginOption => {
+  const websiteId = (process.env.VITE_UMAMI_WEBSITE_ID ?? '').trim()
+  const rawSrc =
+    (process.env.VITE_UMAMI_SRC ?? '').trim() || '/stats/script.js'
+  const origin = (
+    process.env.VITE_SITE_URL ??
+    process.env.VITE_PUBLIC_ORIGIN ??
+    ''
+  ).trim()
+
+  return {
+    name: 'dotsound:umami',
+    apply: 'build',
+    transformIndexHtml(html) {
+      if (!websiteId) return html
+
+      const attrs: Record<string, string | boolean> = {
+        defer: true,
+        src: rawSrc,
+        'data-website-id': websiteId,
+      }
+
+      if (origin) {
+        try {
+          const abs = new URL(rawSrc, origin)
+          attrs.src = abs.toString()
+          const dir = abs.pathname.replace(/\/[^/]*$/, '')
+          attrs['data-host-url'] = (abs.origin + dir).replace(
+            /\/$/,
+            '',
+          )
+          attrs['data-domains'] = new URL(origin).host
+        } catch {
+          // Кривой origin - оставляем относительный src; трекер возьмёт
+          // origin самого скрипта (он first-party, так что это корректно).
+        }
+      }
+
+      return {
+        html,
+        tags: [{ tag: 'script', attrs, injectTo: 'head' }],
+      }
+    },
+  }
+}
+
 export default defineConfig({
   plugins: [
     redirectRootToMiniApp(),
+    umamiPlugin(),
     react(),
     VitePWA({
       registerType: 'autoUpdate',

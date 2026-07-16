@@ -302,6 +302,13 @@ services:
   frontend:
     build:
       context: ./frontend
+      # On-server fallback build (deploy.sh, если pull образа из GHCR упал):
+      # прокидываем публичный Umami website-id и origin сайта из .env, чтобы
+      # трекер запёкся и в этой ветке. Основной путь - готовый образ из CI.
+      # Пусто -> плагин ничего не инъектит.
+      args:
+        VITE_UMAMI_WEBSITE_ID: ${VITE_UMAMI_WEBSITE_ID:-}
+        VITE_SITE_URL: ${VITE_SITE_URL:-}
     restart: unless-stopped
     ports:
       - "80:80"

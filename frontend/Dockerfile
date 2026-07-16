@@ -12,6 +12,19 @@ RUN npm ci --no-audit --no-fund \
  || npm ci --no-audit --no-fund
 
 COPY . .
+
+# Umami analytics (public client-side id): Vite инлайнит env на этапе сборки,
+# поэтому website-id "запекается" в index.html здесь. Пусто по умолчанию ->
+# плагин ничего не инъектит. Значения приходят docker build-arg (CI:
+# .github/workflows/deploy.yml из repo variables; on-server fallback:
+# docker-compose build.args из .env).
+ARG VITE_UMAMI_WEBSITE_ID=""
+ENV VITE_UMAMI_WEBSITE_ID=$VITE_UMAMI_WEBSITE_ID
+ARG VITE_UMAMI_SRC="/stats/script.js"
+ENV VITE_UMAMI_SRC=$VITE_UMAMI_SRC
+ARG VITE_SITE_URL=""
+ENV VITE_SITE_URL=$VITE_SITE_URL
+
 RUN npm run build
 
 FROM nginx:stable-alpine as production-stage
