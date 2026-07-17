@@ -11,9 +11,16 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
     MALLOC_ARENA_MAX=2 \
     POETRY_VERSION=1.8.3 \
-    POETRY_HOME="/opt/poetry" \
     POETRY_VIRTUALENVS_CREATE=false \
-    PATH="/opt/poetry/bin:$PATH"
+    PIP_DISABLE_PIP_VERSION_CHECK=1 \
+    PIP_NO_CACHE_DIR=1
+
+# Static ffmpeg/ffprobe (~100MB binaries) instead of `apt install ffmpeg`,
+# which pulls ~250 multimedia/X11 packages (~700MB) and fails on the
+# small prod box with:
+#   E: You don't have enough free space in /var/cache/apt/archives/
+COPY --from=mwader/static-ffmpeg:7.1.1 /ffmpeg /usr/local/bin/ffmpeg
+COPY --from=mwader/static-ffmpeg:7.1.1 /ffprobe /usr/local/bin/ffprobe
 
 # policy-rc.d exit 101 tells invoke-rc.d to skip service start/stop
 # during apt-get install, preventing the system tor daemon from
@@ -21,10 +28,10 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 RUN printf '#!/bin/sh\nexit 101\n' > /usr/sbin/policy-rc.d \
     && chmod +x /usr/sbin/policy-rc.d
 
+# Runtime OS deps only. No gcc/libpq-dev: asyncpg, cryptography, Pillow
+# ship manylinux wheels for CPython 3.12 and do not need a compiler.
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    ffmpeg \
-    libpq-dev \
-    gcc \
+    ca-certificates \
     curl \
     libmagic1 \
     tor \
@@ -37,7 +44,13 @@ RUN rm -f /usr/sbin/policy-rc.d \
     && rm -rf /var/lib/tor \
     && if [ -f /etc/init.d/tor ]; then update-rc.d -f tor remove || true; fi
 
-RUN curl -sSL https://install.python-poetry.org | python3 -
+# Poetry in an isolated venv; only the `poetry` binary is linked onto
+# PATH so system python3/pip stay the install targets for project deps
+# (POETRY_VIRTUALENVS_CREATE=false -> system site-packages).
+RUN python3 -m venv /opt/poetry \
+    && /opt/poetry/bin/pip install --no-cache-dir \
+        "poetry==${POETRY_VERSION}" \
+    && ln -sf /opt/poetry/bin/poetry /usr/local/bin/poetry
 
 WORKDIR /app
 
@@ -74,7 +87,7 @@ RUN poetry install --no-interaction --no-ansi
 # PYTHONDONTWRITEBYTECODE=1 means no .pyc writes into /app). The prod
 # overlay runs the image code directly (no source bind-mount, DEBUG off),
 # so /app is owned by appuser.
-# NOTE for dev: the base compose bind-mounts the host repo over /app — if
+# NOTE for dev: the base compose bind-mounts the host repo over /app - if
 # you enable debug file logging there, make the host ./logs dir writable
 # by uid 10001 (or run the dev container as root).
 RUN useradd --create-home --uid 10001 appuser \

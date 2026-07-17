@@ -47,19 +47,26 @@ fi
 
 COMPOSE=(docker compose "${COMPOSE_FILES[@]}")
 DEPLOY_PRUNE_BUILDER_CACHE="${DEPLOY_PRUNE_BUILDER_CACHE:-1}"
-# Keep enough build cache between deploys to retain the warm apt/npm/poetry
-# layers (BuildKit evicts least-recently-used beyond this size). 4GB was too
-# small for these images and forced a cold rebuild - and a ~48-min apt step -
-# on every deploy. 20GB on a small VPS left no room for concurrent apt
-# downloads (E: not enough free space in /var/cache/apt/archives/). Default
-# 8GB balances cache hits vs free disk; override via env on larger hosts.
-DEPLOY_BUILDER_CACHE_KEEP_STORAGE="${DEPLOY_BUILDER_CACHE_KEEP_STORAGE:-8GB}"
+# Soft cache keep only when the host has headroom. On the 3.8GB/small-disk
+# prod box a retained BuildKit cache collides with apt/image layers and
+# fails with: E: not enough free space in /var/cache/apt/archives/.
+# Override via env on larger hosts (e.g. DEPLOY_BUILDER_CACHE_KEEP_STORAGE=12GB).
+DEPLOY_BUILDER_CACHE_KEEP_STORAGE="${DEPLOY_BUILDER_CACHE_KEEP_STORAGE:-2GB}"
+# Below this free space (MiB) we hard-prune builder cache + unused images.
+DEPLOY_MIN_FREE_MIB="${DEPLOY_MIN_FREE_MIB:-2048}"
+# Absolute floor: refuse to start a build if still this low after prune.
+DEPLOY_BUILD_FLOOR_MIB="${DEPLOY_BUILD_FLOOR_MIB:-900}"
 
 log() { printf '\033[1;36m==>\033[0m %s\n' "$*"; }
 
-# Free Docker disk before image builds. Without this, a full builder cache
-# plus previous images can leave <100MB free and apt fails mid-download
-# (seen on bot builder: build-essential 82.5MB).
+free_mib() {
+  # Portable free space on / (Linux deploy host). Empty on failure.
+  df -Pm / 2>/dev/null | awk 'NR==2 {print $4}'
+}
+
+# Free Docker disk before image builds. Soft prune first; if free space is
+# still below DEPLOY_MIN_FREE_MIB, drop builder cache entirely and unused
+# images (running stack images stay). Fail fast if still below floor.
 free_build_disk() {
   log "Pre-build disk cleanup"
   docker container prune -f >/dev/null 2>&1 || true
@@ -69,7 +76,26 @@ free_build_disk() {
       --keep-storage "${DEPLOY_BUILDER_CACHE_KEEP_STORAGE}" \
       >/dev/null 2>&1 || true
   fi
+
+  local free
+  free="$(free_mib || true)"
+  if [ -n "${free}" ] && [ "${free}" -lt "${DEPLOY_MIN_FREE_MIB}" ]; then
+    log "Low disk (${free} MiB free < ${DEPLOY_MIN_FREE_MIB}) - hard prune"
+    docker builder prune -af >/dev/null 2>&1 || true
+    docker image prune -af >/dev/null 2>&1 || true
+    docker system prune -af >/dev/null 2>&1 || true
+    free="$(free_mib || true)"
+  fi
+
+  log "Disk after cleanup:"
   df -h / /var/lib/docker 2>/dev/null | sed 's/^/    /' || true
+  docker system df 2>/dev/null | sed 's/^/    /' || true
+
+  if [ -n "${free}" ] && [ "${free}" -lt "${DEPLOY_BUILD_FLOOR_MIB}" ]; then
+    echo "ERROR: only ${free} MiB free on /; need >= ${DEPLOY_BUILD_FLOOR_MIB} MiB to build images." >&2
+    echo "Free space on the server (docker system prune, remove old images/logs), then re-run." >&2
+    exit 1
+  fi
 }
 
 # Build images one at a time. On a small build host, building every image in
