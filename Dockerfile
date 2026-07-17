@@ -28,7 +28,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     curl \
     libmagic1 \
     tor \
-    && rm -rf /var/lib/apt/lists/*
+    && rm -rf /var/lib/apt/lists/* /var/cache/apt/archives/*
 
 # Remove install-time policy guard; clean the system tor data dir so
 # no stale lock/cookie files are left behind. The stem pool writes its

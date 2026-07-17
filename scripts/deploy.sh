@@ -49,18 +49,36 @@ COMPOSE=(docker compose "${COMPOSE_FILES[@]}")
 DEPLOY_PRUNE_BUILDER_CACHE="${DEPLOY_PRUNE_BUILDER_CACHE:-1}"
 # Keep enough build cache between deploys to retain the warm apt/npm/poetry
 # layers (BuildKit evicts least-recently-used beyond this size). 4GB was too
-# small for these images and forced a cold rebuild — and a ~48-min apt step —
-# on every deploy. Tune to the server's free disk via this env var.
-DEPLOY_BUILDER_CACHE_KEEP_STORAGE="${DEPLOY_BUILDER_CACHE_KEEP_STORAGE:-20GB}"
+# small for these images and forced a cold rebuild - and a ~48-min apt step -
+# on every deploy. 20GB on a small VPS left no room for concurrent apt
+# downloads (E: not enough free space in /var/cache/apt/archives/). Default
+# 8GB balances cache hits vs free disk; override via env on larger hosts.
+DEPLOY_BUILDER_CACHE_KEEP_STORAGE="${DEPLOY_BUILDER_CACHE_KEEP_STORAGE:-8GB}"
 
 log() { printf '\033[1;36m==>\033[0m %s\n' "$*"; }
 
+# Free Docker disk before image builds. Without this, a full builder cache
+# plus previous images can leave <100MB free and apt fails mid-download
+# (seen on bot builder: build-essential 82.5MB).
+free_build_disk() {
+  log "Pre-build disk cleanup"
+  docker container prune -f >/dev/null 2>&1 || true
+  docker image prune -f >/dev/null 2>&1 || true
+  if [ "${DEPLOY_PRUNE_BUILDER_CACHE}" = "1" ]; then
+    docker builder prune -af \
+      --keep-storage "${DEPLOY_BUILDER_CACHE_KEEP_STORAGE}" \
+      >/dev/null 2>&1 || true
+  fi
+  df -h / /var/lib/docker 2>/dev/null | sed 's/^/    /' || true
+}
+
 # Build images one at a time. On a small build host, building every image in
-# parallel thrashes disk IO — that's what dragged apt to ~48 min and tripped
+# parallel thrashes disk IO - that's what dragged apt to ~48 min and tripped
 # esbuild's postinstall with ETXTBSY. Serialising costs a little wall-clock on
 # a cold cache but is stable; with the build cache retained between deploys
 # each image is mostly cache hits anyway.
 build_serial() {
+  free_build_disk
   for svc in "$@"; do
     log "Building ${svc}"
     "${COMPOSE[@]}" build "${svc}"
