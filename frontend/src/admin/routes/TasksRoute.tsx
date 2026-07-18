@@ -195,14 +195,14 @@ function bgJobKind(status: string): StatusKind {
 }
 
 function formatAdminDate(raw: unknown): string {
-  if (typeof raw !== 'string' || !raw) return 'вЂ“'
+  if (typeof raw !== 'string' || !raw) return '-'
   const d = new Date(raw)
   if (Number.isNaN(d.getTime())) return raw
   return d.toLocaleString()
 }
 
 function readBgPayloadTarget(payload: unknown): string {
-  if (!payload || typeof payload !== 'object') return 'вЂ“'
+  if (!payload || typeof payload !== 'object') return '-'
   const data = payload as Record<string, unknown>
   const artistId = data.artist_id
   const albumId = data.soundcloud_album_id
@@ -212,7 +212,7 @@ function readBgPayloadTarget(payload: unknown): string {
   }
   if (artistId !== undefined) return `artist:${artistId}`
   if (trackId !== undefined) return `track:${trackId}`
-  return 'вЂ“'
+  return '-'
 }
 
 function readBgPayloadTrackId(payload: unknown): number | null {
@@ -2354,7 +2354,7 @@ export function TasksRoute() {
                   <div>
                     <span>{t('admin.tasks.bg.detail.task')}</span>
                     <strong className="admin-mono">
-                      {String(bgDetail.data.name ?? 'вЂ“')}
+                      {String(bgDetail.data.name ?? '-')}
                     </strong>
                   </div>
                   <div>
@@ -2362,13 +2362,13 @@ export function TasksRoute() {
                     <StatusPill
                       kind={bgJobKind(String(bgDetail.data.status ?? ''))}
                     >
-                      {String(bgDetail.data.status ?? 'вЂ“')}
+                      {String(bgDetail.data.status ?? '-')}
                     </StatusPill>
                   </div>
                   <div>
                     <span>{t('admin.tasks.bg.cols.queue')}</span>
                     <strong className="admin-mono">
-                      {String(bgDetail.data.queue ?? 'вЂ“')}
+                      {String(bgDetail.data.queue ?? '-')}
                     </strong>
                   </div>
                   <div>
