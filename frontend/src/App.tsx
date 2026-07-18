@@ -12,6 +12,7 @@ import {
 } from 'react'
 import { flushSync } from 'react-dom'
 import { useBrandLabel } from '@/lib/brand'
+import { useRouteRobotsGuard } from '@/lib/pageSeo'
 import { AppErrorFallback } from '@/components/AppErrorFallback'
 
 class ErrorBoundary extends Component<
@@ -522,6 +523,7 @@ export function App() {
   const brandLabel = useBrandLabel()
   const { reloadLikes } = useLikes()
   useUploadQueueAutoResume()
+  useRouteRobotsGuard()
   const navigate = useNavigate()
   const location = useLocation()
   const prefetch = useOptionalPrefetch()

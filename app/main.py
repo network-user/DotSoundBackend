@@ -14,7 +14,7 @@ from slowapi.middleware import SlowAPIMiddleware
 from starlette.exceptions import HTTPException as StarletteHTTPException
 from starlette.middleware.cors import CORSMiddleware
 from starlette.middleware.trustedhost import TrustedHostMiddleware
-from starlette.responses import Response
+from starlette.responses import FileResponse, Response
 from starlette.types import Scope
 
 from app.api.router import api_router
@@ -46,8 +46,26 @@ from app.middlewares.security_headers import SecurityHeadersMiddleware
 
 MINI_APP_STATIC_DIR = Path(__file__).resolve().parent / "static" / "mini_app"
 MINI_APP_INDEX_FILE = MINI_APP_STATIC_DIR / "index.html"
+_SEO_ROOT_FILES: dict[str, str] = {
+    "robots.txt": "text/plain; charset=utf-8",
+    "sitemap.xml": "application/xml; charset=utf-8",
+    "llms.txt": "text/plain; charset=utf-8",
+}
 
 logger: structlog.stdlib.BoundLogger = structlog.get_logger(__name__)
+
+
+def resolve_seo_root_file(
+    name: str,
+    *,
+    static_dir: Path = MINI_APP_STATIC_DIR,
+) -> Path | None:
+    if name not in _SEO_ROOT_FILES:
+        return None
+    path = static_dir / name
+    if not path.is_file():
+        return None
+    return path
 
 
 class MiniAppStaticFiles(StaticFiles):
@@ -422,6 +440,32 @@ def create_app() -> FastAPI:
     application.add_middleware(AdminAuditLogMiddleware)
 
     application.include_router(api_router)
+
+    def _seo_file_response(name: str) -> Response:
+        media_type = _SEO_ROOT_FILES[name]
+        file_path = resolve_seo_root_file(name)
+        if file_path is None:
+            return Response(status_code=404)
+        return FileResponse(
+            path=file_path,
+            media_type=media_type,
+            headers={
+                "Cache-Control": "public, max-age=3600",
+            },
+        )
+
+    @application.get("/robots.txt", include_in_schema=False)
+    async def robots_txt() -> Response:
+        return _seo_file_response("robots.txt")
+
+    @application.get("/sitemap.xml", include_in_schema=False)
+    async def sitemap_xml() -> Response:
+        return _seo_file_response("sitemap.xml")
+
+    @application.get("/llms.txt", include_in_schema=False)
+    async def llms_txt() -> Response:
+        return _seo_file_response("llms.txt")
+
     if MINI_APP_INDEX_FILE.is_file():
         application.mount(
             "/mini_app",

@@ -25,9 +25,11 @@ import { showIsland } from '@/lib/island'
 import '@/styles/redesign-artist.css'
 
 import { api, getApiErrorMessage } from '@/lib/api'
+import { useBrandLabel } from '@/lib/brand'
 import { coverProxyUrl } from '@/lib/coverProxy'
 import { useTelegramBackButton } from '@/hooks/useTelegramBackButton'
 import { VARIANTS_FADE_UP, m } from '@/lib/motion'
+import { usePageSeo } from '@/lib/pageSeo'
 import {
   getIsAdmin,
   hapticNotification,
@@ -106,6 +108,7 @@ export function ArtistView() {
   const artistId = Number(idParam)
   const navigate = useNavigate()
   const { t } = useTranslation()
+  const brandLabel = useBrandLabel()
 
   const { playTrack, toggleShuffle } = usePlayerActions()
   const { shuffleOn } = usePlayerMeta()
@@ -156,6 +159,23 @@ export function ArtistView() {
   }, [goBack, selectedReleaseId])
 
   useTelegramBackButton(handleBack)
+
+  const artistSeoDescription = useMemo(() => {
+    if (!detail) return null
+    const bio = (detail.bio || '').trim()
+    if (bio) return bio.slice(0, 160)
+    return `${detail.name} - ${brandLabel}`
+  }, [brandLabel, detail])
+
+  usePageSeo({
+    title: detail?.name
+      ? `${detail.name} - ${brandLabel}`
+      : null,
+    description: artistSeoDescription,
+    path: Number.isFinite(artistId)
+      ? `/artist/${artistId}`
+      : null,
+  })
 
   useEffect(() => {
     const el = heroRef.current

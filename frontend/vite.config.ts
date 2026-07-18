@@ -1,7 +1,8 @@
 ﻿import { defineConfig, type Connect, type PluginOption } from 'vite'
 import react from '@vitejs/plugin-react'
 import { VitePWA } from 'vite-plugin-pwa'
-import path from 'path'
+import fs from 'node:fs'
+import path from 'node:path'
 
 const MINI_APP_BASE = '/mini_app/'
 
@@ -133,6 +134,105 @@ const redirectRootToMiniApp = (): PluginOption => {
   }
 }
 
+const siteOrigin = (): string =>
+  (
+    process.env.VITE_SITE_URL ??
+    process.env.VITE_PUBLIC_ORIGIN ??
+    ''
+  )
+    .trim()
+    .replace(/\/$/, '')
+
+// Absolute SEO URLs only when origin is known at build time
+// (VITE_SITE_URL / VITE_PUBLIC_ORIGIN). Otherwise keep root-relative.
+const seoHtmlPlugin = (): PluginOption => {
+  const origin = siteOrigin()
+
+  return {
+    name: 'dotsound:seo-html',
+    transformIndexHtml(html) {
+      if (!origin) return html
+
+      const abs = (seoPath: string): string => {
+        try {
+          return new URL(seoPath, `${origin}/`).toString()
+        } catch {
+          return seoPath
+        }
+      }
+
+      let next = html
+      const rewrites: Array<[string, string]> = [
+        [
+          'href="/mini_app/" data-seo="canonical"',
+          `href="${abs('/mini_app/')}" data-seo="canonical"`,
+        ],
+        [
+          'content="/mini_app/" data-seo="og-url"',
+          `content="${abs('/mini_app/')}" data-seo="og-url"`,
+        ],
+        [
+          'content="/mini_app/og-default.png" data-seo="og-image"',
+          `content="${abs('/mini_app/og-default.png')}" data-seo="og-image"`,
+        ],
+        [
+          'content="/mini_app/og-default.png" data-seo="twitter-image"',
+          `content="${abs('/mini_app/og-default.png')}" data-seo="twitter-image"`,
+        ],
+        ['"url": "/mini_app/"', `"url": "${abs('/mini_app/')}"`],
+      ]
+      for (const [from, to] of rewrites) {
+        next = next.replace(from, to)
+      }
+      return next
+    },
+  }
+}
+
+// Absolute sitemap <loc> + robots Sitemap when origin is known.
+// public/ files are copied outside the rollup bundle, so rewrite on disk.
+const seoStaticFilesPlugin = (): PluginOption => {
+  const origin = siteOrigin()
+  let outDir = ''
+
+  return {
+    name: 'dotsound:seo-static-files',
+    apply: 'build',
+    configResolved(config) {
+      outDir = path.resolve(config.root, config.build.outDir)
+    },
+    closeBundle() {
+      if (!origin || !outDir) return
+
+      const sitemapPath = path.join(outDir, 'sitemap.xml')
+      if (fs.existsSync(sitemapPath)) {
+        const raw = fs.readFileSync(sitemapPath, 'utf8')
+        const next = raw.replace(
+          /<loc>(\/[^<]*)<\/loc>/g,
+          (_m, locPath: string) => {
+            try {
+              return `<loc>${new URL(locPath, `${origin}/`).toString()}</loc>`
+            } catch {
+              return `<loc>${locPath}</loc>`
+            }
+          },
+        )
+        fs.writeFileSync(sitemapPath, next, 'utf8')
+      }
+
+      const robotsPath = path.join(outDir, 'robots.txt')
+      if (fs.existsSync(robotsPath)) {
+        const raw = fs.readFileSync(robotsPath, 'utf8')
+        const next = raw.replace(
+          /^Sitemap:\s*\/sitemap\.xml\s*$/m,
+          `Sitemap: ${origin}/sitemap.xml`,
+        )
+        fs.writeFileSync(robotsPath, next, 'utf8')
+      }
+    },
+  }
+}
+
 // Self-hosted Umami: инъекция трекера в <head> только на билд-сборке и только
 // когда задан VITE_UMAMI_WEBSITE_ID (public client-side id). Скрипт отдаётся
 // first-party через /stats/* (см. frontend/nginx.conf), поэтому по умолчанию
@@ -143,11 +243,7 @@ const umamiPlugin = (): PluginOption => {
   const websiteId = (process.env.VITE_UMAMI_WEBSITE_ID ?? '').trim()
   const rawSrc =
     (process.env.VITE_UMAMI_SRC ?? '').trim() || '/stats/script.js'
-  const origin = (
-    process.env.VITE_SITE_URL ??
-    process.env.VITE_PUBLIC_ORIGIN ??
-    ''
-  ).trim()
+  const origin = siteOrigin()
 
   return {
     name: 'dotsound:umami',
@@ -188,6 +284,8 @@ const umamiPlugin = (): PluginOption => {
 export default defineConfig({
   plugins: [
     redirectRootToMiniApp(),
+    seoHtmlPlugin(),
+    seoStaticFilesPlugin(),
     umamiPlugin(),
     react(),
     VitePWA({
@@ -210,10 +308,10 @@ export default defineConfig({
         'sounds/tap-soft.wav',
       ],
       manifest: {
-        name: '.\u0437\u0432\u0443\u043a — музыка',
+        name: '.\u0437\u0432\u0443\u043a - \u043c\u0443\u0437\u044b\u043a\u0430',
         short_name: '.\u0437\u0432\u0443\u043a',
         description:
-          '.\u0437\u0432\u0443\u043a — музыка без рекламы, плейлисты, офлайн-доступ.',
+          '.\u0437\u0432\u0443\u043a - \u043c\u0443\u0437\u044b\u043a\u0430 \u0431\u0435\u0437 \u0440\u0435\u043a\u043b\u0430\u043c\u044b. \u0421\u0442\u0440\u0438\u043c\u044b, \u043f\u043b\u0435\u0439\u043b\u0438\u0441\u0442\u044b, UGC, \u043e\u0444\u043b\u0430\u0439\u043d. Telegram Mini App, 18+.',
         lang: 'ru',
         dir: 'ltr',
         categories: ['music', 'entertainment'],

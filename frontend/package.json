@@ -12,7 +12,8 @@
     "test:watch": "vitest",
     "e2e": "playwright test --pass-with-no-tests",
     "lint": "tsc --noEmit && node scripts/check-no-legacy-toast.mjs",
-    "gen:icons": "node scripts/generate-png-icons.mjs"
+    "gen:icons": "node scripts/generate-png-icons.mjs",
+    "gen:og": "node scripts/generate-og-image.mjs"
   },
   "dependencies": {
     "@fingerprintjs/fingerprintjs": "^4.5.1",

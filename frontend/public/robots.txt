@@ -1,0 +1,11 @@
+# DotSound / .звук public crawler policy
+User-agent: *
+Allow: /mini_app/
+Allow: /robots.txt
+Allow: /sitemap.xml
+Allow: /llms.txt
+
+Disallow: /api/
+Disallow: /stats/
+
+Sitemap: /sitemap.xml

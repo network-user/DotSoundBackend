@@ -38,6 +38,11 @@ work, and release coordination live outside the public repository.
 
 ## Public Follow-Ups
 
+- [x] Moderate public SEO baseline: robots/sitemap/llms, Open Graph +
+  JSON-LD in Mini App shell, root file routes (nginx + FastAPI),
+  runtime titles on public profile/artist/legal screens.
+- [x] SEO follow-up: 1200x630 `og-default.png` + runtime `noindex`
+  guard for private Mini App routes (library/upload/admin/etc.).
 - [ ] Add a compact architecture diagram for the public transport +
   private rules model.
 - [ ] Add a short "How to read this repository" section for reviewers.

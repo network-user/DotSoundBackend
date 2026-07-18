@@ -15,7 +15,9 @@ import { ProfileShareModal } from '@/components/Profile/ProfileShareModal'
 import { TrackList } from '@/components/TrackList/TrackList'
 import { MotionPress } from '@/components/ui/MotionPress'
 import { api, getApiErrorMessage } from '@/lib/api'
+import { useBrandLabel } from '@/lib/brand'
 import { showIsland } from '@/lib/island'
+import { usePageSeo } from '@/lib/pageSeo'
 import { playFromPaginatedCollection } from '@/lib/paginatedPlayback'
 import {
   getInternalUserId,
@@ -38,6 +40,7 @@ type PublicProfileTab = 'tracks' | 'liked' | 'stats'
 
 export function PublicProfileView() {
   const { t } = useTranslation()
+  const brandLabel = useBrandLabel()
   const { userId } = useParams<{ userId: string }>()
   const navigate = useNavigate()
   const location = useLocation()
@@ -232,6 +235,19 @@ export function PublicProfileView() {
       t('profile.public.defaultName', 'Профиль')
     )
   }, [profile, t])
+
+  usePageSeo({
+    title: displayName
+      ? `${displayName} - ${brandLabel}`
+      : null,
+    description: displayName
+      ? `${displayName} - ${brandLabel}`
+      : null,
+    path:
+      validUserId && viewedUserId > 0
+        ? `/profile/${viewedUserId}`
+        : null,
+  })
 
   const closeProfile = () => {
     haptic('light')

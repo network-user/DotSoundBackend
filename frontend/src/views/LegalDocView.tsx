@@ -1,20 +1,28 @@
 import { Navigate, useNavigate, useParams } from 'react-router-dom'
 import { Icon } from '@/components/Icon/Icon'
+import { useBrandLabel } from '@/lib/brand'
+import { usePageSeo } from '@/lib/pageSeo'
 import {
   LEGAL_DOCS,
   type LegalDocId,
 } from './legalContent'
 
-export function LegalDocView() {
+function LegalDocBody({
+  docId,
+  document,
+}: {
+  docId: string
+  document: (typeof LEGAL_DOCS)[LegalDocId]
+}) {
   const navigate = useNavigate()
-  const { docId } = useParams()
-  const document = docId
-    ? LEGAL_DOCS[docId as LegalDocId]
-    : null
+  const brandLabel = useBrandLabel()
+  const intro = (document.intro || '').trim()
 
-  if (!document) {
-    return <Navigate to="/legal" replace />
-  }
+  usePageSeo({
+    title: `${document.title} - ${brandLabel}`,
+    description: intro ? intro.slice(0, 160) : document.title,
+    path: `/legal/${docId}`,
+  })
 
   return (
     <div className="legal-view">
@@ -57,4 +65,17 @@ export function LegalDocView() {
       </div>
     </div>
   )
+}
+
+export function LegalDocView() {
+  const { docId } = useParams()
+  const document = docId
+    ? LEGAL_DOCS[docId as LegalDocId]
+    : null
+
+  if (!docId || !document) {
+    return <Navigate to="/legal" replace />
+  }
+
+  return <LegalDocBody docId={docId} document={document} />
 }

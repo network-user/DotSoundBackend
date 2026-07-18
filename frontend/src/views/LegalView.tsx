@@ -2,6 +2,8 @@ import { useNavigate } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import { Icon } from '@/components/Icon/Icon'
 import { MotionPress } from '@/components/ui/MotionPress'
+import { useBrandLabel } from '@/lib/brand'
+import { usePageSeo } from '@/lib/pageSeo'
 import {
   LEGAL_DOCS,
   type LegalDocId,
@@ -10,6 +12,16 @@ import {
 export function LegalView() {
   const navigate = useNavigate()
   const { t } = useTranslation()
+  const brandLabel = useBrandLabel()
+  const legalTitle = t('redesign.legal.title')
+  usePageSeo({
+    title: `${legalTitle} - ${brandLabel}`,
+    description: t(
+      'redesign.legal.docsBody',
+      'Юридические документы сервиса',
+    ),
+    path: '/legal',
+  })
   const legalLinks: Array<{
     id: LegalDocId
     label: string
