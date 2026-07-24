@@ -14,6 +14,7 @@ import { api, getApiErrorMessage } from '@/lib/api'
 import { coverProxyUrl } from '@/lib/coverProxy'
 import { getIsAdmin } from '@/lib/telegram'
 import { VARIANTS_FADE_UP, m } from '@/lib/motion'
+import '@/styles/redesign-home.css'
 import {
   usePlayerActions,
   usePlayerMeta,

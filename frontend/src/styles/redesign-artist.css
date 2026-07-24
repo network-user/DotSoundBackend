@@ -585,6 +585,7 @@
     0 14px 30px rgba(0, 0, 0, 0.18);
 }
 
+.rf-album__hero.ambient-stage,
 .rf-album__hero .ambient-stage {
   min-height: 320px;
 }
@@ -689,6 +690,7 @@
     0 14px 30px rgba(0, 0, 0, 0.18);
 }
 
+.rf-playlist__hero.ambient-stage,
 .rf-playlist__hero .ambient-stage {
   min-height: 320px;
 }
@@ -705,6 +707,8 @@
 .rf-playlist__collage {
   width: 196px;
   height: 196px;
+  max-width: min(196px, 56vw);
+  max-height: min(196px, 56vw);
   display: grid;
   grid-template-columns: 1fr 1fr;
   grid-template-rows: 1fr 1fr;
@@ -714,6 +718,7 @@
   box-shadow: 0 16px 44px rgba(0, 0, 0, 0.55);
   background: var(--surface);
   border: 1px solid rgba(255, 255, 255, 0.14);
+  flex-shrink: 0;
   transition:
     transform 210ms var(--ease-out),
     box-shadow 210ms var(--ease-out);
@@ -727,17 +732,31 @@
   align-items: center;
   justify-content: center;
   color: var(--text-secondary);
+  min-width: 0;
+  min-height: 0;
 }
 
 .rf-playlist__collage-cell img {
   width: 100%;
   height: 100%;
+  max-width: 100%;
+  max-height: 100%;
   object-fit: cover;
   transition: transform 240ms var(--ease-out);
 }
 
 .rf-playlist__collage--single {
   display: block;
+}
+
+.rf-playlist__collage .kenburns-cover,
+.rf-playlist__collage .kenburns-cover img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  max-width: 100%;
+  max-height: 100%;
+  object-fit: cover;
 }
 
 .rf-playlist__title {
