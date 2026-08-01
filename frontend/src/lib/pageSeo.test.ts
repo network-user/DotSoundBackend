@@ -4,6 +4,7 @@ import {
   applyPageSeo,
   applyRobotsMeta,
   defaultPageTitle,
+  isLegalPath,
   normalizeAppPath,
   resolveCanonicalUrl,
   shouldNoIndexPath,
@@ -118,6 +119,23 @@ describe('shouldNoIndexPath', () => {
     expect(normalizeAppPath('/mini_app/library')).toBe('/library')
     expect(shouldNoIndexPath('/mini_app/profile/7')).toBe(false)
     expect(shouldNoIndexPath('/mini_app/upload')).toBe(true)
+  })
+})
+
+describe('isLegalPath', () => {
+  it('matches legal index and document paths', () => {
+    expect(isLegalPath('/legal')).toBe(true)
+    expect(isLegalPath('/legal/')).toBe(true)
+    expect(isLegalPath('/legal/terms')).toBe(true)
+    expect(isLegalPath('/legal/privacy')).toBe(true)
+    expect(isLegalPath('/mini_app/legal/terms')).toBe(true)
+  })
+
+  it('rejects non-legal paths', () => {
+    expect(isLegalPath('/')).toBe(false)
+    expect(isLegalPath('/library')).toBe(false)
+    expect(isLegalPath('/legalize')).toBe(false)
+    expect(isLegalPath('/profile/legal')).toBe(false)
   })
 })
 

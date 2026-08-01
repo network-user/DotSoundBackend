@@ -1,4 +1,9 @@
-import { Navigate, useNavigate, useParams } from 'react-router-dom'
+import {
+  Navigate,
+  useLocation,
+  useNavigate,
+  useParams,
+} from 'react-router-dom'
 import { Icon } from '@/components/Icon/Icon'
 import { useBrandLabel } from '@/lib/brand'
 import { usePageSeo } from '@/lib/pageSeo'
@@ -15,6 +20,7 @@ function LegalDocBody({
   document: (typeof LEGAL_DOCS)[LegalDocId]
 }) {
   const navigate = useNavigate()
+  const location = useLocation()
   const brandLabel = useBrandLabel()
   const intro = (document.intro || '').trim()
 
@@ -29,7 +35,13 @@ function LegalDocBody({
       <div className="legal-header">
         <button
           className="icon-btn"
-          onClick={() => navigate(-1)}
+          onClick={() => {
+            if (location.key !== 'default') {
+              navigate(-1)
+            } else {
+              navigate('/')
+            }
+          }}
         >
           <Icon
             name="chevron"

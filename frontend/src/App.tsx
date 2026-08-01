@@ -12,7 +12,10 @@ import {
 } from 'react'
 import { flushSync } from 'react-dom'
 import { useBrandLabel } from '@/lib/brand'
-import { useRouteRobotsGuard } from '@/lib/pageSeo'
+import {
+  isLegalPath,
+  useRouteRobotsGuard,
+} from '@/lib/pageSeo'
 import { AppErrorFallback } from '@/components/AppErrorFallback'
 
 class ErrorBoundary extends Component<
@@ -1048,6 +1051,34 @@ export function App() {
             Reload
           </button>
         )}
+      </div>
+    )
+  }
+
+  const onLegalRoute = isLegalPath(location.pathname)
+  if (
+    onLegalRoute &&
+    (needsAuth || needsOnboarding || needsTutorial)
+  ) {
+    return (
+      <div id="app">
+        <main id="main">
+          <ErrorBoundary>
+            <Suspense fallback={<RouteFallback />}>
+              <Routes>
+                <Route path="/legal" element={<LegalView />} />
+                <Route
+                  path="/legal/:docId"
+                  element={<LegalDocView />}
+                />
+                <Route
+                  path="*"
+                  element={<Navigate to="/legal" replace />}
+                />
+              </Routes>
+            </Suspense>
+          </ErrorBoundary>
+        </main>
       </div>
     )
   }

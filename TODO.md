@@ -43,6 +43,8 @@ work, and release coordination live outside the public repository.
   runtime titles on public profile/artist/legal screens.
 - [x] SEO follow-up: 1200x630 `og-default.png` + runtime `noindex`
   guard for private Mini App routes (library/upload/admin/etc.).
+- [x] Guest-accessible `/legal/*` before auth: AuthScreen / onboarding
+  legal links no longer bounce to the login gate.
 - [ ] Add a compact architecture diagram for the public transport +
   private rules model.
 - [ ] Add a short "How to read this repository" section for reviewers.

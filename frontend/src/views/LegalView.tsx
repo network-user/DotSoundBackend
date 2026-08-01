@@ -1,4 +1,4 @@
-import { useNavigate } from 'react-router-dom'
+import { useLocation, useNavigate } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import { Icon } from '@/components/Icon/Icon'
 import { MotionPress } from '@/components/ui/MotionPress'
@@ -11,6 +11,7 @@ import {
 
 export function LegalView() {
   const navigate = useNavigate()
+  const location = useLocation()
   const { t } = useTranslation()
   const brandLabel = useBrandLabel()
   const legalTitle = t('redesign.legal.title')
@@ -50,7 +51,13 @@ export function LegalView() {
           variant="ghost"
           haptic="selection"
           className="icon-btn"
-          onClick={() => navigate(-1)}
+          onClick={() => {
+            if (location.key !== 'default') {
+              navigate(-1)
+            } else {
+              navigate('/')
+            }
+          }}
           aria-label={t('redesign.home.back')}
         >
           <Icon name="chevron" size={20} className="back-chevron" />

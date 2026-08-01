@@ -34,6 +34,7 @@ import { AvatarBuilder } from '@/components/Onboarding/AvatarBuilder'
 import { GenreBubble } from '@/components/Onboarding/GenreBubble'
 import { useBrandLabel } from '@/lib/brand'
 import { LEGAL_VERSION } from '@/views/legalContent'
+import { Link } from 'react-router-dom'
 import type {
   ArtistInfo,
   OnboardingArtistItem,
@@ -1865,21 +1866,13 @@ function CompleteStep({
           {t('redesign.onboardingV2.complete.cta')}
           », вы подтверждаете, что вам исполнилось 18 лет,
           и принимаете{' '}
-          <a
-            href={`${import.meta.env.BASE_URL}legal/terms`}
-            target="_blank"
-            rel="noopener noreferrer"
-          >
+          <Link to="/legal/terms">
             Условия использования
-          </a>
+          </Link>
           {' и '}
-          <a
-            href={`${import.meta.env.BASE_URL}legal/privacy`}
-            target="_blank"
-            rel="noopener noreferrer"
-          >
+          <Link to="/legal/privacy">
             Политику конфиденциальности
-          </a>
+          </Link>
           .
         </p>
       </div>

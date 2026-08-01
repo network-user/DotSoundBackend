@@ -121,6 +121,12 @@ export function shouldNoIndexPath(pathname: string): boolean {
   return !INDEXABLE_PATH_PATTERNS.some((re) => re.test(path))
 }
 
+/** Legal docs must be readable before auth / during onboarding. */
+export function isLegalPath(pathname: string): boolean {
+  const path = normalizeAppPath(pathname)
+  return path === '/legal' || path.startsWith('/legal/')
+}
+
 export function applyRobotsMeta(noIndex: boolean): () => void {
   if (typeof document === 'undefined') {
     return () => undefined

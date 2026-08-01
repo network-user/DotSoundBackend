@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { Link } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import { api } from '@/lib/api'
 import { useBrandLabel } from '@/lib/brand'
@@ -267,23 +268,13 @@ export function AuthScreen({
         </MotionPress>
         <p className="auth-microcopy auth-microcopy--muted">
           Продолжая, вы принимаете{' '}
-          <a
-            href={`${import.meta.env.BASE_URL}legal/terms`}
-            target="_blank"
-            rel="noopener noreferrer"
-          >
+          <Link to="/legal/terms">
             Условия использования
-          </a>
+          </Link>
           {' и '}
-          <a
-            href={
-              `${import.meta.env.BASE_URL}legal/privacy`
-            }
-            target="_blank"
-            rel="noopener noreferrer"
-          >
+          <Link to="/legal/privacy">
             Политику конфиденциальности
-          </a>
+          </Link>
           . Сервис 18+.
         </p>
         <p className="auth-microcopy auth-microcopy--muted">
